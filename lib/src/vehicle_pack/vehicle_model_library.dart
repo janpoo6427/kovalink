@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:kovalink/src/models/vehicle_model_manifest.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
@@ -59,6 +60,15 @@ class VehicleModelLibrary {
   final Future<Directory> Function() storageRoot;
   final AssetBundle? bundle;
 
+  /// Bumped after every successful import or delete so lists can refresh.
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  List<VehicleModelEntry> _cache = const [];
+
+  /// Last listed entries, kept current by [importPack] and [delete] so a
+  /// list UI can refresh without new file IO.
+  List<VehicleModelEntry> get cachedEntries => _cache;
+
   Future<Directory> _modelsDirectory() async {
     final root = await storageRoot();
     return Directory('${root.path}/vehicle_models');
@@ -82,7 +92,10 @@ class VehicleModelLibrary {
       );
     }
     final models = await _modelsDirectory();
-    if (!await models.exists()) return entries;
+    if (!await models.exists()) {
+      _cache = List.unmodifiable(entries);
+      return entries;
+    }
     final directories = await models
         .list()
         .where((entity) => entity is Directory)
@@ -104,6 +117,7 @@ class VehicleModelLibrary {
         ),
       );
     }
+    _cache = List.unmodifiable(entries);
     return entries;
   }
 
@@ -136,13 +150,19 @@ class VehicleModelLibrary {
     if (replaced) await target.delete(recursive: true);
     await incoming.rename(target.path);
     final preview = File('${target.path}/preview.png');
+    final entry = VehicleModelEntry(
+      id: manifest.id,
+      manifest: manifest,
+      builtIn: false,
+      previewPath: await preview.exists() ? preview.path : null,
+    );
+    _cache = List.unmodifiable([
+      ..._cache.where((existing) => existing.id != entry.id),
+      entry,
+    ]);
+    revision.value++;
     return VehicleModelImportOutcome._(
-      entry: VehicleModelEntry(
-        id: manifest.id,
-        manifest: manifest,
-        builtIn: false,
-        previewPath: await preview.exists() ? preview.path : null,
-      ),
+      entry: entry,
       warnings: validation.warnings,
       replaced: replaced,
     );
@@ -157,6 +177,8 @@ class VehicleModelLibrary {
     final directory = Directory('${(await _modelsDirectory()).path}/$id');
     if (!await directory.exists()) return false;
     await directory.delete(recursive: true);
+    _cache = List.unmodifiable(_cache.where((entry) => entry.id != id));
+    revision.value++;
     return true;
   }
 
