@@ -141,7 +141,7 @@ class SceneLook {
         headlights: false,
         wetness: 0,
         streetLights: false,
-        bloom: 0.06,
+        bloom: 0.09,
         rain: false,
       ),
       SceneTheme.overcast => SceneLook(
@@ -162,7 +162,7 @@ class SceneLook {
         headlights: false,
         wetness: 0.15,
         streetLights: false,
-        bloom: 0.05,
+        bloom: 0.1,
         rain: false,
       ),
       SceneTheme.sunset => SceneLook(
