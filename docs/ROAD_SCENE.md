@@ -13,7 +13,45 @@ values are display-only; nothing here sends anything to the vehicle.
 - The vehicle model pack (GLB) keeps its own frame (`RH_Y_UP_Z_FORWARD`,
   origin between the rear wheels); see `VEHICLE_MODEL_PACK.md`.
 
-## Renderer (`lib/src/features/road_view/scene3d/`)
+## GPU renderer (`lib/src/gpu_scene/`, default on phones)
+
+Real 3D on Filament through the vendored thermion 0.7 (Apache-2.0). The
+software renderer below stays as the 절약 path and for tests.
+
+- `RoadWorldGlb` builds the ego-relative world for each frame as a GLB:
+  asphalt with tire tracks and seams (vertex-color noise scrolling with the
+  odometer), lane paint (same dash phase as the software path), red edge
+  bands, shoulders, guardrails (highway) or curbs (city), grass, soft
+  low-poly trees, city blocks with window grids (lit at night), street
+  lamps and the path ribbon (unlit, blended, teal → blue → violet, tinted
+  amber/red by the lead tone, with an engage light sweep).
+- `VehicleGpuGlb` turns the built-in vehicle/figure builders into GLBs with
+  crease-angle smooth normals, PBR materials (clearcoat paint, reflective
+  see-through glass, emissive lamps) and wheel pivots. Imported packs keep
+  their own GLB materials; `GlbBounds` fits them by the manifest body node
+  and hides `excludeNodes` and staging props.
+- `GpuRoadRenderer` keeps one asset per road user (pooled), sets paint,
+  lamp emission, wheel spin (speed / radius) and front-wheel steer
+  (steering angle / 15.5), PCSS sun shadows + screen-space contact shadows,
+  SAO, bloom, fog, MSAA + TAA and PBR-Neutral tone mapping. Lights: sun,
+  ego headlights (focused spots), tail/brake glow (spots aimed back onto
+  the road), street lamps, oncoming headlights.
+- `SceneLook` (맑음/흐림/노을/밤/비): procedural sky (also baked into
+  `assets/environments/*_ibl.ktx`, `*_skybox.ktx` by
+  `tool/gpu/make_environments.sh`, Filament cmgen, CC0 output), exposure
+  solved so the horizon lands at a target value, fog colour from the sky,
+  headlight/lamp power given as on-screen levels. Rain = wet glossy
+  translucent asphalt with mirrored vehicles/lamps below (puddle
+  reflections) plus a rain overlay.
+- Camera work comes from `SceneDirector` (shared with the software path):
+  speed-dependent chase height/FOV, roll into announced turns, lead tone,
+  engage sweep, blind-spot marks (`SceneMarkersPainter`).
+- Worker captures: `tool/gpu/headless_gpu.dart` runs the same renderer on
+  Mesa llvmpipe through an EGL surfaceless display; captures inject the
+  frame with `RoadViewScreen.gpuSurfaceBuilder`
+  (`tool/screenshots/gpu_capture_test.dart`, `KOVA_VIDEO=1` for the 10 s clip).
+
+## Software renderer (`lib/src/features/road_view/scene3d/`, 절약)
 
 `RoadWorldPainter` is a small software 3D pipeline drawn with Canvas, so
 the same image renders on every platform and in tests:
@@ -105,3 +143,10 @@ never interrupts a live gateway session.
 
 `KOVA_SHOT_DIR=out flutter test tool/screenshots` renders the scene and full
 screens headlessly (uses a host CJK font if present).
+
+GPU captures (worker only, needs `build/native_assets/linux/libthermion_dart.so`
+from a previous `flutter test` and Mesa EGL):
+
+    KOVA_SHOT_DIR=out flutter test tool/screenshots/gpu_capture_test.dart
+    KOVA_VIDEO=1 KOVA_SHOT_DIR=out flutter test tool/screenshots/gpu_capture_test.dart
+    ffmpeg -framerate 24 -i out/video_frames/f_%04d.png -c:v libx264 -crf 22 -pix_fmt yuv420p demo.mp4

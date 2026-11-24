@@ -28,6 +28,12 @@ Addresses are saved only if `LocalEndpointPolicy` accepts them (loopback,
 hosts are refused with "KovaLink는 로컬·사설 네트워크 gateway에만
 연결합니다." The connect screen starts from the saved addresses.
 
+- 화질 (`renderQuality`): 자동 (default; GPU where the device has it, falls
+  back to software if the GPU view cannot start or averages over 70 ms per
+  update for 90 updates) / 고품질 (always GPU when available) / 절약
+  (software renderer).
+- 도로 테마 (`sceneTheme`) also offers 노을, 밤 and 비.
+
 ## Storage
 
 - `AppSettings` (`lib/src/settings/app_settings.dart`) is serialized as JSON

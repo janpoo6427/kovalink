@@ -485,8 +485,12 @@ void main() {
       initial: AppSettings(sceneTheme: theme, demoRoute: route),
     );
     final profile = VehicleModelLoadResult.bundledDefault.profile;
+    final library = VehicleModelLibrary(
+      storageRoot: () async => Directory.systemTemp,
+    );
     ui.Image? current;
     final key = GlobalKey();
+    final tick = ValueNotifier<int>(0);
     final dir = Directory('$shotDirectory/video_frames')
       ..createSync(recursive: true);
     for (var i = 0; i < seconds * fps; i++) {
@@ -505,6 +509,7 @@ void main() {
         () => _renderGpu(request, size, warmup: i == 0 ? 3 : 0),
       ))!;
       controller.scene = scene;
+      tick.value = i;
       if (i == 0) {
         await tester.pumpWidget(
           MaterialApp(
@@ -512,15 +517,18 @@ void main() {
             theme: _theme(Brightness.light),
             home: RepaintBoundary(
               key: key,
-              child: KovaLinkHome(
-                controller: controller,
-                settings: settings,
-                library: VehicleModelLibrary(
-                  storageRoot: () async => Directory.systemTemp,
+              // GatewayController.scene is a plain field; rebuild the home
+              // every frame so the road view reads the new scene.
+              child: ValueListenableBuilder<int>(
+                valueListenable: tick,
+                builder: (context, _, _) => KovaLinkHome(
+                  controller: controller,
+                  settings: settings,
+                  library: library,
+                  director: director,
+                  gpuSurfaceBuilder: (context, r) =>
+                      RawImage(image: current, fit: BoxFit.fill),
                 ),
-                director: director,
-                gpuSurfaceBuilder: (context, r) =>
-                    RawImage(image: current, fit: BoxFit.fill),
               ),
             ),
           ),
@@ -536,6 +544,11 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
     expect(dir.listSync().length, greaterThanOrEqualTo(seconds * fps));
+    final first = File('${dir.path}/f_0000.png').readAsBytesSync();
+    final mid = File(
+      '${dir.path}/f_${(seconds * fps ~/ 2).toString().padLeft(4, '0')}.png',
+    ).readAsBytesSync();
+    expect(first, isNot(mid), reason: 'video frames must move');
   }, timeout: const Timeout(Duration(minutes: 60)));
 
   tearDownAll(() async {

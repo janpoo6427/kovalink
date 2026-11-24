@@ -14,6 +14,7 @@ import 'package:kovalink/src/models/ego_vehicle_profile.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/vehicle_mesh/builtin_figures.dart';
 import 'package:kovalink/src/vehicle_mesh/builtin_vehicles.dart';
+import 'package:kovalink/src/vehicle_mesh/mesh_builder.dart';
 import 'package:kovalink/src/vehicle_mesh/vehicle_mesh.dart';
 import 'package:thermion_dart/thermion_dart.dart';
 // ignore: implementation_imports
@@ -39,8 +40,105 @@ class GpuVehicleLibrary {
       GpuBody.cyclist => BuiltinFigures.cyclistBuilder(),
       GpuBody.cone => BuiltinFigures.coneBuilder(),
     };
-    return VehicleGpuGlb.build(builder, rearAxleX: 0);
+    if (body == GpuBody.suv) _roofDetails(builder, rails: true);
+    if (body == GpuBody.sedan) _roofDetails(builder, rails: false);
+    return VehicleGpuGlb.build(
+      builder,
+      rearAxleX: 0,
+      cabin: body == GpuBody.suv || body == GpuBody.sedan,
+    );
   });
+
+  /// Close-up details the GPU view can afford: roof rails following the
+  /// roof line (SUV) and a shark-fin antenna (both), in trim black.
+  static void _roofDetails(MeshBuilder b, {required bool rails}) {
+    final mesh = b.build();
+    final p = mesh.positions;
+    var minX = double.infinity, maxX = -double.infinity, maxY = 0.0;
+    for (var i = 0; i < p.length; i += 3) {
+      minX = math.min(minX, p[i]);
+      maxX = math.max(maxX, p[i]);
+      maxY = math.max(maxY, p[i + 1].abs());
+    }
+    final length = maxX - minX;
+    const bins = 40;
+    // Roof height profile near the side of the roof (|y| ~ 0.62 width/2).
+    final roof = List<double>.filled(bins + 1, -1);
+    for (var i = 0; i < p.length; i += 3) {
+      if (p[i + 1].abs() > maxY * 0.7) continue;
+      final k = ((p[i] - minX) / length * bins).round().clamp(0, bins);
+      roof[k] = math.max(roof[k], p[i + 2]);
+    }
+    final top = roof.reduce(math.max);
+    const trim = BuiltinVehicles.pillar;
+    b.part('Body');
+    if (rails) {
+      // Rails where the roof is within 6 cm of its top.
+      final idx = [
+        for (var k = 0; k <= bins; k++)
+          if (roof[k] > top - 0.06) k,
+      ];
+      if (idx.length >= 3) {
+        for (final side in const [1.0, -1.0]) {
+          final y0 = side * maxY * 0.52, y1 = side * maxY * 0.60;
+          for (var j = 0; j < idx.length - 1; j++) {
+            final xa = minX + idx[j] / bins * length,
+                xb = minX + idx[j + 1] / bins * length;
+            final za = roof[idx[j]] + 0.045, zb = roof[idx[j + 1]] + 0.045;
+            b.smoothQuad(
+              [P3(xa, y0, za), P3(xb, y0, zb), P3(xb, y1, zb), P3(xa, y1, za)],
+              const [P3(0, 0, 1), P3(0, 0, 1), P3(0, 0, 1), P3(0, 0, 1)],
+              trim,
+              const P3(0, 0, 1),
+            );
+            b.poly(
+              [
+                P3(xa, y1, za),
+                P3(xb, y1, zb),
+                P3(xb, y1, zb - 0.05),
+                P3(xa, y1, za - 0.05),
+              ],
+              trim,
+              P3(0, side, 0),
+            );
+            b.poly(
+              [
+                P3(xa, y0, za),
+                P3(xb, y0, zb),
+                P3(xb, y0, zb - 0.05),
+                P3(xa, y0, za - 0.05),
+              ],
+              trim,
+              P3(0, -side, 0),
+            );
+          }
+        }
+      }
+    }
+    // Shark-fin antenna near the rear of the roof.
+    var kr = 0;
+    for (var k = 0; k <= bins; k++) {
+      if (roof[k] > top - 0.03) {
+        kr = k;
+        break;
+      }
+    }
+    final x0 = minX + kr / bins * length + 0.05, z0 = roof[kr] - 0.005;
+    const half = 0.035;
+    final tip = P3(x0 + 0.04, 0, z0 + 0.075);
+    for (final side in const [1.0, -1.0]) {
+      b.poly(
+        [P3(x0, side * half, z0), P3(x0 + 0.18, side * half * 0.4, z0), tip],
+        trim,
+        P3(0, side, 0),
+      );
+    }
+    b.poly(
+      [P3(x0, half, z0), P3(x0, -half, z0), tip],
+      trim,
+      const P3(-1, 0, 0.4),
+    );
+  }
 
   /// Body for a tracked object (same SUV/sedan mix as the software path).
   static GpuBody bodyFor(TrackedObject object) {
@@ -763,10 +861,10 @@ class GpuRoadRenderer {
         look,
         egoRearX,
         dims.width,
-        scene.brakeActive ? (look.night ? 0.9 : 0.6) : 0.22,
+        scene.brakeActive ? (look.night ? 0.8 : 0.42) : 0.2,
       );
     } else if (scene.brakeActive) {
-      _tailGlow(lights, look, egoRearX, dims.width, 0.4);
+      _tailGlow(lights, look, egoRearX, dims.width, 0.3);
     }
     if (look.streetLights) {
       final lamps = [...world.lamps]

@@ -121,7 +121,7 @@ class GpuMaterials {
   static double lampStrength(MeshRole role, {required bool on}) =>
       switch (role) {
         MeshRole.tail => on ? 2.2 : 0.45,
-        MeshRole.brake => on ? 4.0 : 0.05,
+        MeshRole.brake => on ? 6.0 : 0.05,
         MeshRole.turnLeft || MeshRole.turnRight => on ? 6.0 : 0.0,
         MeshRole.reverse => on ? 4.0 : 0.0,
         MeshRole.headlight => on ? 5.0 : 0.25,
@@ -178,6 +178,7 @@ class VehicleGpuGlb {
     MeshBuilder builder, {
     required double rearAxleX,
     double creaseDegrees = 40,
+    bool cabin = true,
   }) {
     final mesh = builder.build();
     final roles = <String, List<MeshRole>>{};
@@ -250,6 +251,26 @@ class VehicleGpuGlb {
       roles[name] = [for (final mat in keys) mesh.materials[mat].role];
       if (name.startsWith('Wheel')) wheels[name] = [ox, oy, oz];
     }
+    // Dark cabin behind the glass, so see-through windows show an interior
+    // (and not the road and path ribbon through both windscreens).
+    if (cabin && mesh.materials.any((m) => m.role == MeshRole.glass)) {
+      final cabin = out.material({
+        'name': 'KL_Cabin',
+        'pbrMetallicRoughness': {
+          'baseColorFactor': [0.018, 0.02, 0.024, 1.0],
+          'metallicFactor': 0.0,
+          'roughnessFactor': 0.9,
+        },
+      });
+      final l = hi[0] - lo[0], w = hi[1] - lo[1], h = hi[2] - lo[2];
+      final box = _box(
+        [lo[1] + w * 0.12, lo[2] + h * 0.42, lo[0] - rearAxleX + l * 0.16],
+        [hi[1] - w * 0.12, lo[2] + h * 0.86, lo[0] - rearAxleX + l * 0.80],
+        cabin,
+      );
+      out.node('Cabin', mesh: out.mesh('Cabin', [box]));
+      roles['Cabin'] = const [MeshRole.trim];
+    }
     return VehicleGpuAsset(
       glb: out.toGlb(generator: 'KovaLink gpu vehicle'),
       roles: roles,
@@ -259,6 +280,34 @@ class VehicleGpuGlb {
       height: hi[2] - lo[2],
       rearX: lo[0] - rearAxleX,
     );
+  }
+
+  /// Axis-aligned box (glTF frame) with outward flat normals.
+  static GltfPrimitive _box(List<double> mn, List<double> mx, int material) {
+    final buf = PrimitiveBuffer();
+    for (var axis = 0; axis < 3; axis++) {
+      for (final sign in const [-1.0, 1.0]) {
+        final n = [0.0, 0.0, 0.0]..[axis] = sign;
+        final u = (axis + 1) % 3, v = (axis + 2) % 3;
+        final ids = <int>[];
+        for (final (a, b) in const [(0, 0), (1, 0), (1, 1), (0, 1)]) {
+          final p = [0.0, 0.0, 0.0];
+          p[axis] = sign < 0 ? mn[axis] : mx[axis];
+          p[u] = a == 0 ? mn[u] : mx[u];
+          p[v] = b == 0 ? mn[v] : mx[v];
+          ids.add(buf.vertex(p[0], p[1], p[2], n[0], n[1], n[2]));
+        }
+        // (u, v, axis) is right-handed, so this order faces +axis.
+        if (sign > 0) {
+          buf.tri(ids[0], ids[1], ids[2]);
+          buf.tri(ids[0], ids[2], ids[3]);
+        } else {
+          buf.tri(ids[0], ids[2], ids[1]);
+          buf.tri(ids[0], ids[3], ids[2]);
+        }
+      }
+    }
+    return buf.build(material);
   }
 
   static GltfPrimitive _smoothPrimitive(
