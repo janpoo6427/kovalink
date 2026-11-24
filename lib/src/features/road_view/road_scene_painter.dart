@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/models/ego_vehicle_profile.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 
 class RoadScenePainter extends CustomPainter {
@@ -9,12 +10,16 @@ class RoadScenePainter extends CustomPainter {
     this.drawEnvironment = true,
     this.cameraAligned = false,
     this.drawEgoVehicle = false,
+    this.vehicle = EgoVehicleProfile.builtIn,
   });
 
   final RoadScene scene;
   final bool drawEnvironment;
   final bool cameraAligned;
   final bool drawEgoVehicle;
+
+  /// Size and colors of the built-in ego renderer (from the model pack).
+  final EgoVehicleProfile vehicle;
   static const maxDistanceMeters = 120.0;
 
   @override
@@ -168,10 +173,21 @@ class RoadScenePainter extends CustomPainter {
     );
   }
 
-  void _paintFallbackVehicle(Canvas canvas, Size size) {
+  /// Screen rectangle of the chase-view ego body. Public for tests.
+  static Rect chaseEgoBodyRect(Size size, EgoVehicleProfile vehicle) {
     final center = Offset(size.width / 2, size.height * 0.86);
-    final width = math.min(size.width * 0.38, 205.0);
-    final height = width * 0.58;
+    final width = math.min(size.width * 0.38, 205.0) * vehicle.chaseWidthScale;
+    final height = width * vehicle.chaseHeightRatio;
+    return Rect.fromCenter(center: center, width: width, height: height);
+  }
+
+  void _paintFallbackVehicle(Canvas canvas, Size size) {
+    final bodyRect = chaseEgoBodyRect(size, vehicle);
+    final center = bodyRect.center;
+    final width = bodyRect.width;
+    final height = bodyRect.height;
+    final paintColor = Color(vehicle.appearance.paintArgb);
+    final glassColor = Color(vehicle.appearance.glassArgb);
     canvas.drawOval(
       Rect.fromCenter(
         center: center.translate(0, height * 0.36),
@@ -222,11 +238,15 @@ class RoadScenePainter extends CustomPainter {
       body,
       Paint()
         ..shader =
-            const LinearGradient(
+            LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFFB9C2CB), Color(0xFF56616D), Color(0xFF252B32)],
-              stops: [0, 0.48, 1],
+              colors: [
+                Color.lerp(paintColor, Colors.white, 0.6)!,
+                paintColor,
+                Color.lerp(paintColor, Colors.black, 0.56)!,
+              ],
+              stops: const [0, 0.48, 1],
             ).createShader(
               Rect.fromCenter(center: center, width: width, height: height),
             ),
@@ -259,17 +279,17 @@ class RoadScenePainter extends CustomPainter {
       rearGlass,
       Paint()
         ..shader =
-            const LinearGradient(
+            LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFF273746), Color(0xFF0A1118)],
+              colors: [glassColor, Color.lerp(glassColor, Colors.black, 0.62)!],
             ).createShader(
               Rect.fromCenter(center: center, width: width, height: height),
             ),
     );
     final red = scene.brakeActive
         ? const Color(0xFFFF3B50)
-        : const Color(0xFFB01D31);
+        : Color(vehicle.appearance.lampArgb);
     final lightPaint = Paint()
       ..color = red
       ..strokeWidth = scene.brakeActive ? 7 : 4
@@ -502,5 +522,6 @@ class RoadScenePainter extends CustomPainter {
       oldDelegate.scene.monotonicTimeNanos != scene.monotonicTimeNanos ||
       oldDelegate.drawEnvironment != drawEnvironment ||
       oldDelegate.cameraAligned != cameraAligned ||
-      oldDelegate.drawEgoVehicle != drawEgoVehicle;
+      oldDelegate.drawEgoVehicle != drawEgoVehicle ||
+      oldDelegate.vehicle != vehicle;
 }

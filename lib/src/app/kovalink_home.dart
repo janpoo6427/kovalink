@@ -1,14 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/features/connect/connect_screen.dart';
 import 'package:kovalink/src/features/road_view/road_view_screen.dart';
 import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
+import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/widgets/liquid_glass.dart';
 
 class KovaLinkHome extends StatefulWidget {
-  const KovaLinkHome({required this.controller, super.key});
+  const KovaLinkHome({required this.controller, this.vehicleModel, super.key});
 
   final GatewayController controller;
+  final ValueListenable<VehicleModelLoadResult>? vehicleModel;
 
   @override
   State<KovaLinkHome> createState() => _KovaLinkHomeState();
@@ -28,9 +31,15 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
             IndexedStack(
               index: selectedIndex,
               children: [
-                RoadViewScreen(controller: widget.controller),
+                RoadViewScreen(
+                  controller: widget.controller,
+                  vehicleModel: widget.vehicleModel,
+                ),
                 ConnectScreen(controller: widget.controller),
-                SettingsScreen(controller: widget.controller),
+                SettingsScreen(
+                  controller: widget.controller,
+                  vehicleModel: widget.vehicleModel,
+                ),
               ],
             ),
             if (selectedIndex == 0)

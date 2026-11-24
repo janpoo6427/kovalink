@@ -1,16 +1,23 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
+import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/widgets/page_header.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({required this.controller, super.key});
+  const SettingsScreen({
+    required this.controller,
+    this.vehicleModel,
+    super.key,
+  });
 
   final GatewayController controller;
+  final ValueListenable<VehicleModelLoadResult>? vehicleModel;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
+      animation: Listenable.merge([controller, ?vehicleModel]),
       builder: (context, _) => ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         children: [
@@ -19,6 +26,11 @@ class SettingsScreen extends StatelessWidget {
             subtitle: 'typed capability와 allowlist에 등록된 항목만 변경합니다.',
           ),
           const SizedBox(height: 22),
+          VehicleModelCard(
+            result:
+                vehicleModel?.value ?? VehicleModelLoadResult.bundledDefault,
+          ),
+          const SizedBox(height: 6),
           if (!controller.canEditSettings)
             const Card(
               color: Color(0xFF17202A),
@@ -68,6 +80,70 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class VehicleModelCard extends StatelessWidget {
+  const VehicleModelCard({required this.result, super.key});
+
+  final VehicleModelLoadResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final manifest = result.manifest;
+    final dimensions = result.profile.dimensions;
+    String meters(double value) => value.toStringAsFixed(2);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: Color(manifest.appearance.paintArgb),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white54),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '내 차 모델 · ${manifest.displayName}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '길이 ${meters(dimensions.length)} m · 폭 ${meters(dimensions.width)} m'
+              ' · 높이 ${meters(dimensions.height)} m'
+              ' · 축간 ${meters(dimensions.wheelbase)} m',
+              style: const TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              result.usesBuiltInModel
+                  ? '표시 방식: 기본 내장 모델(2D)'
+                  : '표시 방식: 모델 팩 GLB + 기본 내장 모델',
+              style: const TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
+            ),
+            for (final warning in result.warnings) ...[
+              const SizedBox(height: 6),
+              Text(
+                warning,
+                style: const TextStyle(color: Color(0xFFFFC857), fontSize: 12),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

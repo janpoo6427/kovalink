@@ -4,6 +4,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:kovalink/src/features/road_view/road_scene_painter.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
+import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
 import 'package:kovalink/src/widgets/liquid_glass.dart';
 import 'package:thermion_flutter/thermion_flutter.dart';
@@ -12,8 +13,15 @@ import 'package:vector_math/vector_math_64.dart' as vector;
 enum RoadViewMode { scene, camera, overlay }
 
 class RoadViewScreen extends StatefulWidget {
-  const RoadViewScreen({required this.controller, super.key});
+  const RoadViewScreen({
+    required this.controller,
+    this.vehicleModel,
+    super.key,
+  });
   final GatewayController controller;
+
+  /// Loaded model pack. Null keeps the bundled default pack.
+  final ValueListenable<VehicleModelLoadResult>? vehicleModel;
 
   @override
   State<RoadViewScreen> createState() => _RoadViewScreenState();
@@ -33,6 +41,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
       animation: Listenable.merge([
         widget.controller,
         widget.controller.roadStream,
+        ?widget.vehicleModel,
       ]),
       builder: (context, _) {
         final scene = widget.controller.scene;
@@ -89,8 +98,13 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
     );
   }
 
+  VehicleModelLoadResult get _vehicleModel =>
+      widget.vehicleModel?.value ?? VehicleModelLoadResult.bundledDefault;
+
   Widget _buildRoadSurface(RoadScene scene) {
     if (mode == RoadViewMode.scene) {
+      final vehicleModel = _vehicleModel;
+      final glbAssetPath = vehicleModel.glbAssetPath;
       return Stack(
         fit: StackFit.expand,
         children: [
@@ -101,16 +115,22 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                 // Deterministic underlay: the native GLB covers this when
                 // available, and unsupported GPUs never leave the road empty.
                 drawEgoVehicle: true,
+                vehicle: vehicleModel.profile,
               ),
             ),
           ),
-          if (_supportsNativeVehicle)
+          if (_supportsNativeVehicle && glbAssetPath != null)
             Positioned(
               left: 24,
               right: 24,
               bottom: 18,
               height: 340,
-              child: const IgnorePointer(child: _NativeVehicleModel()),
+              child: IgnorePointer(
+                child: _NativeVehicleModel(
+                  key: ValueKey(glbAssetPath),
+                  assetPath: glbAssetPath,
+                ),
+              ),
             ),
         ],
       );
@@ -155,7 +175,9 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
 }
 
 class _NativeVehicleModel extends StatefulWidget {
-  const _NativeVehicleModel();
+  const _NativeVehicleModel({required this.assetPath, super.key});
+
+  final String assetPath;
 
   @override
   State<_NativeVehicleModel> createState() => _NativeVehicleModelState();
@@ -163,7 +185,7 @@ class _NativeVehicleModel extends StatefulWidget {
 
 class _NativeVehicleModelState extends State<_NativeVehicleModel> {
   late final ViewerWidget _viewer = ViewerWidget(
-    assetPath: 'assets/vehicles/toy_car/vehicle.glb',
+    assetPath: widget.assetPath,
     initial: const SizedBox.expand(),
     initialCameraPosition: vector.Vector3(1.65, 1.05, 2.55),
     manipulatorType: ManipulatorType.NONE,

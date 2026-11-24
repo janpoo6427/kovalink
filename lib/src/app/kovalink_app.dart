@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/app/kovalink_home.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
+import 'package:kovalink/src/services/vehicle_model_repository.dart';
 
 class KovaLinkApp extends StatefulWidget {
-  const KovaLinkApp({super.key});
+  const KovaLinkApp({super.key, this.vehicleBundle});
+
+  /// Asset bundle for the vehicle model pack; null uses rootBundle.
+  final AssetBundle? vehicleBundle;
 
   @override
   State<KovaLinkApp> createState() => _KovaLinkAppState();
@@ -11,16 +15,29 @@ class KovaLinkApp extends StatefulWidget {
 
 class _KovaLinkAppState extends State<KovaLinkApp> {
   late final GatewayController controller;
+  final vehicleModel = ValueNotifier<VehicleModelLoadResult>(
+    VehicleModelLoadResult.bundledDefault,
+  );
 
   @override
   void initState() {
     super.initState();
     controller = GatewayController()..startDemo();
+    _loadVehicleModel();
+  }
+
+  Future<void> _loadVehicleModel() async {
+    final result = await VehicleModelRepository.loadBundled(
+      bundle: widget.vehicleBundle,
+    );
+    if (!mounted) return;
+    vehicleModel.value = result;
   }
 
   @override
   void dispose() {
     controller.dispose();
+    vehicleModel.dispose();
     super.dispose();
   }
 
@@ -63,7 +80,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
         ),
         useMaterial3: true,
       ),
-      home: KovaLinkHome(controller: controller),
+      home: KovaLinkHome(controller: controller, vehicleModel: vehicleModel),
     );
   }
 }
