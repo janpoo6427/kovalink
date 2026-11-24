@@ -232,6 +232,9 @@ class _DisplaySection extends StatelessWidget {
                 options: const [
                   (SceneTheme.clear, '맑음'),
                   (SceneTheme.overcast, '흐림'),
+                  (SceneTheme.sunset, '노을'),
+                  (SceneTheme.night, '밤'),
+                  (SceneTheme.rain, '비'),
                 ],
                 onChanged: (v) =>
                     settings.update((s) => s.copyWith(sceneTheme: v)),

@@ -40,6 +40,8 @@ dependencies:
     path: third_party/flutter_webrtc
   thermion_flutter:
     path: third_party/thermion_flutter
+  thermion_dart:
+    path: third_party/thermion_dart
   vector_math: ^2.2.0
   file_picker: ^13.4.1
   path_provider: ^2.1.6
@@ -54,6 +56,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  # Worker-only GPU captures (tool/gpu): PNG encoding.
+  image: ^4.3.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -69,6 +73,7 @@ flutter:
   assets:
     - assets/vehicles/toy_car/
     - assets/vehicles/kovalink_basic/
+    - assets/environments/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

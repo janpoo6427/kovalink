@@ -125,22 +125,43 @@ class PerspectiveCamera extends SceneCamera {
   factory PerspectiveCamera.chase(Size size) {
     final aspect = (size.width / size.height).clamp(0.45, 1.8);
     final t = ((aspect - 0.5) / 1.0).clamp(0.0, 1.0);
-    final egoWidthFraction = _lerp(0.24, 0.17, t);
-    final horizonFraction = _lerp(0.42, 0.46, t);
-    final contactFraction = _lerp(0.80, 0.85, t);
-    final focal = egoWidthFraction * size.width * chaseDistance / 1.86;
+    return PerspectiveCamera.framed(
+      size,
+      egoWidthFraction: _lerp(0.24, 0.17, t),
+      horizonFraction: _lerp(0.42, 0.46, t),
+      contactFraction: _lerp(0.80, 0.85, t),
+    );
+  }
+
+  /// Chase camera solved from where the ego should sit on screen: its
+  /// width as a fraction of the screen width, the horizon height and the
+  /// height of the ego's rear contact line (fractions of the screen
+  /// height), at [distance] meters behind a reference-length car. A
+  /// lateral [offset] (m, left positive) shifts the eye sideways.
+  factory PerspectiveCamera.framed(
+    Size size, {
+    required double egoWidthFraction,
+    required double horizonFraction,
+    required double contactFraction,
+    double distance = chaseDistance,
+    double offset = 0,
+  }) {
+    final focal = egoWidthFraction * size.width * distance / 1.86;
     final centerY = size.height * 0.5;
     final tanPitch = (centerY - horizonFraction * size.height) / focal;
     final g = (contactFraction * size.height - centerY) / focal;
-    final height = chaseDistance * (g + tanPitch) / (1 - g * tanPitch);
+    final height = distance * (g + tanPitch) / (1 - g * tanPitch);
     return PerspectiveCamera(
       // Behind the rear bumper of a reference-length (4.5 m) car.
-      eye: V3(-4.5 - chaseDistance, 0, height),
+      eye: V3(-4.5 - distance, offset, height),
       pitchRadians: math.atan(tanPitch),
       focalPixels: focal,
       center: Offset(size.width / 2, centerY),
     );
   }
+
+  /// Vertical field of view, radians, for a screen [height].
+  double verticalFov(double height) => 2 * math.atan(height / 2 / focalPixels);
 
   /// Driver eye point: about 42 % of the body length behind the front
   /// bumper, 0.37 m left of center, 1.3 m above ground.

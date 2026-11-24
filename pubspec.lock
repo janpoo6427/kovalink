@@ -264,7 +264,7 @@ packages:
     source: hosted
     version: "4.1.2"
   image:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: image
       sha256: bc13f61f0f5cb77936e78ae5dae3800f442718dac5d2bc4654f03c239230ed0c
@@ -565,7 +565,7 @@ packages:
     source: hosted
     version: "0.7.11"
   thermion_dart:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "third_party/thermion_dart"
       relative: true
