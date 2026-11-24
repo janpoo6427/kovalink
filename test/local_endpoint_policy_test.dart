@@ -72,7 +72,7 @@ void main() {
       '[fc00::1]',
       '[fe80::1]',
       '[fe80::1%25usb0]',
-      '[febf::1]',
+      '[fe80:1::1]',
     ];
     for (final host in hosts) {
       _expectAllowedOnAllSchemes(host);
@@ -87,6 +87,8 @@ void main() {
       '[::ffff:10.0.0.1]',
       '[fec0::1]',
       '[fc2::1]',
+      '[febf::1]',
+      '[fe81::1]',
     ];
     for (final host in hosts) {
       _expectRejectedOnAllSchemes(host);

@@ -51,7 +51,7 @@ class LocalEndpointPolicy {
         (first == 172 && second >= 16 && second <= 31);
   }
 
-  /// Loopback (::1), unique-local (fc00::/7) or link-local (fe80::/10).
+  /// Loopback (::1), unique-local (fc00::/7) or link-local (fe80::/16, same as the previous fe80: prefix rule).
   static bool _isLocalIPv6Literal(String host) {
     final zoneStart = host.indexOf('%');
     final address = zoneStart < 0 ? host : host.substring(0, zoneStart);
@@ -64,7 +64,7 @@ class LocalEndpointPolicy {
     final isLoopback =
         bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1;
     final isUniqueLocal = (bytes[0] & 0xfe) == 0xfc;
-    final isLinkLocal = bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80;
+    final isLinkLocal = bytes[0] == 0xfe && bytes[1] == 0x80;
     return isLoopback || isUniqueLocal || isLinkLocal;
   }
 
