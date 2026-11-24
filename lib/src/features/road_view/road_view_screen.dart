@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:kovalink/src/features/road_view/road_scene_painter.dart';
+import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
+import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
+import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
@@ -16,12 +19,24 @@ class RoadViewScreen extends StatefulWidget {
   const RoadViewScreen({
     required this.controller,
     this.vehicleModel,
+    this.viewpoint = SceneViewpoint.chase,
+    this.theme = SceneTheme.clear,
+    this.layers = const SceneLayers(),
+    this.nativeVehicleOverlay = false,
     super.key,
   });
   final GatewayController controller;
 
   /// Loaded model pack. Null keeps the bundled default pack.
   final ValueListenable<VehicleModelLoadResult>? vehicleModel;
+  final SceneViewpoint viewpoint;
+  final SceneTheme theme;
+  final SceneLayers layers;
+
+  /// Layer the model pack's GLB (thermion) over the chase view on
+  /// Android/iOS. Off by default: the built-in renderer already draws the
+  /// ego in the same camera as the road.
+  final bool nativeVehicleOverlay;
 
   @override
   State<RoadViewScreen> createState() => _RoadViewScreenState();
@@ -110,16 +125,19 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
         children: [
           RepaintBoundary(
             child: CustomPaint(
-              painter: RoadScenePainter(
-                scene,
-                // Deterministic underlay: the native GLB covers this when
-                // available, and unsupported GPUs never leave the road empty.
-                drawEgoVehicle: true,
+              painter: RoadWorldPainter(
+                scene: scene,
                 vehicle: vehicleModel.profile,
+                viewpoint: widget.viewpoint,
+                theme: widget.theme,
+                layers: widget.layers,
               ),
             ),
           ),
-          if (_supportsNativeVehicle && glbAssetPath != null)
+          if (widget.nativeVehicleOverlay &&
+              widget.viewpoint == SceneViewpoint.chase &&
+              _supportsNativeVehicle &&
+              glbAssetPath != null)
             Positioned(
               left: 24,
               right: 24,

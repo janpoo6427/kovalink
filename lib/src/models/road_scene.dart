@@ -46,7 +46,62 @@ class CameraProjection {
   }
 }
 
-enum TrackedObjectKind { vehicle, pedestrian, unknown }
+enum TrackedObjectKind {
+  vehicle,
+  pedestrian,
+  unknown,
+  truck,
+  cyclist,
+  trafficCone,
+}
+
+/// Road context reported by the gateway (map/navigation derived). Drives
+/// display choices only, such as roadside scenery.
+enum RoadType { highway, city, unknown }
+
+enum LaneLineColor { white, yellow, blue, unknown }
+
+enum LaneLineStyle { solid, dashed, doubleSolid, unknown }
+
+/// One painted lane line in the vehicle frame (`x` forward, `y` left, m).
+class LaneLine {
+  const LaneLine({
+    required this.points,
+    this.probability = 1,
+    this.color = LaneLineColor.white,
+    this.style = LaneLineStyle.solid,
+  });
+
+  final List<ScenePoint> points;
+
+  /// Model confidence 0..1. The renderer fades low-confidence lines.
+  final double probability;
+  final LaneLineColor color;
+  final LaneLineStyle style;
+
+  factory LaneLine.fromJson(Map<String, dynamic> json) => LaneLine(
+    points: _pointList(json['points']),
+    probability: ((json['probability'] as num?) ?? 1).toDouble().clamp(
+      0.0,
+      1.0,
+    ),
+    color: _enumByName(
+      LaneLineColor.values,
+      json['color'] as String?,
+      LaneLineColor.unknown,
+    ),
+    style: _enumByName(
+      LaneLineStyle.values,
+      json['style'] as String?,
+      LaneLineStyle.unknown,
+    ),
+  );
+}
+
+List<ScenePoint> _pointList(Object? value) =>
+    (value as List<dynamic>? ?? const [])
+        .map((item) => ScenePoint.fromJson(item as Map<String, dynamic>))
+        .toList(growable: false);
 
 enum VehicleGear { park, reverse, neutral, drive, unknown }
 
@@ -109,12 +164,42 @@ class TrackedObject {
     required this.leftMeters,
     required this.relativeSpeedMps,
     this.kind = TrackedObjectKind.vehicle,
+    this.id,
+    this.lengthMeters,
+    this.widthMeters,
+    this.heightMeters,
+    this.isLead = false,
+    this.brakeLights = false,
   });
 
+  /// Gap from the ego front bumper to the object's rear, meters.
   final double distanceMeters;
   final double leftMeters;
   final double relativeSpeedMps;
   final TrackedObjectKind kind;
+  final int? id;
+  final double? lengthMeters;
+  final double? widthMeters;
+  final double? heightMeters;
+
+  /// True when the planner/radar marks this object as the lead.
+  final bool isLead;
+  final bool brakeLights;
+
+  /// Box size used for drawing. Reported sizes win; otherwise a typical
+  /// size for the kind.
+  double get length => lengthMeters ?? _defaultSize.$1;
+  double get width => widthMeters ?? _defaultSize.$2;
+  double get height => heightMeters ?? _defaultSize.$3;
+
+  (double, double, double) get _defaultSize => switch (kind) {
+    TrackedObjectKind.vehicle => (4.6, 1.85, 1.45),
+    TrackedObjectKind.truck => (9.0, 2.5, 3.2),
+    TrackedObjectKind.pedestrian => (0.5, 0.5, 1.7),
+    TrackedObjectKind.cyclist => (1.8, 0.6, 1.7),
+    TrackedObjectKind.trafficCone => (0.4, 0.4, 0.7),
+    TrackedObjectKind.unknown => (1.0, 1.0, 1.0),
+  };
 
   factory TrackedObject.fromJson(Map<String, dynamic> json) {
     final kindName = json['kind'] as String? ?? 'unknown';
@@ -126,8 +211,19 @@ class TrackedObject {
         (value) => value.name == kindName,
         orElse: () => TrackedObjectKind.unknown,
       ),
+      id: (json['id'] as num?)?.toInt(),
+      lengthMeters: _positive(json['lengthMeters']),
+      widthMeters: _positive(json['widthMeters']),
+      heightMeters: _positive(json['heightMeters']),
+      isLead: json['isLead'] as bool? ?? false,
+      brakeLights: json['brakeLights'] as bool? ?? false,
     );
   }
+}
+
+double? _positive(Object? value) {
+  final number = (value as num?)?.toDouble();
+  return number != null && number.isFinite && number > 0 ? number : null;
 }
 
 class RoadScene {
@@ -148,7 +244,13 @@ class RoadScene {
     this.speedLimitKph,
     this.tbt,
     this.cameraProjection,
-  });
+    List<LaneLine>? laneLines,
+    this.roadEdges = const [],
+    this.roadType = RoadType.unknown,
+    this.odometerMeters = 0,
+    // Kept private so callers read [laneLines], which applies the fallback.
+    // ignore: prefer_initializing_formals
+  }) : _laneLines = laneLines;
 
   final int monotonicTimeNanos;
   final double speedMps;
@@ -166,6 +268,67 @@ class RoadScene {
   final double? speedLimitKph;
   final TbtInstruction? tbt;
   final CameraProjection? cameraProjection;
+  final List<LaneLine>? _laneLines;
+
+  /// Road boundaries (curbs/barriers), outermost first-left then right.
+  final List<List<ScenePoint>> roadEdges;
+  final RoadType roadType;
+
+  /// Distance driven, used only to scroll dashes and scenery smoothly.
+  final double odometerMeters;
+
+  /// Typed lane lines. Frames without `laneLines` fall back to the legacy
+  /// `leftLane`/`rightLane` pair as solid white, full-confidence lines.
+  List<LaneLine> get laneLines =>
+      _laneLines ??
+      [
+        if (leftLane.length >= 2) LaneLine(points: leftLane),
+        if (rightLane.length >= 2) LaneLine(points: rightLane),
+      ];
+
+  /// The lead object: explicitly marked by the gateway, else the nearest
+  /// vehicle-like object within the ego corridor along the planned path.
+  TrackedObject? get leadObject {
+    for (final object in objects) {
+      if (object.isLead) return object;
+    }
+    TrackedObject? best;
+    for (final object in objects) {
+      if (object.distanceMeters <= 0) continue;
+      if (object.kind != TrackedObjectKind.vehicle &&
+          object.kind != TrackedObjectKind.truck) {
+        continue;
+      }
+      final center = pathLeftAt(object.distanceMeters);
+      if ((object.leftMeters - center).abs() > 1.5) continue;
+      if (best == null || object.distanceMeters < best.distanceMeters) {
+        best = object;
+      }
+    }
+    return best;
+  }
+
+  /// Lateral offset of the planned path at [forward] meters (0 if absent).
+  double pathLeftAt(double forward) =>
+      plannedPath.length < 2 ? 0 : interpolateLeft(plannedPath, forward);
+
+  /// Linear interpolation of `leftMeters` at [forward]; extrapolates with
+  /// the first/last segment so the road extends behind and beyond samples.
+  static double interpolateLeft(List<ScenePoint> points, double forward) {
+    if (points.isEmpty) return 0;
+    if (points.length == 1) return points.first.leftMeters;
+    var index = 0;
+    while (index < points.length - 2 &&
+        points[index + 1].forwardMeters < forward) {
+      index++;
+    }
+    final a = points[index];
+    final b = points[index + 1];
+    final span = b.forwardMeters - a.forwardMeters;
+    if (span.abs() < 1e-9) return a.leftMeters;
+    final t = (forward - a.forwardMeters) / span;
+    return a.leftMeters + (b.leftMeters - a.leftMeters) * t;
+  }
 
   double get speedKph => speedMps * 3.6;
   double get setSpeedKph => setSpeedMps * 3.6;
@@ -206,6 +369,22 @@ class RoadScene {
         Map<String, dynamic> value => CameraProjection.fromJson(value),
         _ => null,
       },
+      laneLines: switch (json['laneLines']) {
+        List<dynamic> value =>
+          value
+              .map((item) => LaneLine.fromJson(item as Map<String, dynamic>))
+              .toList(growable: false),
+        _ => null,
+      },
+      roadEdges: (json['roadEdges'] as List<dynamic>? ?? const [])
+          .map(_pointList)
+          .toList(growable: false),
+      roadType: _enumByName(
+        RoadType.values,
+        json['roadType'] as String?,
+        RoadType.unknown,
+      ),
+      odometerMeters: (json['odometerMeters'] as num? ?? 0).toDouble(),
     );
   }
 

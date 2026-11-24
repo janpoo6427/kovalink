@@ -26,6 +26,12 @@ class VehicleModelLoadResult {
       dimensions: VehicleDimensions.reference,
       nodes: VehicleNodeBindings(body: 'ToyCar'),
       cameras: {},
+      appearance: VehicleAppearance(
+        paintArgb: 0xFFD6DBE0,
+        glassArgb: 0xFF1A222B,
+      ),
+      author: 'Guido Odendahl, Eric Chadwick (Khronos glTF Sample Assets)',
+      license: 'CC0-1.0',
     ),
     glbAssetPath: '${VehicleModelRepository.bundledPackDirectory}vehicle.glb',
   );

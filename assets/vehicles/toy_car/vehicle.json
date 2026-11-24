@@ -6,6 +6,7 @@
   "license": "CC0-1.0",
   "asset": "vehicle.glb",
   "coordinateSystem": "RH_Y_UP_Z_FORWARD",
+  "appearance": {"paintColor": "#D6DBE0", "glassColor": "#1A222B"},
   "dimensionsMeters": {
     "length": 4.50,
     "width": 1.86,
