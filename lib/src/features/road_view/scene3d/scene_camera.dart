@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:kovalink/src/models/ego_vehicle_profile.dart';
@@ -72,6 +73,15 @@ abstract class SceneCamera {
 
   /// Back-face test for a face with outward [normal] at [center].
   bool faceVisible(V3 center, V3 normal);
+
+  /// Eye position for view vectors, or null for orthographic views (the
+  /// view direction is then straight down).
+  V3? get eyePoint;
+
+  /// Batch projection for meshes: [xyz] holds points, [screen] receives
+  /// x/y pixels and [depth] the camera-axis depth (points with depth below
+  /// [nearDepth] get undefined screen values).
+  void projectAll(Float64List xyz, Float32List screen, Float64List depth);
 
   /// Clips a planar polygon against the near plane and projects it.
   /// Returns null when nothing is in front of the camera.
@@ -190,6 +200,31 @@ class PerspectiveCamera extends SceneCamera {
     final view = center - eye;
     return view.x * normal.x + view.y * normal.y + view.z * normal.z < 0;
   }
+
+  @override
+  V3? get eyePoint => eye;
+
+  /// Horizontal field of view, radians, for a screen [width].
+  double horizontalFov(double width) => 2 * math.atan(width / 2 / focalPixels);
+
+  @override
+  void projectAll(Float64List xyz, Float32List screen, Float64List depth) {
+    final s = _sin, c = _cos;
+    final ex = eye.x, ey = eye.y, ez = eye.z;
+    final f = focalPixels, cx = center.dx, cy = center.dy;
+    for (var v = 0; v < depth.length; v++) {
+      final dx = xyz[v * 3] - ex;
+      final dy = xyz[v * 3 + 1] - ey;
+      final dz = xyz[v * 3 + 2] - ez;
+      final d = dx * c - dz * s;
+      depth[v] = d;
+      if (d > 1e-6) {
+        final up = dx * s + dz * c;
+        screen[v * 2] = cx - f * dy / d;
+        screen[v * 2 + 1] = cy - f * up / d;
+      }
+    }
+  }
 }
 
 /// Orthographic bird's-eye camera. Ego front bumper sits at 70 % height.
@@ -222,6 +257,19 @@ class TopDownCamera extends SceneCamera {
 
   @override
   bool faceVisible(V3 center, V3 normal) => normal.z > 1e-6;
+
+  @override
+  V3? get eyePoint => null;
+
+  @override
+  void projectAll(Float64List xyz, Float32List screen, Float64List depth) {
+    for (var v = 0; v < depth.length; v++) {
+      final x = xyz[v * 3], y = xyz[v * 3 + 1], z = xyz[v * 3 + 2];
+      screen[v * 2] = origin.dx - y * scale;
+      screen[v * 2 + 1] = origin.dy - x * scale;
+      depth[v] = 40 + x - z * 0.01;
+    }
+  }
 }
 
 double _lerp(double a, double b, double t) => a + (b - a) * t;

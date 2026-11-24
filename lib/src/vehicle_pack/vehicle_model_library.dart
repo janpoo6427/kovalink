@@ -48,7 +48,7 @@ class VehicleModelImportOutcome {
 class VehicleModelLibrary {
   VehicleModelLibrary({required this.storageRoot, this.bundle});
 
-  static const defaultModelId = 'khronos-toy-car';
+  static const defaultModelId = 'kovalink-basic';
 
   /// Built-in packs: asset directory per pack id.
   static const builtInPacks = {

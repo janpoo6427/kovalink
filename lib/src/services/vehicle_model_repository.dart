@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:kovalink/src/models/ego_vehicle_profile.dart';
 import 'package:kovalink/src/models/vehicle_model_manifest.dart';
+import 'package:kovalink/src/vehicle_mesh/vehicle_mesh.dart';
 
 /// Outcome of loading a vehicle model pack. Loading never throws: a broken
 /// or missing pack falls back to the built-in model and records why.
@@ -11,26 +12,34 @@ class VehicleModelLoadResult {
     required this.manifest,
     required this.glbAssetPath,
     this.warnings = const [],
+    this.mesh,
   });
 
-  /// Bundled Khronos Toy Car pack, used until the asynchronous load finishes.
-  /// Same values as `assets/vehicles/toy_car/vehicle.json`, so the first
-  /// frame matches the loaded state.
+  /// Bundled KovaLink SUV pack, used until the asynchronous load finishes.
+  /// Same values as `assets/vehicles/kovalink_basic/vehicle.json`, so the
+  /// first frame matches the loaded state (the renderer draws the same
+  /// built-in SUV mesh until the GLB levels arrive).
   static const bundledDefault = VehicleModelLoadResult(
     manifest: VehicleModelManifest(
       schemaVersion: 1,
-      id: 'khronos-toy-car',
-      displayName: 'Khronos Toy Car',
+      id: 'kovalink-basic',
+      displayName: 'KovaLink 기본 SUV',
       asset: 'vehicle.glb',
       coordinateSystem: 'RH_Y_UP_Z_FORWARD',
-      dimensions: VehicleDimensions.reference,
-      nodes: VehicleNodeBindings(body: 'ToyCar'),
+      dimensions: VehicleDimensions(
+        length: 4.60,
+        width: 1.86,
+        height: 1.69,
+        wheelbase: 2.80,
+      ),
+      nodes: VehicleNodeBindings(body: 'Body'),
       cameras: {},
       appearance: VehicleAppearance(
-        paintArgb: 0xFFD6DBE0,
-        glassArgb: 0xFF1A222B,
+        paintArgb: 0xFFE6E9EC,
+        glassArgb: 0xFF141B23,
+        lampArgb: 0xFFA0172A,
       ),
-      author: 'Guido Odendahl, Eric Chadwick (Khronos glTF Sample Assets)',
+      author: 'KovaLink project',
       license: 'CC0-1.0',
     ),
     glbAssetPath: '${VehicleModelRepository.bundledPackDirectory}vehicle.glb',
@@ -43,7 +52,21 @@ class VehicleModelLoadResult {
   final String? glbAssetPath;
   final List<String> warnings;
 
+  /// Render levels read from the GLB for the in-app road renderer, or null
+  /// while loading / when the GLB cannot be drawn (built-in SUV then).
+  final VehicleMeshSet? mesh;
+
   bool get usesBuiltInModel => glbAssetPath == null;
+
+  VehicleModelLoadResult withMesh(
+    VehicleMeshSet? mesh, [
+    List<String> extraWarnings = const [],
+  ]) => VehicleModelLoadResult(
+    manifest: manifest,
+    glbAssetPath: glbAssetPath,
+    warnings: List.unmodifiable([...warnings, ...extraWarnings]),
+    mesh: mesh,
+  );
 
   EgoVehicleProfile get profile => EgoVehicleProfile.fromManifest(manifest);
 }
@@ -51,7 +74,7 @@ class VehicleModelLoadResult {
 class VehicleModelRepository {
   const VehicleModelRepository._();
 
-  static const bundledPackDirectory = 'assets/vehicles/toy_car/';
+  static const bundledPackDirectory = 'assets/vehicles/kovalink_basic/';
   static const supportedCoordinateSystem = 'RH_Y_UP_Z_FORWARD';
 
   static Future<VehicleModelLoadResult> loadBundled({

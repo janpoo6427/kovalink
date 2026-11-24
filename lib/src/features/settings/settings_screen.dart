@@ -624,9 +624,7 @@ class _VehicleModelSectionState extends State<_VehicleModelSection> {
                       ),
                       selected: entry.id == selected,
                       onTap: () => widget.settings.update(
-                        (s) => entry.id == VehicleModelLibrary.defaultModelId
-                            ? s.copyWith(clearVehicleModel: true)
-                            : s.copyWith(vehicleModelId: entry.id),
+                        (s) => s.copyWith(vehicleModelId: entry.id),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

@@ -3,8 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
+import 'package:kovalink/src/features/road_view/scene3d/vehicle_mesh_painter.dart';
 import 'package:kovalink/src/models/ego_vehicle_profile.dart';
 import 'package:kovalink/src/models/road_scene.dart';
+import 'package:kovalink/src/vehicle_mesh/builtin_vehicles.dart';
+import 'package:kovalink/src/vehicle_mesh/vehicle_mesh.dart';
 
 /// Which scene elements to draw (설정 → 표시 항목).
 class SceneLayers {
@@ -47,9 +50,24 @@ class RoadWorldPainter extends CustomPainter {
     this.theme = SceneTheme.clear,
     this.layers = const SceneLayers(),
     this.labelFontFamily,
+    this.egoMesh,
+    this.onVehicleDrawn,
   });
 
+  /// Test/benchmark hook: called for every vehicle mesh drawn (object is
+  /// null for the ego) with its triangle counts and screen bounds.
+  final void Function(
+    TrackedObject? object,
+    VehiclePose pose,
+    MeshDrawStats stats,
+  )?
+  onVehicleDrawn;
+
   final RoadScene scene;
+
+  /// Mesh of the selected vehicle model pack (loaded from its GLB). Null
+  /// draws the built-in KovaLink SUV in the profile's paint color.
+  final VehicleMeshSet? egoMesh;
   final EgoVehicleProfile vehicle;
   final SceneViewpoint viewpoint;
   final SceneTheme theme;
@@ -97,18 +115,24 @@ class RoadWorldPainter extends CustomPainter {
     if (viewpoint == SceneViewpoint.driver) {
       _paintHood(frame);
     } else {
-      _paintVehicle(
+      _paintMeshVehicle(
         frame,
-        rear: -vehicle.dimensions.length,
-        left: 0,
-        length: vehicle.dimensions.length,
-        width: vehicle.dimensions.width,
-        height: vehicle.dimensions.height,
-        paint: Color(vehicle.appearance.paintArgb),
-        glass: Color(vehicle.appearance.glassArgb),
-        lamp: Color(vehicle.appearance.lampArgb),
-        brake: scene.brakeActive,
-        ego: true,
+        egoMesh ?? BuiltinVehicles.suvSet,
+        VehiclePose(
+          rearX: -vehicle.dimensions.length,
+          leftY: 0,
+          length: vehicle.dimensions.length,
+          width: vehicle.dimensions.width,
+          height: vehicle.dimensions.height,
+        ),
+        paintArgb: vehicle.appearance.paintArgb,
+        lamps: VehicleLamps(
+          brake: scene.brakeActive,
+          leftTurn: scene.leftBlinker && _blinkOn,
+          rightTurn: scene.rightBlinker && _blinkOn,
+        ),
+        shadowStrength: 1.2,
+        object: null,
       );
     }
     if (layers.objects) _paintLeadBubble(frame);
@@ -534,18 +558,23 @@ class RoadWorldPainter extends CustomPainter {
               final body = isLead
                   ? f.palette.leadVehicle
                   : f.palette.otherVehicle;
-              _paintVehicle(
+              final set = builtinBodyFor(object);
+              final (nl, nw, nh) = set.lod0.size;
+              final length = object.lengthMeters ?? nl;
+              _paintMeshVehicle(
                 f,
-                rear: object.distanceMeters,
-                left: object.leftMeters,
-                length: object.length,
-                width: object.width,
-                height: object.height,
-                paint: body,
-                glass: const Color(0xFF1E2833),
-                lamp: const Color(0xFFB3202F),
-                brake: object.brakeLights,
-                ego: false,
+                set,
+                VehiclePose(
+                  rearX: object.distanceMeters,
+                  leftY: object.leftMeters,
+                  length: length,
+                  width: object.widthMeters ?? nw,
+                  height: object.heightMeters ?? nh,
+                  yaw: _laneYaw(object.distanceMeters + length / 2),
+                ),
+                paintArgb: body.toARGB32(),
+                lamps: VehicleLamps(brake: object.brakeLights),
+                object: object,
               );
           }
         }),
@@ -595,153 +624,49 @@ class RoadWorldPainter extends CustomPainter {
     }
   }
 
-  void _paintVehicle(
-    _Frame f, {
-    required double rear,
-    required double left,
-    required double length,
-    required double width,
-    required double height,
-    required Color paint,
-    required Color glass,
-    required Color lamp,
-    required bool brake,
-    required bool ego,
-  }) {
-    final front = rear + length;
-    final half = width / 2;
-    final beltZ = height * 0.58;
-    _groundBlob(
-      f,
-      V3(rear + length / 2, left - 0.15, 0),
-      length * 0.62,
-      half + 0.35,
-      f.palette.shadowAlpha * (ego ? 1.25 : 1),
-    );
-    // Wheels.
-    final overhang = length * 0.2;
-    for (final ax in [rear + overhang, front - overhang]) {
-      for (final side in const [1, -1]) {
-        final y = left + side * (half - 0.16);
-        _box(
-          f,
-          V3(ax - 0.34, y - 0.13, 0),
-          V3(ax + 0.34, y + 0.13, 0.66),
-          const Color(0xFF1B1D20),
-        );
-      }
-    }
-    // Lower body (rounded by a top taper) and cabin: slanted rear window,
-    // raked windshield, painted roof.
-    _box(
-      f,
-      V3(rear, left - half, 0.26),
-      V3(front, left + half, beltZ),
-      paint,
-      taper: 0.09,
-      taperFront: 0.22,
-      gloss: true,
-    );
-    _box(
-      f,
-      V3(rear + length * 0.08, left - half + 0.07, beltZ),
-      V3(front - length * 0.24, left + half - 0.07, height),
-      glass,
-      taper: 0.13,
-      taperRear: 0.34,
-      taperFront: 0.62,
-      topColor: paint,
-      gloss: true,
-    );
+  /// Built-in body for a tracked vehicle: trucks get the box truck,
+  /// cars a deterministic mix of SUV and sedan (by track id).
+  static VehicleMeshSet builtinBodyFor(TrackedObject object) {
+    if (object.kind == TrackedObjectKind.truck) return BuiltinVehicles.truckSet;
+    final id = object.id;
+    if (id == null) return BuiltinVehicles.sedanSet;
+    return _hash(id * 31 + 7) < 0.45
+        ? BuiltinVehicles.suvSet
+        : BuiltinVehicles.sedanSet;
+  }
 
-    // Rear details only when the rear face points at the camera.
-    final rearCenter = V3(rear, left, beltZ * 0.7);
-    if (!f.camera.faceVisible(rearCenter, const V3(-1, 0, 0))) return;
-    final x = rear - 0.012;
-    final lampColor = brake ? const Color(0xFFFF2E48) : lamp;
-    // Bumper trim.
-    _flat(f, [
-      V3(x, left + half - 0.03, 0.27),
-      V3(x, left - half + 0.03, 0.27),
-      V3(x, left - half + 0.03, 0.36),
-      V3(x, left + half - 0.03, 0.36),
-    ], Color.lerp(paint, Colors.black, 0.55)!);
-    for (final side in const [1, -1]) {
-      final outer = left + side * (half - 0.04);
-      final inner = left + side * (half - 0.40);
-      final glow = brake ? 10.0 : (ego ? 3.0 : 0.0);
-      _flat(
-        f,
-        [
-          V3(x, outer, beltZ - 0.13),
-          V3(x, inner, beltZ - 0.13),
-          V3(x, inner, beltZ - 0.05),
-          V3(x, outer, beltZ - 0.05),
-        ],
-        lampColor,
-        glow: glow,
-      );
-      _flat(
-        f,
-        [
-          V3(x, outer, beltZ - 0.32),
-          V3(x, outer - side * 0.09, beltZ - 0.32),
-          V3(x, outer - side * 0.09, beltZ - 0.05),
-          V3(x, outer, beltZ - 0.05),
-        ],
-        lampColor,
-        glow: glow,
-      );
-      if (ego && _blinkOn) {
-        final on = side > 0 ? scene.leftBlinker : scene.rightBlinker;
-        if (on) {
-          _flat(
-            f,
-            [
-              V3(x, outer, beltZ - 0.30),
-              V3(x, outer - side * 0.18, beltZ - 0.30),
-              V3(x, outer - side * 0.18, beltZ - 0.19),
-              V3(x, outer, beltZ - 0.19),
-            ],
-            const Color(0xFFFFB21C),
-            glow: 12,
-          );
-        }
-      }
-    }
-    // Light bar across the tailgate and the plate.
-    _flat(
-      f,
-      [
-        V3(x, left + half - 0.40, beltZ - 0.09),
-        V3(x, left - half + 0.40, beltZ - 0.09),
-        V3(x, left - half + 0.40, beltZ - 0.065),
-        V3(x, left + half - 0.40, beltZ - 0.065),
-      ],
-      lampColor.withValues(alpha: 0.85),
-      glow: brake ? 6 : 0,
+  /// Heading of the lane at [x] (from the planned path), radians.
+  double _laneYaw(double x) {
+    if (scene.plannedPath.length < 2) return 0;
+    final last = scene.plannedPath.last.forwardMeters;
+    final a = math.min(x - 2, last - 4);
+    final slope = (scene.pathLeftAt(a + 4) - scene.pathLeftAt(a)) / 4;
+    return math.atan(slope).clamp(-0.6, 0.6);
+  }
+
+  MeshDrawStats _paintMeshVehicle(
+    _Frame f,
+    VehicleMeshSet set,
+    VehiclePose pose, {
+    int? paintArgb,
+    VehicleLamps lamps = const VehicleLamps(),
+    double shadowStrength = 1,
+    required TrackedObject? object,
+  }) {
+    final depth = f.camera.depthOf(V3(pose.rearX, pose.leftY, 0.5));
+    final pixels = f.camera.pixelsPerMeter(depth) * pose.length;
+    final stats = VehicleMeshPainter.paint(
+      canvas: f.canvas,
+      camera: f.camera,
+      palette: f.palette,
+      mesh: set.forScreenLength(pixels),
+      pose: pose,
+      paintArgb: paintArgb,
+      lamps: lamps,
+      shadowStrength: shadowStrength,
     );
-    _flat(f, [
-      V3(x, left + 0.26, 0.38),
-      V3(x, left - 0.26, 0.38),
-      V3(x, left - 0.26, 0.49),
-      V3(x, left + 0.26, 0.49),
-    ], const Color(0xFFF1F3F5));
-    if (brake) {
-      // High-mount stop lamp at the top of the slanted rear window.
-      final cabinRear = rear + length * 0.08 + 0.30;
-      _flat(
-        f,
-        [
-          V3(cabinRear, left + 0.28, height - 0.10),
-          V3(cabinRear, left - 0.28, height - 0.10),
-          V3(cabinRear, left - 0.28, height - 0.06),
-          V3(cabinRear, left + 0.28, height - 0.06),
-        ],
-        const Color(0xFFFF2E48),
-        glow: 8,
-      );
-    }
+    onVehicleDrawn?.call(object, pose, stats);
+    return stats;
   }
 
   bool get _blinkOn => (scene.monotonicTimeNanos ~/ 500000000).isEven;
@@ -891,22 +816,6 @@ class RoadWorldPainter extends CustomPainter {
     );
   }
 
-  /// Draws a planar polygon facing the camera without shading.
-  void _flat(_Frame f, List<V3> points, Color color, {double glow = 0}) {
-    final polygon = f.camera.projectPolygon(points);
-    if (polygon == null) return;
-    final path = Path()..addPolygon(polygon, true);
-    if (glow > 0) {
-      f.canvas.drawPath(
-        path,
-        Paint()
-          ..color = color.withValues(alpha: 0.75)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, glow),
-      );
-    }
-    f.canvas.drawPath(path, Paint()..color = color);
-  }
-
   /// Flat-shaded polygon with back-face culling. Points wind
   /// counter-clockwise when seen from outside.
   void _face(_Frame f, List<V3> points, Color color, {bool gloss = false}) {
@@ -1037,7 +946,8 @@ class RoadWorldPainter extends CustomPainter {
       oldDelegate.viewpoint != viewpoint ||
       oldDelegate.theme != theme ||
       oldDelegate.layers != layers ||
-      oldDelegate.labelFontFamily != labelFontFamily;
+      oldDelegate.labelFontFamily != labelFontFamily ||
+      !identical(oldDelegate.egoMesh, egoMesh);
 }
 
 /// Road boundaries as functions of forward distance.

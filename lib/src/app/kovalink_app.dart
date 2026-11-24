@@ -6,6 +6,7 @@ import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
+import 'package:kovalink/src/vehicle_mesh/vehicle_mesh_loader.dart';
 import 'package:kovalink/src/vehicle_pack/vehicle_model_library.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -88,6 +89,14 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
     final result = await library.load(id);
     if (!mounted || _loadedModelId != id) return;
     vehicleModel.value = result;
+    // The road renderer draws the pack's own mesh once it is read.
+    final load = await VehicleMeshLoader.load(
+      result.glbAssetPath,
+      result.manifest,
+      bundle: widget.vehicleBundle,
+    );
+    if (!mounted || _loadedModelId != id) return;
+    vehicleModel.value = result.withMesh(load.mesh, load.warnings);
   }
 
   @override

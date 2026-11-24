@@ -120,6 +120,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                 theme: widget.theme,
                 layers: widget.layers,
                 labelFontFamily: DefaultTextStyle.of(context).style.fontFamily,
+                egoMesh: vehicleModel.mesh,
               ),
             ),
           ),
