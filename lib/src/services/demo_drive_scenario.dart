@@ -432,7 +432,7 @@ class DemoDriveScenario {
   }
 
   List<RoadAlert> _alerts(double odometer) {
-    final camera = _odometerAt(70) - odometer;
+    final camera = _odometerAt(82) - odometer;
     final toll = loopDistance + 600 - odometer;
     return [
       if (camera > 0)

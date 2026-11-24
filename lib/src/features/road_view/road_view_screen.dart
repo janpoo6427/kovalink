@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:kovalink/src/features/road_view/hud/drive_hud.dart';
 import 'package:kovalink/src/features/road_view/road_scene_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
+import 'package:kovalink/src/models/display_units.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
@@ -23,6 +25,8 @@ class RoadViewScreen extends StatefulWidget {
     this.theme = SceneTheme.clear,
     this.layers = const SceneLayers(),
     this.nativeVehicleOverlay = false,
+    this.speedUnit = SpeedUnit.kph,
+    this.showHud = true,
     super.key,
   });
   final GatewayController controller;
@@ -37,6 +41,10 @@ class RoadViewScreen extends StatefulWidget {
   /// Android/iOS. Off by default: the built-in renderer already draws the
   /// ego in the same camera as the road.
   final bool nativeVehicleOverlay;
+  final SpeedUnit speedUnit;
+
+  /// 설정 → 표시 항목 → HUD 수치.
+  final bool showHud;
 
   @override
   State<RoadViewScreen> createState() => _RoadViewScreenState();
@@ -67,25 +75,12 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
               fit: StackFit.expand,
               children: [
                 _buildRoadSurface(scene),
-                Positioned(left: 18, top: 16, child: _DriveState(scene: scene)),
-                Positioned(
-                  top: 18,
-                  left: compact ? null : constraints.maxWidth * 0.36,
-                  right: compact ? 90 : constraints.maxWidth * 0.36,
-                  child: _TurnSignalPanel(scene: scene),
+                DriveHud(
+                  scene: scene,
+                  compact: compact,
+                  unit: widget.speedUnit,
+                  showNumbers: widget.showHud,
                 ),
-                Positioned(
-                  right: 18,
-                  top: 16,
-                  child: _SpeedLimit(value: scene.speedLimitKph),
-                ),
-                if (scene.tbt != null)
-                  Positioned(
-                    top: compact ? 142 : 132,
-                    right: 18,
-                    width: compact ? 272 : 320,
-                    child: _TbtCard(instruction: scene.tbt!, compact: compact),
-                  ),
                 Positioned(
                   left: 18,
                   bottom: 22,
@@ -98,13 +93,6 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                     }),
                   ),
                 ),
-                if (scene.tbt != null && !compact)
-                  Positioned(
-                    bottom: 24,
-                    left: constraints.maxWidth * 0.38,
-                    right: constraints.maxWidth * 0.38,
-                    child: _NextTurnPill(instruction: scene.tbt!),
-                  ),
               ],
             );
           },
@@ -131,6 +119,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                 viewpoint: widget.viewpoint,
                 theme: widget.theme,
                 layers: widget.layers,
+                labelFontFamily: DefaultTextStyle.of(context).style.fontFamily,
               ),
             ),
           ),
@@ -218,273 +207,6 @@ class _NativeVehicleModelState extends State<_NativeVehicleModel> {
 
   @override
   Widget build(BuildContext context) => _viewer;
-}
-
-class _DriveState extends StatelessWidget {
-  const _DriveState({required this.scene});
-  final RoadScene scene;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: '현재 속도 ${scene.speedKph.round()} 킬로미터, 기어 ${scene.gear.name}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${scene.speedKph.round()}',
-                style: const TextStyle(
-                  fontSize: 62,
-                  height: 0.88,
-                  fontWeight: FontWeight.w300,
-                  letterSpacing: -4,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.only(left: 8, bottom: 6),
-                child: Text(
-                  'km/h',
-                  style: TextStyle(
-                    color: Color(0xFFB5C0CB),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: VehicleGear.values
-                .take(4)
-                .map((gear) {
-                  final selected = gear == scene.gear;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 11),
-                    child: Text(
-                      _gearLabel(gear),
-                      style: TextStyle(
-                        color: selected
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.28),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  );
-                })
-                .toList(growable: false),
-          ),
-          const SizedBox(height: 12),
-          LiquidGlass(
-            radius: 15,
-            blur: 14,
-            tint: const Color(0x26111A24),
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  scene.engaged
-                      ? Icons.assistant_navigation
-                      : Icons.sports_motorsports_outlined,
-                  size: 15,
-                  color: scene.engaged
-                      ? const Color(0xFF68E7C0)
-                      : const Color(0xFFB5C0CB),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  scene.engaged
-                      ? '주행 보조 ${scene.setSpeedKph.round()}'
-                      : '조향 보조 대기',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _gearLabel(VehicleGear gear) => switch (gear) {
-    VehicleGear.park => 'P',
-    VehicleGear.reverse => 'R',
-    VehicleGear.neutral => 'N',
-    VehicleGear.drive => 'D',
-    VehicleGear.unknown => '–',
-  };
-}
-
-class _TurnSignalPanel extends StatelessWidget {
-  const _TurnSignalPanel({required this.scene});
-  final RoadScene scene;
-
-  @override
-  Widget build(BuildContext context) {
-    final blinkOn = (scene.monotonicTimeNanos ~/ 500000000).isEven;
-    Color color(bool active) => active && blinkOn
-        ? const Color(0xFF67E5A7)
-        : Colors.white.withValues(alpha: 0.16);
-    return LiquidGlass(
-      radius: 18,
-      blur: 16,
-      tint: const Color(0x24172634),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          Icon(Icons.arrow_back_rounded, color: color(scene.leftBlinker)),
-          Icon(Icons.arrow_forward_rounded, color: color(scene.rightBlinker)),
-        ],
-      ),
-    );
-  }
-}
-
-class _SpeedLimit extends StatelessWidget {
-  const _SpeedLimit({required this.value});
-  final double? value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 61,
-          height: 61,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF7F8FA),
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFEE3843), width: 6),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x55000000),
-                blurRadius: 18,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Text(
-            value?.round().toString() ?? '–',
-            style: const TextStyle(
-              color: Color(0xFF17191D),
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        const SizedBox(height: 5),
-        const Text(
-          '제한속도',
-          style: TextStyle(
-            color: Color(0xFFB5C0CB),
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TbtCard extends StatelessWidget {
-  const _TbtCard({required this.instruction, this.compact = false});
-  final TbtInstruction instruction;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    return LiquidGlass(
-      tint: const Color(0x3C172534),
-      padding: EdgeInsets.all(compact ? 13 : 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (instruction.roadName != null)
-            Text(
-              instruction.roadName!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFFB5C0CB), fontSize: 12),
-            ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(_maneuverIcon(instruction.maneuver), size: 31),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _maneuverLabel(instruction.maneuver),
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              Text(
-                _distance(instruction.distanceMeters),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          if (!compact && instruction.remainingDistanceMeters != null) ...[
-            const SizedBox(height: 12),
-            Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
-            const SizedBox(height: 10),
-            Text(
-              '${_distance(instruction.remainingDistanceMeters!)} 남음'
-              '${instruction.remainingSeconds == null ? '' : ' · ${_duration(instruction.remainingSeconds!)}'}',
-              style: const TextStyle(
-                color: Color(0xFFB5C0CB),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _NextTurnPill extends StatelessWidget {
-  const _NextTurnPill({required this.instruction});
-  final TbtInstruction instruction;
-
-  @override
-  Widget build(BuildContext context) {
-    return LiquidGlass(
-      radius: 24,
-      tint: const Color(0x421A2A3C),
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            _maneuverIcon(instruction.maneuver),
-            color: const Color(0xFF72A7FF),
-          ),
-          const SizedBox(width: 9),
-          Text(
-            _distance(instruction.distanceMeters),
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ModeButton extends StatelessWidget {
@@ -581,34 +303,4 @@ class _CameraPlaceholder extends StatelessWidget {
       ),
     );
   }
-}
-
-IconData _maneuverIcon(TbtManeuver maneuver) => switch (maneuver) {
-  TbtManeuver.turnLeft => Icons.turn_left_rounded,
-  TbtManeuver.turnRight => Icons.turn_right_rounded,
-  TbtManeuver.slightLeft => Icons.turn_slight_left_rounded,
-  TbtManeuver.slightRight => Icons.turn_slight_right_rounded,
-  TbtManeuver.uTurn => Icons.u_turn_left_rounded,
-  TbtManeuver.arrive => Icons.flag_rounded,
-  _ => Icons.straight_rounded,
-};
-
-String _maneuverLabel(TbtManeuver maneuver) => switch (maneuver) {
-  TbtManeuver.turnLeft => '좌회전',
-  TbtManeuver.turnRight => '우회전',
-  TbtManeuver.slightLeft => '왼쪽 방향',
-  TbtManeuver.slightRight => '오른쪽 방향',
-  TbtManeuver.uTurn => '유턴',
-  TbtManeuver.arrive => '목적지 도착',
-  _ => '직진',
-};
-
-String _distance(double meters) => meters >= 1000
-    ? '${(meters / 1000).toStringAsFixed(meters >= 10000 ? 0 : 1)} km'
-    : '${meters.round()} m';
-
-String _duration(int seconds) {
-  final hours = seconds ~/ 3600;
-  final minutes = (seconds % 3600) ~/ 60;
-  return hours > 0 ? '$hours시간 $minutes분' : '$minutes분';
 }

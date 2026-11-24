@@ -333,7 +333,7 @@ class RoadWorldPainter extends CustomPainter {
     f.canvas.drawPath(
       Path()..addPolygon(polygon, true),
       Paint()
-        ..color = const Color(0x77FF2D45)
+        ..color = const Color(0x5CFF2D45)
         ..maskFilter = MaskFilter.blur(
           BlurStyle.normal,
           math.max(4, ppm * 0.45),
@@ -473,6 +473,11 @@ class RoadWorldPainter extends CustomPainter {
     final lead = scene.leadObject;
     for (final object in scene.objects) {
       if (object.distanceMeters <= -40 || object.distanceMeters > 180) continue;
+      // Cars beside/behind the ego would fill the chase camera's near
+      // field; the top-down view still shows them.
+      if (viewpoint != SceneViewpoint.topDown && object.distanceMeters < -6) {
+        continue;
+      }
       final center = V3(
         object.distanceMeters + object.length / 2,
         object.leftMeters,
