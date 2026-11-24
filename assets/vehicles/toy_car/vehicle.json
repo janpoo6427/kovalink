@@ -6,9 +6,12 @@
   "license": "CC0-1.0",
   "asset": "vehicle.glb",
   "coordinateSystem": "RH_Y_UP_Z_FORWARD",
-  "appearance": {"paintColor": "#D6DBE0", "glassColor": "#1A222B"},
+  "appearance": {
+    "paintColor": "#D6DBE0",
+    "glassColor": "#1A222B"
+  },
   "dimensionsMeters": {
-    "length": 4.50,
+    "length": 4.5,
     "width": 1.86,
     "height": 1.48,
     "wheelbase": 2.75
@@ -21,7 +24,32 @@
     "reverseLights": []
   },
   "cameras": {
-    "park": {"position": [2.6, 1.5, 3.4], "target": [0, 0.45, 0]},
-    "drive": {"position": [0, 1.2, 3.2], "target": [0, 0.35, 0]}
-  }
+    "park": {
+      "position": [
+        2.6,
+        1.5,
+        3.4
+      ],
+      "target": [
+        0,
+        0.45,
+        0
+      ]
+    },
+    "drive": {
+      "position": [
+        0,
+        1.2,
+        3.2
+      ],
+      "target": [
+        0,
+        0.35,
+        0
+      ]
+    }
+  },
+  "excludeNodes": [
+    "Fabric"
+  ]
 }

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "kovalink-basic",
-  "displayName": "KovaLink 기본 차량",
+  "displayName": "KovaLink 기본 SUV",
   "author": "KovaLink project",
   "license": "CC0-1.0",
   "asset": "vehicle.glb",
@@ -9,15 +9,15 @@
   "origin": "rearAxleGround",
   "scale": 1.0,
   "dimensionsMeters": {
-    "length": 4.60,
+    "length": 4.6,
     "width": 1.86,
-    "height": 1.50,
-    "wheelbase": 2.80
+    "height": 1.69,
+    "wheelbase": 2.8
   },
   "appearance": {
-    "paintColor": "#545E6B",
-    "glassColor": "#0D141C",
-    "lampColor": "#B01D31"
+    "paintColor": "#E6E9EC",
+    "glassColor": "#141B23",
+    "lampColor": "#A0172A"
   },
   "nodes": {
     "body": "Body",
@@ -25,10 +25,23 @@
     "frontRightWheel": "Wheel_FR",
     "rearLeftWheel": "Wheel_RL",
     "rearRightWheel": "Wheel_RR",
-    "leftTurnSignals": ["Turn_FL", "Turn_RL"],
-    "rightTurnSignals": ["Turn_FR", "Turn_RR"],
-    "brakeLights": ["Brake_L", "Brake_R", "Brake_C"],
-    "reverseLights": ["Reverse_L", "Reverse_R"]
+    "leftTurnSignals": [
+      "Turn_FL",
+      "Turn_RL"
+    ],
+    "rightTurnSignals": [
+      "Turn_FR",
+      "Turn_RR"
+    ],
+    "brakeLights": [
+      "Brake_L",
+      "Brake_R",
+      "Brake_C"
+    ],
+    "reverseLights": [
+      "Reverse_L",
+      "Reverse_R"
+    ]
   },
   "materials": {
     "bodyPaint": "KL_BodyPaint",
@@ -40,7 +53,29 @@
     "reverseLights": "KL_Reverse"
   },
   "cameras": {
-    "park": {"position": [2.6, 1.6, 6.0], "target": [0, 0.6, 1.4]},
-    "drive": {"position": [0, 2.2, -5.5], "target": [0, 0.8, 2.0]}
+    "park": {
+      "position": [
+        2.6,
+        1.6,
+        6.0
+      ],
+      "target": [
+        0,
+        0.6,
+        1.4
+      ]
+    },
+    "drive": {
+      "position": [
+        0,
+        2.2,
+        -5.5
+      ],
+      "target": [
+        0,
+        0.8,
+        2.0
+      ]
+    }
   }
 }

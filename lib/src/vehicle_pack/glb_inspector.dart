@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:kovalink/src/vehicle_mesh/gltf_mesh_reader.dart';
 import 'package:kovalink/src/vehicle_pack/safe_zip_reader.dart';
 
 class GlbLimits {
@@ -9,6 +10,7 @@ class GlbLimits {
     this.maxTriangles = 200000,
     this.maxTextureSize = 2048,
     this.maxImages = 16,
+    this.renderTriangleBudget = 20000,
   });
 
   /// Above this a warning is shown (mobile quality tier target).
@@ -18,6 +20,10 @@ class GlbLimits {
   final int maxTriangles;
   final int maxTextureSize;
   final int maxImages;
+
+  /// Above this the in-app road renderer draws a simplified copy (vertex
+  /// clustering) and the import shows a warning.
+  final int renderTriangleBudget;
 }
 
 class GlbReport {
@@ -151,6 +157,8 @@ class GlbInspector {
         );
       }
     }
+    // Draco/meshopt compressed geometry cannot be drawn by the app.
+    GltfMeshReader.rejectUnsupported(gltf);
     if (images.length > limits.maxImages) {
       throw ModelPackRejection(
         'too-many-textures',
@@ -233,7 +241,13 @@ class GlbInspector {
     final warnings = <String>[];
     if (triangles > limits.recommendedTriangles) {
       warnings.add(
-        '폴리곤 $triangles개: 권장 ${limits.recommendedTriangles}개를 넘어 휴대폰에서 느릴 수 있습니다.',
+        '폴리곤 $triangles개: 권장 ${limits.recommendedTriangles}개를 넘어 휴대폰에서 느릴 수 있습니다. '
+        '도로 화면에서는 차량당 ${limits.renderTriangleBudget}개 이하로 단순화해 그립니다.',
+      );
+    } else if (triangles > limits.renderTriangleBudget) {
+      warnings.add(
+        '폴리곤 $triangles개: 도로 화면에서는 차량당 ${limits.renderTriangleBudget}개 이하로 '
+        '단순화해 그립니다(멀리 있는 차는 더 단순한 단계).',
       );
     }
     return GlbReport(

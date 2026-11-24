@@ -14,6 +14,7 @@ class VehicleModelManifest {
     this.scale = 1.0,
     this.origin = defaultOrigin,
     this.materials = const VehicleMaterialBindings(),
+    this.excludeNodes = const [],
   });
 
   static const defaultOrigin = 'rearAxleGround';
@@ -45,6 +46,10 @@ class VehicleModelManifest {
 
   /// glTF material names with a special role (recolorable paint, lamps).
   final VehicleMaterialBindings materials;
+
+  /// glTF node names the in-app renderer leaves out (display stands,
+  /// ground cloths). Their children are skipped too.
+  final List<String> excludeNodes;
 
   /// Built-in vehicle used when no model pack can be loaded. It has no GLB
   /// asset, so only the deterministic built-in ego renderer is used.
@@ -83,6 +88,7 @@ class VehicleModelManifest {
     scale: scale,
     origin: origin,
     materials: materials,
+    excludeNodes: excludeNodes,
   );
 
   factory VehicleModelManifest.fromJson(Map<String, dynamic> json) {
@@ -118,6 +124,9 @@ class VehicleModelManifest {
       materials: VehicleMaterialBindings.fromJson(
         json['materials'] as Map<String, dynamic>? ?? const {},
       ),
+      excludeNodes: (json['excludeNodes'] as List<dynamic>? ?? const [])
+          .cast<String>()
+          .toList(growable: false),
     );
   }
 }
