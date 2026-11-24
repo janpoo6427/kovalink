@@ -9,6 +9,7 @@ abstract final class HudColors {
   static const muted = Color(0xFF7D8791);
   static const faint = Color(0xFFB4BCC4);
   static const glass = Color(0x8CFFFFFF);
+  static const cardGlass = Color(0x99E6F0FA);
   static const engaged = Color(0xFF1E9E6A);
   static const engagedTint = Color(0x8C9FE3C6);
   static const signalGreen = Color(0xFF22B455);
@@ -75,7 +76,7 @@ class DriveHud extends StatelessWidget {
               right: 18,
               top: compact ? 204 : 108,
               width: compact ? 250 : 300,
-              child: RouteInfoCard(scene: scene, unit: unit),
+              child: RouteInfoCard(scene: scene, unit: unit, compact: compact),
             ),
           if (showTurnSign && city)
             Positioned(
@@ -427,10 +428,18 @@ class SpeedLimitSign extends StatelessWidget {
 
 /// Road name, enforcement points, tollgates, next turn and destination.
 class RouteInfoCard extends StatelessWidget {
-  const RouteInfoCard({required this.scene, required this.unit, super.key});
+  const RouteInfoCard({
+    required this.scene,
+    required this.unit,
+    this.compact = false,
+    super.key,
+  });
 
   final RoadScene scene;
   final SpeedUnit unit;
+
+  /// Phone portrait: the narrower card keeps the smaller type.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -438,6 +447,7 @@ class RouteInfoCard extends StatelessWidget {
     final rows = <Widget>[
       for (final alert in scene.roadAlerts.take(3))
         _InfoRow(
+          compact: compact,
           icon: switch (alert.kind) {
             RoadAlertKind.speedCamera => Icons.photo_camera_outlined,
             RoadAlertKind.sectionCamera => Icons.videocam_outlined,
@@ -461,6 +471,7 @@ class RouteInfoCard extends StatelessWidget {
           tbt.maneuver != TbtManeuver.straight &&
           tbt.maneuver != TbtManeuver.unknown)
         _InfoRow(
+          compact: compact,
           icon: maneuverIcon(tbt.maneuver),
           label: maneuverLabel(tbt.maneuver),
           detail: '교차로',
@@ -468,6 +479,7 @@ class RouteInfoCard extends StatelessWidget {
         ),
       if (tbt?.remainingDistanceMeters case final remaining?)
         _InfoRow(
+          compact: compact,
           icon: Icons.flag_outlined,
           label: '목적지까지',
           value:
@@ -478,20 +490,23 @@ class RouteInfoCard extends StatelessWidget {
     if (rows.isEmpty && scene.roadName == null) return const SizedBox.shrink();
     return _Pill(
       radius: 18,
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      tint: HudColors.cardGlass,
+      padding: compact
+          ? const EdgeInsets.fromLTRB(14, 10, 14, 10)
+          : const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           if (scene.roadName case final name?)
             Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.only(bottom: 6),
               child: Text(
                 tbt?.roadName ?? name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11.5,
+                style: TextStyle(
+                  fontSize: compact ? 11.5 : 12,
                   color: HudColors.muted,
                   fontWeight: FontWeight.w600,
                 ),
@@ -510,8 +525,10 @@ class _InfoRow extends StatelessWidget {
     required this.label,
     required this.value,
     this.detail,
+    this.compact = false,
   });
 
+  final bool compact;
   final IconData icon;
   final String label;
   final String? detail;
@@ -520,11 +537,11 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3.5),
+      padding: EdgeInsets.symmetric(vertical: compact ? 3.5 : 4.5),
       child: Row(
         children: [
-          Icon(icon, size: 17, color: HudColors.ink),
-          const SizedBox(width: 9),
+          Icon(icon, size: compact ? 17 : 18, color: HudColors.ink),
+          SizedBox(width: compact ? 9 : 10),
           Expanded(
             child: Row(
               children: [
@@ -533,8 +550,8 @@ class _InfoRow extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
+                    style: TextStyle(
+                      fontSize: compact ? 12.5 : 13.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -545,8 +562,8 @@ class _InfoRow extends StatelessWidget {
                       ' · $detail',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12.5,
+                      style: TextStyle(
+                        fontSize: compact ? 12.5 : 13,
                         color: HudColors.muted,
                       ),
                     ),
@@ -557,7 +574,10 @@ class _InfoRow extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             value,
-            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+            style: TextStyle(
+              fontSize: compact ? 13.5 : 15.5,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),

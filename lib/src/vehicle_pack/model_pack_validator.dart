@@ -130,7 +130,7 @@ class ModelPackValidator {
     if (manifest.coordinateSystem != 'RH_Y_UP_Z_FORWARD') {
       throw const ModelPackRejection(
         'manifest-axes',
-        'coordinateSystem은 RH_Y_UP_Z_FORWARD(+X 오른쪽, +Y 위, +Z 앞)여야 합니다.',
+        'coordinateSystem은 RH_Y_UP_Z_FORWARD(glTF 기본: +X 왼쪽, +Y 위, +Z 앞)여야 합니다.',
       );
     }
     if (manifest.origin != VehicleModelManifest.defaultOrigin) {

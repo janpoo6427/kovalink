@@ -234,8 +234,8 @@ class BuiltinVehicles {
       bumperZ: 0.54,
       skidHalf: 0.46,
     ),
-    mirrorX: (3.42, 3.62),
-    mirrorZ: (1.07, 1.21),
+    mirrorX: (3.44, 3.62),
+    mirrorZ: (1.08, 1.19),
   );
 
   static final _sedanSpec = _BodySpec(
@@ -689,7 +689,7 @@ class BuiltinVehicles {
     final (z0, z1) = spec.mirrorZ;
     final ws = spec.halfWidth - 0.02;
     for (final side in const [1.0, -1.0]) {
-      final yIn = side * (ws - 0.10), yOut = side * (ws + 0.13);
+      final yIn = side * (ws - 0.08), yOut = side * (ws + 0.11);
       final min = P3(x0, math.min(yIn, yOut), z0);
       final max = P3(x1, math.max(yIn, yOut), z1);
       b.box(min, max, paint);

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
@@ -283,7 +284,9 @@ class RoadWorldPainter extends CustomPainter {
     }
   }
 
-  /// Rainbow planned-path ribbon (청록 → 파랑 → 보라), fading out ahead.
+  /// Rainbow planned-path ribbon (청록 → 파랑 → 보라), one soft-edged
+  /// outline with a gradient along the road, fading in at the ego and out
+  /// at the lead (no per-segment banding).
   void _paintPath(_Frame f) {
     final path = scene.plannedPath;
     if (path.length < 2) return;
@@ -294,73 +297,114 @@ class RoadWorldPainter extends CustomPainter {
     );
     const start = 0.4;
     if (end <= start + 1) return;
-    const stops = [
-      Color(0xFF39E6CF),
-      Color(0xFF4F9DFF),
-      Color(0xFF9B72FF),
-      Color(0xFFE071E6),
-    ];
-    Color colorAt(double t) {
-      final scaled = (t.clamp(0.0, 1.0)) * (stops.length - 1);
-      final index = scaled.floor().clamp(0, stops.length - 2);
-      return Color.lerp(stops[index], stops[index + 1], scaled - index)!;
-    }
-
     final xs = <double>[];
     for (var x = start; x < end; x += 0.6 + x * 0.04) {
       xs.add(x);
     }
     xs.add(end);
     double center(double x) => RoadScene.interpolateLeft(path, x);
-    for (var index = 0; index < xs.length - 1; index++) {
-      final a = xs[index];
-      final b = xs[index + 1];
-      final t = ((a + b) / 2 - start) / (end - start);
-      final fadeIn = (((a + b) / 2 - start) / 1.5).clamp(0.0, 1.0);
-      final alpha = 0.78 * math.pow(1 - t, 0.7) * fadeIn;
-      final color = colorAt(t).withValues(alpha: alpha.toDouble());
-      _quad(
-        f,
-        V3(a, center(a) + pathHalfWidth, 0.01),
-        V3(a, center(a) - pathHalfWidth, 0.01),
-        V3(b, center(b) - pathHalfWidth, 0.01),
-        V3(b, center(b) + pathHalfWidth, 0.01),
-        color,
-        fog: false,
+    List<Offset>? outline(double half, double z, {double from = start}) {
+      final part = xs.where((x) => x >= from).toList();
+      if (part.length < 2) return null;
+      return f.camera.projectPolygon([
+        for (final x in part) V3(x, center(x) + half, z),
+        for (final x in part.reversed) V3(x, center(x) - half, z),
+      ]);
+    }
+
+    // Gradient runs from just ahead of the ego (the part the ego does not
+    // hide) to the end of the ribbon, in screen space.
+    final fromX = start + math.min(5.2, (end - start) * 0.35);
+    final from = f.camera.project(V3(fromX, center(fromX), 0));
+    final to = f.camera.project(V3(end, center(end), 0));
+    if (from == null || to == null) return;
+    final ppm = f.camera.pixelsPerMeter(f.camera.depthOf(V3(8, 0, 0)));
+    // The wide glow starts a little ahead so it never haloes the ego.
+    final glow = outline(pathHalfWidth * 1.45, 0.009, from: 3.5);
+    if (glow != null) {
+      f.canvas.drawPath(
+        Path()..addPolygon(glow, true),
+        Paint()
+          ..shader = ui.Gradient.linear(
+            from.offset,
+            to.offset,
+            const [
+              Color(0x3839E6CF),
+              Color(0x404F9DFF),
+              Color(0x309B72FF),
+              Color(0x00E071E6),
+            ],
+            const [0, 0.35, 0.7, 1],
+          )
+          ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal,
+            math.max(2.0, ppm * 0.22),
+          ),
       );
-      _quad(
-        f,
-        V3(a, center(a) + pathHalfWidth * 0.35, 0.012),
-        V3(a, center(a) - pathHalfWidth * 0.35, 0.012),
-        V3(b, center(b) - pathHalfWidth * 0.35, 0.012),
-        V3(b, center(b) + pathHalfWidth * 0.35, 0.012),
-        Colors.white.withValues(alpha: alpha * 0.22),
-        fog: false,
+    }
+    final core = outline(pathHalfWidth, 0.01);
+    if (core == null) return;
+    f.canvas.drawPath(
+      Path()..addPolygon(core, true),
+      Paint()
+        ..shader = ui.Gradient.linear(
+          from.offset,
+          to.offset,
+          const [
+            Color(0xB839E6CF),
+            Color(0xB84F9DFF),
+            Color(0xA89B72FF),
+            Color(0x60E071E6),
+            Color(0x00E071E6),
+          ],
+          const [0, 0.32, 0.64, 0.88, 1],
+        )
+        ..maskFilter = MaskFilter.blur(
+          BlurStyle.normal,
+          math.max(0.8, ppm * 0.05),
+        ),
+    );
+    // Faint bright center line, like light on a glass strip.
+    final shine = outline(pathHalfWidth * 0.28, 0.011);
+    if (shine != null) {
+      f.canvas.drawPath(
+        Path()..addPolygon(shine, true),
+        Paint()
+          ..shader = ui.Gradient.linear(from.offset, to.offset, const [
+            Color(0x38FFFFFF),
+            Color(0x00FFFFFF),
+          ])
+          ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal,
+            math.max(1.0, ppm * 0.08),
+          ),
       );
     }
   }
 
   void _paintBrakePool(_Frame f) {
+    // Soft red light on the road right behind the lamps.
     final rear = -vehicle.dimensions.length;
-    final halfWidth = vehicle.dimensions.width * 0.75;
+    final halfWidth = vehicle.dimensions.width * 0.58;
     final points = [
-      for (var i = 0; i < 16; i++)
+      for (var i = 0; i < 20; i++)
         V3(
-          rear - 1.4 + math.cos(i / 16 * math.pi * 2) * 1.9,
-          math.sin(i / 16 * math.pi * 2) * halfWidth,
+          rear - 1.05 + math.cos(i / 20 * math.pi * 2) * 1.15,
+          math.sin(i / 20 * math.pi * 2) * halfWidth,
           0.02,
         ),
     ];
     final polygon = f.camera.projectPolygon(points);
     if (polygon == null) return;
-    final ppm = f.camera.pixelsPerMeter(f.camera.depthOf(V3(rear - 1.4, 0, 0)));
+    final ppm = f.camera.pixelsPerMeter(f.camera.depthOf(V3(rear - 1, 0, 0)));
     f.canvas.drawPath(
       Path()..addPolygon(polygon, true),
       Paint()
-        ..color = const Color(0x5CFF2D45)
+        ..color = const Color(0x66FF2D45)
+        ..blendMode = BlendMode.screen
         ..maskFilter = MaskFilter.blur(
           BlurStyle.normal,
-          math.max(4, ppm * 0.45),
+          math.max(3, ppm * 0.32),
         ),
     );
   }
@@ -463,7 +507,8 @@ class RoadWorldPainter extends CustomPainter {
     );
   }
 
-  /// Low-poly foliage: octagonal bipyramid, flat shaded.
+  /// Low-poly round foliage (faceted sphere: 3 rings of 7), flat shaded
+  /// like the reference's broadleaf trees.
   void _blob(
     _Frame f,
     V3 center,
@@ -471,23 +516,36 @@ class RoadWorldPainter extends CustomPainter {
     double halfHeight,
     Color color,
   ) {
-    const segments = 8;
+    const segments = 7;
+    const rings = [(-0.55, 0.78), (0.05, 1.0), (0.6, 0.72)];
     final top = center + V3(0, 0, halfHeight);
-    final bottom = center - V3(0, 0, halfHeight * 0.8);
-    final ring = [
-      for (var i = 0; i < segments; i++)
-        center +
-            V3(
-              math.cos((i + 0.5) / segments * math.pi * 2) * radius,
-              math.sin((i + 0.5) / segments * math.pi * 2) * radius,
-              (i.isEven ? 0.12 : -0.08) * halfHeight,
-            ),
+    final bottom = center - V3(0, 0, halfHeight * 0.78);
+    final grid = [
+      for (final (ri, (h, r)) in rings.indexed)
+        [
+          for (var i = 0; i < segments; i++)
+            center +
+                V3(
+                  math.cos((i + ri * 0.5) / segments * math.pi * 2) *
+                      radius *
+                      r *
+                      (1 + 0.08 * _hash(i * 7 + ri)),
+                  math.sin((i + ri * 0.5) / segments * math.pi * 2) *
+                      radius *
+                      r *
+                      (1 + 0.08 * _hash(i * 7 + ri)),
+                  h * halfHeight,
+                ),
+        ],
     ];
     for (var i = 0; i < segments; i++) {
-      final a = ring[i];
-      final b = ring[(i + 1) % segments];
-      _face(f, [a, b, top], color);
-      _face(f, [b, a, bottom], color);
+      final j = (i + 1) % segments;
+      _face(f, [grid[2][i], grid[2][j], top], color);
+      _face(f, [grid[0][j], grid[0][i], bottom], color);
+      for (var r = 0; r < rings.length - 1; r++) {
+        _face(f, [grid[r][i], grid[r][j], grid[r + 1][j]], color);
+        _face(f, [grid[r][i], grid[r + 1][j], grid[r + 1][i]], color);
+      }
     }
   }
 

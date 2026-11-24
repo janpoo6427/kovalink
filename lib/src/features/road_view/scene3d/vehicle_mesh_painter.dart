@@ -364,9 +364,12 @@ class VehicleMeshPainter {
     final ndl = math.max(0.0, nx * lx + ny * ly + nz * lz);
     // Hemispheric ambient, darker toward the ground (fake occlusion).
     final occlusion = 0.80 + 0.20 * heightFraction.clamp(0.0, 1.0);
-    final ambient = (0.58 + 0.14 * nz) * occlusion;
+    final ambient = (0.76 + 0.10 * nz) * occlusion;
     final metallic = m.metallic;
-    final diffuse = (ambient + 0.46 * ndl) * (1 - metallic * 0.45);
+    // Soft fill from the viewer (like the reference's studio look): faces
+    // turned to the camera stay bright even with the sun behind them.
+    final fill = 0.16 * math.max(0.0, -(nx * vx + ny * vy + nz * vz));
+    final diffuse = (ambient + 0.30 * ndl + fill) * (1 - metallic * 0.40);
     var r = br * diffuse, g = bg * diffuse, b = bb * diffuse;
 
     // Reflection of sky/ground (Fresnel-weighted, clear coat for paint).

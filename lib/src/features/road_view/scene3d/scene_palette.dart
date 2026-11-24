@@ -89,7 +89,7 @@ class ScenePalette {
         skyTop: const Color(0xFFD9DDE1),
         skyHorizon: const Color(0xFFE8EAEC),
         fog: const Color(0xFFE6E8EA),
-        fogDensity: city ? 0.024 : 0.014,
+        fogDensity: city ? 0.032 : 0.014,
         groundNear: city ? const Color(0xFFCDD1D4) : const Color(0xFFB4C0A8),
         shoulder: const Color(0xFFD2D5D7),
         asphaltNear: city ? const Color(0xFFBFC4C8) : const Color(0xFF6A7076),
