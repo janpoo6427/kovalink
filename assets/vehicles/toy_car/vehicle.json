@@ -2,6 +2,8 @@
   "schemaVersion": 1,
   "id": "khronos-toy-car",
   "displayName": "Khronos Toy Car",
+  "author": "Guido Odendahl, Eric Chadwick (Khronos glTF Sample Assets)",
+  "license": "CC0-1.0",
   "asset": "vehicle.glb",
   "coordinateSystem": "RH_Y_UP_Z_FORWARD",
   "dimensionsMeters": {

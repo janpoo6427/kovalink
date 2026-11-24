@@ -9,7 +9,14 @@ class VehicleModelManifest {
     required this.nodes,
     required this.cameras,
     this.appearance = const VehicleAppearance(),
+    this.author,
+    this.license,
+    this.scale = 1.0,
+    this.origin = defaultOrigin,
+    this.materials = const VehicleMaterialBindings(),
   });
+
+  static const defaultOrigin = 'rearAxleGround';
 
   final int schemaVersion;
   final String id;
@@ -23,6 +30,21 @@ class VehicleModelManifest {
   /// Optional colors used by the built-in 2D/3D-like ego renderer. Packs
   /// written before `appearance` existed keep the default palette.
   final VehicleAppearance appearance;
+
+  /// Pack author and SPDX license identifier. Required for imported packs
+  /// (checked by ModelPackValidator), optional for older bundled packs.
+  final String? author;
+  final String? license;
+
+  /// GLB units per meter multiplier. 1.0 means the GLB is authored in meters.
+  final double scale;
+
+  /// Origin rule. v1 supports only `rearAxleGround`: ground level, centered
+  /// between the rear wheels.
+  final String origin;
+
+  /// glTF material names with a special role (recolorable paint, lamps).
+  final VehicleMaterialBindings materials;
 
   /// Built-in vehicle used when no model pack can be loaded. It has no GLB
   /// asset, so only the deterministic built-in ego renderer is used.
@@ -56,6 +78,11 @@ class VehicleModelManifest {
     nodes: nodes,
     cameras: cameras,
     appearance: appearance,
+    author: author,
+    license: license,
+    scale: scale,
+    origin: origin,
+    materials: materials,
   );
 
   factory VehicleModelManifest.fromJson(Map<String, dynamic> json) {
@@ -84,8 +111,58 @@ class VehicleModelManifest {
         Map<String, dynamic> value => VehicleAppearance.fromJson(value),
         _ => const VehicleAppearance(),
       },
+      author: json['author'] as String?,
+      license: json['license'] as String?,
+      scale: (json['scale'] as num? ?? 1).toDouble(),
+      origin: json['origin'] as String? ?? defaultOrigin,
+      materials: VehicleMaterialBindings.fromJson(
+        json['materials'] as Map<String, dynamic>? ?? const {},
+      ),
     );
   }
+}
+
+/// Optional glTF material names. The renderer may recolor [bodyPaint] with
+/// the user's paint color and drive lamp materials' emissive strength.
+class VehicleMaterialBindings {
+  const VehicleMaterialBindings({
+    this.bodyPaint,
+    this.glass,
+    this.tailLights,
+    this.brakeLights,
+    this.leftTurnSignals,
+    this.rightTurnSignals,
+    this.reverseLights,
+  });
+
+  final String? bodyPaint;
+  final String? glass;
+  final String? tailLights;
+  final String? brakeLights;
+  final String? leftTurnSignals;
+  final String? rightTurnSignals;
+  final String? reverseLights;
+
+  List<String> get all => [
+    ?bodyPaint,
+    ?glass,
+    ?tailLights,
+    ?brakeLights,
+    ?leftTurnSignals,
+    ?rightTurnSignals,
+    ?reverseLights,
+  ];
+
+  factory VehicleMaterialBindings.fromJson(Map<String, dynamic> json) =>
+      VehicleMaterialBindings(
+        bodyPaint: json['bodyPaint'] as String?,
+        glass: json['glass'] as String?,
+        tailLights: json['tailLights'] as String?,
+        brakeLights: json['brakeLights'] as String?,
+        leftTurnSignals: json['leftTurnSignals'] as String?,
+        rightTurnSignals: json['rightTurnSignals'] as String?,
+        reverseLights: json['reverseLights'] as String?,
+      );
 }
 
 class VehicleDimensions {
@@ -179,6 +256,8 @@ class VehicleNodeBindings {
     this.body,
     this.frontLeftWheel,
     this.frontRightWheel,
+    this.rearLeftWheel,
+    this.rearRightWheel,
     this.steeringWheel,
     this.leftTurnSignals = const [],
     this.rightTurnSignals = const [],
@@ -189,6 +268,8 @@ class VehicleNodeBindings {
   final String? body;
   final String? frontLeftWheel;
   final String? frontRightWheel;
+  final String? rearLeftWheel;
+  final String? rearRightWheel;
   final String? steeringWheel;
   final List<String> leftTurnSignals;
   final List<String> rightTurnSignals;
@@ -202,6 +283,8 @@ class VehicleNodeBindings {
       body: json['body'] as String?,
       frontLeftWheel: json['frontLeftWheel'] as String?,
       frontRightWheel: json['frontRightWheel'] as String?,
+      rearLeftWheel: json['rearLeftWheel'] as String?,
+      rearRightWheel: json['rearRightWheel'] as String?,
       steeringWheel: json['steeringWheel'] as String?,
       leftTurnSignals: names('leftTurnSignals'),
       rightTurnSignals: names('rightTurnSignals'),
@@ -209,6 +292,19 @@ class VehicleNodeBindings {
       reverseLights: names('reverseLights'),
     );
   }
+
+  List<String> get all => [
+    ?body,
+    ?frontLeftWheel,
+    ?frontRightWheel,
+    ?rearLeftWheel,
+    ?rearRightWheel,
+    ?steeringWheel,
+    ...leftTurnSignals,
+    ...rightTurnSignals,
+    ...brakeLights,
+    ...reverseLights,
+  ];
 }
 
 class VehicleCameraPreset {
