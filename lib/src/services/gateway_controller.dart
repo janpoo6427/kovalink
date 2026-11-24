@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
+import 'package:kovalink/src/services/demo_drive_scenario.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
 
 enum GatewayMode { demo, connecting, live, disconnected, error }
@@ -12,29 +13,57 @@ enum GatewayMode { demo, connecting, live, disconnected, error }
 class GatewayController extends ChangeNotifier {
   final WebRtcRoadStream roadStream = WebRtcRoadStream();
   GatewayMode mode = GatewayMode.disconnected;
-  RoadScene scene = RoadScene.demo(Duration.zero);
+  RoadScene scene = DemoDriveScenario().sceneAt(Duration.zero);
   String? errorMessage;
   String? connectedEndpoint;
   bool gatewayAuthenticated = false;
 
+  /// Demo route currently (or last) played.
+  DemoRoute demoRoute = DemoRoute.city;
+
+  static const demoFrameInterval = Duration(milliseconds: 50);
+
   Timer? _demoTimer;
-  Stopwatch? _demoClock;
+  DemoDriveScenario? _scenario;
+  Duration _demoElapsed = Duration.zero;
   WebSocket? _socket;
   StreamSubscription<dynamic>? _socketSubscription;
 
   bool get canEditSettings => mode == GatewayMode.live && gatewayAuthenticated;
 
-  void startDemo() {
+  /// Elapsed demo time. Advances by exactly one frame interval per tick so
+  /// the demo is deterministic (independent of wall-clock jitter).
+  Duration get demoElapsed => _demoElapsed;
+
+  /// The scenario being played, or null when the demo is off.
+  DemoDriveScenario? get scenario => _scenario;
+
+  /// Plays the built-in demo drive. No network is used.
+  void startDemo({DemoRoute? route, int seed = DemoDriveScenario.defaultSeed}) {
     _closeTransport();
     errorMessage = null;
     connectedEndpoint = null;
     gatewayAuthenticated = false;
     mode = GatewayMode.demo;
-    _demoClock = Stopwatch()..start();
-    _demoTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      scene = RoadScene.demo(_demoClock!.elapsed);
+    demoRoute = route ?? demoRoute;
+    final scenario = DemoDriveScenario(route: demoRoute, seed: seed);
+    _scenario = scenario;
+    _demoElapsed = Duration.zero;
+    scene = scenario.sceneAt(_demoElapsed);
+    _demoTimer = Timer.periodic(demoFrameInterval, (_) {
+      _demoElapsed += demoFrameInterval;
+      scene = scenario.sceneAt(_demoElapsed);
       notifyListeners();
     });
+    notifyListeners();
+  }
+
+  /// Stops the demo and shows an idle road (no vehicles, standby state).
+  void stopDemo() {
+    if (mode != GatewayMode.demo) return;
+    _closeTransport();
+    mode = GatewayMode.disconnected;
+    scene = RoadScene.idle;
     notifyListeners();
   }
 
@@ -113,8 +142,7 @@ class GatewayController extends ChangeNotifier {
   void _closeTransport({bool closeSocket = true}) {
     _demoTimer?.cancel();
     _demoTimer = null;
-    _demoClock?.stop();
-    _demoClock = null;
+    _scenario = null;
     _socketSubscription?.cancel();
     _socketSubscription = null;
     if (closeSocket) _socket?.close();

@@ -248,11 +248,25 @@ class RoadScene {
     this.roadEdges = const [],
     this.roadType = RoadType.unknown,
     this.odometerMeters = 0,
+    this.roadName,
+    this.trafficSignal,
+    this.roadAlerts = const [],
+    this.laneGuidance = const [],
     // Kept private so callers read [laneLines], which applies the fallback.
     // ignore: prefer_initializing_formals
   }) : _laneLines = laneLines;
 
   final int monotonicTimeNanos;
+
+  /// Current road name from navigation (display only).
+  final String? roadName;
+  final TrafficSignal? trafficSignal;
+
+  /// Upcoming enforcement/toll points, nearest first.
+  final List<RoadAlert> roadAlerts;
+
+  /// Lanes at the next maneuver, left to right.
+  final List<LaneGuide> laneGuidance;
   final double speedMps;
   final double setSpeedMps;
   final double steeringAngleDegrees;
@@ -331,6 +345,20 @@ class RoadScene {
   }
 
   double get speedKph => speedMps * 3.6;
+
+  /// Standby frame shown when neither the demo nor a gateway is active:
+  /// empty road, unknown gear, nothing invented.
+  static const idle = RoadScene(
+    monotonicTimeNanos: 0,
+    speedMps: 0,
+    setSpeedMps: 0,
+    steeringAngleDegrees: 0,
+    engaged: false,
+    plannedPath: [],
+    leftLane: [],
+    rightLane: [],
+    objects: [],
+  );
   double get setSpeedKph => setSpeedMps * 3.6;
 
   factory RoadScene.fromJson(Map<String, dynamic> json) {
@@ -385,6 +413,17 @@ class RoadScene {
         RoadType.unknown,
       ),
       odometerMeters: (json['odometerMeters'] as num? ?? 0).toDouble(),
+      roadName: json['roadName'] as String?,
+      trafficSignal: switch (json['trafficSignal']) {
+        Map<String, dynamic> value => TrafficSignal.fromJson(value),
+        _ => null,
+      },
+      roadAlerts: (json['roadAlerts'] as List<dynamic>? ?? const [])
+          .map((item) => RoadAlert.fromJson(item as Map<String, dynamic>))
+          .toList(growable: false),
+      laneGuidance: (json['laneGuidance'] as List<dynamic>? ?? const [])
+          .map((item) => LaneGuide.fromJson(item as Map<String, dynamic>))
+          .toList(growable: false),
     );
   }
 
@@ -441,5 +480,81 @@ T _enumByName<T extends Enum>(List<T> values, String? name, T fallback) {
   return values.firstWhere(
     (value) => value.name == name,
     orElse: () => fallback,
+  );
+}
+
+enum TrafficSignalState { red, yellow, green, unknown }
+
+/// Next traffic signal on the route (navigation-derived, display only).
+class TrafficSignal {
+  const TrafficSignal({
+    required this.state,
+    this.leftArrow = false,
+    this.remainingSeconds,
+    this.distanceMeters,
+  });
+
+  final TrafficSignalState state;
+
+  /// Protected left-turn arrow lit.
+  final bool leftArrow;
+  final int? remainingSeconds;
+  final double? distanceMeters;
+
+  factory TrafficSignal.fromJson(Map<String, dynamic> json) => TrafficSignal(
+    state: _enumByName(
+      TrafficSignalState.values,
+      json['state'] as String?,
+      TrafficSignalState.unknown,
+    ),
+    leftArrow: json['leftArrow'] as bool? ?? false,
+    remainingSeconds: (json['remainingSeconds'] as num?)?.toInt(),
+    distanceMeters: (json['distanceMeters'] as num?)?.toDouble(),
+  );
+}
+
+enum RoadAlertKind { speedCamera, sectionCamera, tollgate, schoolZone, unknown }
+
+class RoadAlert {
+  const RoadAlert({
+    required this.kind,
+    required this.distanceMeters,
+    this.speedLimitKph,
+  });
+
+  final RoadAlertKind kind;
+  final double distanceMeters;
+  final double? speedLimitKph;
+
+  factory RoadAlert.fromJson(Map<String, dynamic> json) => RoadAlert(
+    kind: _enumByName(
+      RoadAlertKind.values,
+      json['kind'] as String?,
+      RoadAlertKind.unknown,
+    ),
+    distanceMeters: (json['distanceMeters'] as num).toDouble(),
+    speedLimitKph: (json['speedLimitKph'] as num?)?.toDouble(),
+  );
+}
+
+enum LaneDirection { straight, left, right, uTurn }
+
+class LaneGuide {
+  const LaneGuide({required this.directions, this.recommended = false});
+
+  final List<LaneDirection> directions;
+  final bool recommended;
+
+  factory LaneGuide.fromJson(Map<String, dynamic> json) => LaneGuide(
+    directions: (json['directions'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .map(
+          (name) => LaneDirection.values.firstWhere(
+            (value) => value.name == name,
+            orElse: () => LaneDirection.straight,
+          ),
+        )
+        .toList(growable: false),
+    recommended: json['recommended'] as bool? ?? false,
   );
 }
