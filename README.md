@@ -6,16 +6,25 @@ publish selected state.
 
 ## Current prototype
 
-- Tesla-inspired semantic road view with a native Filament GLB ego vehicle
+- 2.5D road world (software 3D on Canvas): chase / top-down / driver views,
+  clear and overcast themes, typed lane lines, road edges, lead bubble,
+  rainbow path, low-poly scenery
+- Manifest-driven ego vehicle (size and paint from the model pack), optional
+  native Filament GLB overlay
+- Public vehicle model pack format (`.kovamodel`) with a safe validator and
+  in-app import, list, preview and delete
+- Light glass HUD: speed, gear, assist state, signals, speed limit, route
+  card, turn sign, lane guidance
+- Deterministic city/highway demo drive (no network)
+- Persisted app settings (units, view, theme, layers, demo, local addresses)
 - Liquid-glass driving UI with speed, gear, signals, speed limit, and TBT
 - Versioned, replaceable vehicle model-pack format
 - Typed road-scene model for path, lanes, tracked objects, and vehicle state
-- Demo telemetry at 20 Hz for development without a vehicle
 - Local WebSocket telemetry client
 - On-demand road-camera WebRTC receiver using the existing kovapilot stream
 - Camera-only and camera-plus-model overlay modes
 - Connection policy that rejects public hosts
-- Settings shell locked until an authenticated gateway is connected
+- Vehicle (gateway) settings stay locked until an authenticated gateway is connected
 - Separate telemetry and video transports so video stays off when not viewed
 
 No comma cloud service, Athena connection, route upload, raw CAN forwarding, or
@@ -48,5 +57,12 @@ kovapilot KovaLink gateway
 ```
 
 See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the telemetry contract and gateway
-boundaries, and [docs/VEHICLE_MODEL_PACK.md](docs/VEHICLE_MODEL_PACK.md) for the
-replaceable GLB vehicle format.
+boundaries, [docs/ROAD_SCENE.md](docs/ROAD_SCENE.md) for the renderer, HUD and
+demo, [docs/APP_SETTINGS.md](docs/APP_SETTINGS.md) for settings and storage,
+[docs/VEHICLE_MODEL_PACK.md](docs/VEHICLE_MODEL_PACK.md) for the public vehicle
+model pack format, and [docs/VEHICLE_MODELING_GUIDE.md](docs/VEHICLE_MODELING_GUIDE.md)
+for making your own model in Blender.
+
+Model pack tools: `dart run tool/kovamodel.dart pack <folder> <out.kovamodel>`
+and `dart run tool/kovamodel.dart check <file.kovamodel>`. Headless screen
+captures: `KOVA_SHOT_DIR=out flutter test tool/screenshots`.

@@ -66,6 +66,67 @@ homogeneous source-image pixels. The gateway derives it from the selected
 camera intrinsics and current `extrinsicsCalibration`. KovaLink refuses to draw
 AR geometry over video when this calibration is absent.
 
+## Optional display fields
+
+Newer gateways may add these typed, display-only fields. Every field is
+optional; KovaLink draws a safe fallback when one is missing (see
+[ROAD_SCENE.md](ROAD_SCENE.md) for how each is rendered).
+
+```json
+{
+  "roadType": "highway",
+  "roadName": "경부고속도로",
+  "odometerMeters": 1234.5,
+  "laneLines": [
+    {
+      "points": [{"x": 0, "y": 1.8}, {"x": 60, "y": 1.9}],
+      "probability": 0.94,
+      "color": "white",
+      "style": "dashed"
+    }
+  ],
+  "roadEdges": [[{"x": 0, "y": 6.4}, {"x": 60, "y": 6.5}]],
+  "objects": [
+    {
+      "id": 2,
+      "distanceMeters": 34.8,
+      "leftMeters": 0.1,
+      "relativeSpeedMps": -0.5,
+      "kind": "vehicle",
+      "lengthMeters": 4.6,
+      "widthMeters": 1.85,
+      "heightMeters": 1.45,
+      "isLead": true,
+      "brakeLights": false
+    }
+  ],
+  "trafficSignal": {
+    "state": "green",
+    "leftArrow": true,
+    "remainingSeconds": 24,
+    "distanceMeters": 247
+  },
+  "roadAlerts": [
+    {"kind": "speedCamera", "distanceMeters": 545, "speedLimitKph": 100},
+    {"kind": "tollgate", "distanceMeters": 1100}
+  ],
+  "laneGuidance": [
+    {"directions": ["left"], "recommended": true},
+    {"directions": ["straight"]}
+  ]
+}
+```
+
+- `distanceMeters` of objects is the gap from the ego front bumper (scene
+  origin) to the object's rear.
+- `laneLines` supersedes `leftLane`/`rightLane`; without it the legacy pair
+  is drawn as solid white lines.
+- `color`: `white`, `yellow`, `blue`; `style`: `solid`, `dashed`,
+  `doubleSolid`. `kind`: `vehicle`, `truck`, `pedestrian`, `cyclist`,
+  `trafficCone`, `unknown`. Unknown enum names map to `unknown`.
+- Signals, alerts and lane guidance must come from existing navigation
+  state; KovaLink never answers them with controls.
+
 ## Camera signaling
 
 The app creates a receive-only WebRTC offer and posts it to the authenticated
