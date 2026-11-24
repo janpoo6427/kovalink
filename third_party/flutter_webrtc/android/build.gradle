@@ -1,0 +1,62 @@
+group 'com.cloudwebrtc.webrtc'
+version '1.0-SNAPSHOT'
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+}
+
+apply plugin: 'com.android.library'
+
+// Do not declare or apply KGP here. Flutter 3.44 supplies the app-level KGP to
+// Android plugins while the app opts out of AGP 9 Built-in Kotlin. Flutter
+// 3.47+ compiles this Kotlin via AGP when Built-in Kotlin is enabled. Keeping
+// the plugin script free of KGP removes the forward-compatibility warning.
+
+android {
+    if (project.android.hasProperty("namespace")) {
+        namespace 'com.cloudwebrtc.webrtc'
+    }
+    compileSdkVersion 36
+
+    defaultConfig {
+        minSdkVersion 21
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        consumerProguardFiles 'proguard-rules.pro'
+    }
+
+    lintOptions {
+        disable 'InvalidPackage'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+// Configure the Kotlin JVM target. The compilerOptions DSL requires KGP 1.9+ or
+// AGP 9 built-in Kotlin; older Flutter app templates ship KGP 1.8.x, which only
+// supports the legacy kotlinOptions DSL.
+def kotlinExt = project.extensions.findByName('kotlin')
+if (kotlinExt?.hasProperty('compilerOptions')) {
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8
+        }
+    }
+} else {
+    android.kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8.toString()
+    }
+}
+
+dependencies {
+    implementation 'io.github.webrtc-sdk:android:150.7871.04'
+    implementation 'com.github.davidliu:audioswitch:039a35aefab7747c557242fa216c9ea11743b604'
+    implementation 'androidx.annotation:annotation:1.1.0'
+    testImplementation 'junit:junit:4.13.2'
+}

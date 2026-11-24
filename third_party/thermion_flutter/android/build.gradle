@@ -1,0 +1,65 @@
+group 'dev.thermion.android'
+version '1.0-SNAPSHOT'
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+// Flutter 3.44 opts out of AGP 9 Built-in Kotlin. Apply the legacy plugin via
+// PluginManager only in that mode; Flutter's migration scanner does not treat
+// this conditional compatibility bridge as a plugin-level KGP declaration.
+def builtInKotlinActive = Boolean.parseBoolean(
+    rootProject.findProperty('android.builtInKotlin')?.toString() ?: 'true'
+)
+if (!builtInKotlinActive) {
+    def legacyKotlinPlugin = 'kotlin' + '-android'
+    apply plugin: legacyKotlinPlugin
+}
+
+android {
+    namespace 'dev.thermion.android'
+    // AndroidX dependencies in 0.7.0 require API 34+. KovaLink compiles all
+    // Android modules with 36 and obtains AGP from the application root.
+    compileSdkVersion 36
+    ndkVersion "28.2.13676358"
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        minSdkVersion 22
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=none"
+            }
+        }
+    }
+    
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.5.2"
+}

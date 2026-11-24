@@ -1,0 +1,36 @@
+PODS:
+  - Flutter (1.0.0)
+  - flutter_webrtc (1.6.3):
+    - Flutter
+    - WebRTC-SDK (= 150.7871.04)
+  - thermion_flutter (0.0.1):
+    - Flutter
+    - FlutterMacOS
+  - WebRTC-SDK (150.7871.04)
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - flutter_webrtc (from `.symlinks/plugins/flutter_webrtc/ios`)
+  - thermion_flutter (from `.symlinks/plugins/thermion_flutter/darwin`)
+
+SPEC REPOS:
+  trunk:
+    - WebRTC-SDK
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  flutter_webrtc:
+    :path: ".symlinks/plugins/flutter_webrtc/ios"
+  thermion_flutter:
+    :path: ".symlinks/plugins/thermion_flutter/darwin"
+
+SPEC CHECKSUMS:
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_webrtc: 7948417965923736a584f9a1c5eeccaccf3372cf
+  thermion_flutter: 987b70a40b6eae8c66ef5d1e41ea714dd2494c76
+  WebRTC-SDK: 71bce2be85c3082d24bbfd1a9930ea07d0c494c1
+
+PODFILE CHECKSUM: 003377f3f3f39e8591fc0de7deaf917249a59847
+
+COCOAPODS: 1.17.0

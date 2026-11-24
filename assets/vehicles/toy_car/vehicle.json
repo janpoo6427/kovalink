@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "khronos-toy-car",
+  "displayName": "Khronos Toy Car",
+  "asset": "vehicle.glb",
+  "coordinateSystem": "RH_Y_UP_Z_FORWARD",
+  "dimensionsMeters": {
+    "length": 4.50,
+    "width": 1.86,
+    "height": 1.48,
+    "wheelbase": 2.75
+  },
+  "nodes": {
+    "body": "ToyCar",
+    "leftTurnSignals": [],
+    "rightTurnSignals": [],
+    "brakeLights": [],
+    "reverseLights": []
+  },
+  "cameras": {
+    "park": {"position": [2.6, 1.5, 3.4], "target": [0, 0.45, 0]},
+    "drive": {"position": [0, 1.2, 3.2], "target": [0, 0.35, 0]}
+  }
+}
