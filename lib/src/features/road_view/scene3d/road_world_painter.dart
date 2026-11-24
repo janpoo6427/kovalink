@@ -3,10 +3,14 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
+import 'package:kovalink/src/features/road_view/scene3d/scene_director.dart';
+import 'package:kovalink/src/features/road_view/scene3d/scene_markers.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
 import 'package:kovalink/src/features/road_view/scene3d/vehicle_mesh_painter.dart';
+import 'package:kovalink/src/gpu_scene/scene_look.dart';
 import 'package:kovalink/src/models/ego_vehicle_profile.dart';
 import 'package:kovalink/src/models/road_scene.dart';
+import 'package:kovalink/src/vehicle_mesh/builtin_figures.dart';
 import 'package:kovalink/src/vehicle_mesh/builtin_vehicles.dart';
 import 'package:kovalink/src/vehicle_mesh/vehicle_mesh.dart';
 
@@ -53,7 +57,16 @@ class RoadWorldPainter extends CustomPainter {
     this.labelFontFamily,
     this.egoMesh,
     this.onVehicleDrawn,
+    this.director,
+    this.options = const SoftwareRenderOptions(),
   });
+
+  /// Camera work from [SceneDirector] (speed camera, roll, path styling,
+  /// blind spots). Null keeps the fixed camera for the viewpoint.
+  final DirectorFrame? director;
+
+  /// Software quality features (all on by default).
+  final SoftwareRenderOptions options;
 
   /// Test/benchmark hook: called for every vehicle mesh drawn (object is
   /// null for the ego) with its triangle counts and screen bounds.
@@ -88,21 +101,43 @@ class RoadWorldPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
+    final director = this.director;
     final frame = _Frame(
       canvas: canvas,
       size: size,
-      camera: SceneCamera.forViewpoint(viewpoint, size, vehicle),
+      camera:
+          director?.camera ??
+          SceneCamera.forViewpoint(viewpoint, size, vehicle),
       palette: ScenePalette.resolve(theme, scene.roadType),
     );
+    canvas.save();
+    if (director != null) applyRoll(canvas, size, director.rollRadians);
     final road = RoadGeometry.fromScene(scene);
     final xs = _samples();
+    final look = SceneLook.resolve(theme, scene.roadType);
+    final nightLights =
+        options.nightLights &&
+        look.headlights &&
+        viewpoint != SceneViewpoint.topDown;
 
     _paintSkyAndGround(frame);
     _paintRoad(frame, road, xs);
     if (layers.lanes) _paintLanes(frame, xs);
+    if (nightLights) _paintHeadlightPools(frame, look);
     if (layers.path) _paintPath(frame);
     if (viewpoint != SceneViewpoint.driver && scene.brakeActive) {
       _paintBrakePool(frame);
+    }
+    if (layers.objects && director != null) {
+      SceneMarkers.paintBlindSpots(
+        canvas,
+        frame.camera,
+        scene,
+        director.blindSpots,
+        egoLength: vehicle.dimensions.length,
+        egoWidth: vehicle.dimensions.width,
+        timeSeconds: scene.monotonicTimeNanos / 1e9,
+      );
     }
 
     final drawables = <_Drawable>[];
@@ -111,6 +146,9 @@ class RoadWorldPainter extends CustomPainter {
     drawables.sort((a, b) => b.depth.compareTo(a.depth));
     for (final drawable in drawables) {
       drawable.paint();
+    }
+    if (nightLights && look.wetness > 0.5 && layers.objects) {
+      _paintWetStreaks(frame);
     }
 
     if (viewpoint == SceneViewpoint.driver) {
@@ -136,7 +174,104 @@ class RoadWorldPainter extends CustomPainter {
         object: null,
       );
     }
-    if (layers.objects) _paintLeadBubble(frame);
+    if (layers.objects) {
+      if (director != null) {
+        SceneMarkers.paintLeadBubble(
+          canvas,
+          frame.camera,
+          scene,
+          tone: director.leadTone,
+          fontFamily: labelFontFamily,
+        );
+      } else {
+        _paintLeadBubble(frame);
+      }
+    }
+    canvas.restore();
+  }
+
+  /// Warm light pools ahead of the ego's headlights (night, dusk, rain).
+  void _paintHeadlightPools(_Frame f, SceneLook look) {
+    final strength = look.night ? 0.5 : (look.rain ? 0.32 : 0.22);
+    for (final side in const [1.0, -1.0]) {
+      final pts = [
+        for (var i = 0; i < 24; i++)
+          () {
+            final a = i / 24 * math.pi * 2;
+            return V3(
+              14 + math.cos(a) * 12,
+              side * 0.7 + math.sin(a) * (2.0 + 0.6 * math.cos(a)),
+              0.015,
+            );
+          }(),
+      ];
+      final polygon = f.camera.projectPolygon(pts);
+      if (polygon == null) continue;
+      final ppm = f.camera.pixelsPerMeter(f.camera.depthOf(const V3(12, 0, 0)));
+      f.canvas.drawPath(
+        Path()..addPolygon(polygon, true),
+        Paint()
+          ..color = Color.fromRGBO(255, 244, 222, strength)
+          ..blendMode = BlendMode.screen
+          ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal,
+            math.max(4.0, ppm * 1.4),
+          ),
+      );
+    }
+  }
+
+  /// Wet road: long vertical reflections under every lit tail lamp.
+  void _paintWetStreaks(_Frame f) {
+    void streak(double x, double y, double z, Color color, double alpha) {
+      final top = f.camera.project(V3(x, y, 0.02));
+      final lamp = f.camera.project(V3(x, y, z));
+      if (top == null || lamp == null) return;
+      final length = (top.offset.dy - lamp.offset.dy).abs() * 2.6;
+      final ppm = f.camera.pixelsPerMeter(top.depth);
+      final rect = Rect.fromLTWH(
+        top.offset.dx - ppm * 0.09,
+        top.offset.dy,
+        ppm * 0.18,
+        length,
+      );
+      f.canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = ui.Gradient.linear(rect.topCenter, rect.bottomCenter, [
+            color.withValues(alpha: alpha),
+            color.withValues(alpha: 0),
+          ])
+          ..blendMode = BlendMode.screen
+          ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal,
+            math.max(1.5, ppm * 0.06),
+          ),
+      );
+    }
+
+    const red = Color(0xFFFF3040);
+    for (final o in scene.objects) {
+      if (o.kind != TrackedObjectKind.vehicle &&
+          o.kind != TrackedObjectKind.truck) {
+        continue;
+      }
+      if (o.distanceMeters < 0 || o.distanceMeters > 90) continue;
+      final a = o.brakeLights ? 0.6 : 0.35;
+      for (final s in const [-0.38, 0.38]) {
+        streak(o.distanceMeters, o.leftMeters + s * o.width, 0.9, red, a);
+      }
+    }
+    final rear = -vehicle.dimensions.length;
+    for (final s in const [-0.38, 0.38]) {
+      streak(
+        rear - 0.05,
+        s * vehicle.dimensions.width,
+        0.95,
+        red,
+        scene.brakeActive ? 0.7 : 0.4,
+      );
+    }
   }
 
   List<double> _samples() {
@@ -319,6 +454,24 @@ class RoadWorldPainter extends CustomPainter {
     final to = f.camera.project(V3(end, center(end), 0));
     if (from == null || to == null) return;
     final ppm = f.camera.pixelsPerMeter(f.camera.depthOf(V3(8, 0, 0)));
+    final style = director?.path;
+    final tone = (style?.leadTone ?? 0).clamp(0.0, 1.0);
+    final warm = tone < 0.5
+        ? Color.lerp(
+            const Color(0xFF4F9DFF),
+            const Color(0xFFFFA020),
+            tone * 2,
+          )!
+        : Color.lerp(
+            const Color(0xFFFFA020),
+            const Color(0xFFFF2E3A),
+            tone * 2 - 1,
+          )!;
+    Color tint(Color c, double along) => Color.lerp(
+      c,
+      warm.withValues(alpha: c.a),
+      tone * (0.35 + 0.65 * along),
+    )!;
     // The wide glow starts a little ahead so it never haloes the ego.
     final glow = outline(pathHalfWidth * 1.45, 0.009, from: 3.5);
     if (glow != null) {
@@ -328,11 +481,11 @@ class RoadWorldPainter extends CustomPainter {
           ..shader = ui.Gradient.linear(
             from.offset,
             to.offset,
-            const [
-              Color(0x3839E6CF),
-              Color(0x404F9DFF),
-              Color(0x309B72FF),
-              Color(0x00E071E6),
+            [
+              tint(const Color(0x3839E6CF), 0),
+              tint(const Color(0x404F9DFF), 0.35),
+              tint(const Color(0x309B72FF), 0.7),
+              const Color(0x00E071E6),
             ],
             const [0, 0.35, 0.7, 1],
           )
@@ -350,12 +503,12 @@ class RoadWorldPainter extends CustomPainter {
         ..shader = ui.Gradient.linear(
           from.offset,
           to.offset,
-          const [
-            Color(0xB839E6CF),
-            Color(0xB84F9DFF),
-            Color(0xA89B72FF),
-            Color(0x60E071E6),
-            Color(0x00E071E6),
+          [
+            tint(const Color(0xB839E6CF), 0),
+            tint(const Color(0xB84F9DFF), 0.32),
+            tint(const Color(0xA89B72FF), 0.64),
+            tint(const Color(0x60E071E6), 0.88),
+            const Color(0x00E071E6),
           ],
           const [0, 0.32, 0.64, 0.88, 1],
         )
@@ -379,6 +532,32 @@ class RoadWorldPainter extends CustomPainter {
             math.max(1.0, ppm * 0.08),
           ),
       );
+    }
+    // Engage sweep: a bright pulse running up the ribbon.
+    final sweep = style?.sweep ?? -1;
+    if (sweep >= 0) {
+      final x = start + (end - start) * sweep;
+      final a = math.max(start, x - 2.5), b = math.min(end, x + 2.5);
+      if (b > a) {
+        final band = f.camera.projectPolygon([
+          V3(a, center(a) + pathHalfWidth * 1.2, 0.012),
+          V3(b, center(b) + pathHalfWidth * 1.2, 0.012),
+          V3(b, center(b) - pathHalfWidth * 1.2, 0.012),
+          V3(a, center(a) - pathHalfWidth * 1.2, 0.012),
+        ]);
+        if (band != null) {
+          f.canvas.drawPath(
+            Path()..addPolygon(band, true),
+            Paint()
+              ..color = Color.fromRGBO(200, 255, 250, 0.75 * (1 - sweep * 0.6))
+              ..blendMode = BlendMode.screen
+              ..maskFilter = MaskFilter.blur(
+                BlurStyle.normal,
+                math.max(2.0, ppm * 0.3),
+              ),
+          );
+        }
+      }
     }
   }
 
@@ -575,26 +754,25 @@ class RoadWorldPainter extends CustomPainter {
             case TrackedObjectKind.trafficCone:
               _paintCone(f, V3(object.distanceMeters, object.leftMeters, 0));
             case TrackedObjectKind.pedestrian || TrackedObjectKind.cyclist:
-              _groundBlob(
+              final set = object.kind == TrackedObjectKind.pedestrian
+                  ? BuiltinFigures.pedestrianSet
+                  : BuiltinFigures.cyclistSet;
+              final (nl, nw, nh) = set.lod0.size;
+              _paintMeshVehicle(
                 f,
-                center,
-                object.length * 0.8,
-                object.width * 0.8,
-                f.palette.shadowAlpha,
-              );
-              _box(
-                f,
-                V3(
-                  object.distanceMeters,
-                  object.leftMeters - object.width / 2,
-                  0,
+                set,
+                VehiclePose(
+                  rearX: object.distanceMeters,
+                  leftY: object.leftMeters,
+                  length: object.lengthMeters ?? nl,
+                  width: object.widthMeters ?? nw,
+                  height: object.heightMeters ?? nh,
+                  yaw: object.kind == TrackedObjectKind.cyclist
+                      ? _laneYaw(object.distanceMeters)
+                      : 0,
                 ),
-                V3(
-                  object.distanceMeters + object.length,
-                  object.leftMeters + object.width / 2,
-                  object.height,
-                ),
-                const Color(0xFF8FA3B8),
+                shadowStrength: 0.6,
+                object: object,
               );
             case TrackedObjectKind.unknown:
               _box(
@@ -722,6 +900,7 @@ class RoadWorldPainter extends CustomPainter {
       paintArgb: paintArgb,
       lamps: lamps,
       shadowStrength: shadowStrength,
+      options: options,
     );
     onVehicleDrawn?.call(object, pose, stats);
     return stats;
@@ -1005,6 +1184,7 @@ class RoadWorldPainter extends CustomPainter {
       oldDelegate.theme != theme ||
       oldDelegate.layers != layers ||
       oldDelegate.labelFontFamily != labelFontFamily ||
+      oldDelegate.director != director ||
       !identical(oldDelegate.egoMesh, egoMesh);
 }
 

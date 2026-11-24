@@ -56,6 +56,36 @@ class MeshDrawStats {
   final Rect bounds;
 }
 
+/// Software-renderer quality features (절약 경로). Each is one finished
+/// feature, on by default; off only for benchmarks and tests.
+class SoftwareRenderOptions {
+  const SoftwareRenderOptions({
+    this.smoothNormals = true,
+    this.supersample = true,
+    this.horizonReflection = true,
+    this.nightLights = true,
+  });
+
+  /// Crease-angle smoothed vertex normals (Gouraud across panels).
+  final bool smoothNormals;
+
+  /// Vehicles rasterized at 2× and filtered down (anti-aliased edges).
+  final bool supersample;
+
+  /// Sharp sky/ground horizon line reflected in paint and glass.
+  final bool horizonReflection;
+
+  /// Headlight pools, tail-light glow and wet streaks at night/rain.
+  final bool nightLights;
+
+  static const off = SoftwareRenderOptions(
+    smoothNormals: false,
+    supersample: false,
+    horizonReflection: false,
+    nightLights: false,
+  );
+}
+
 /// Software rasterization of a [VehicleMesh] in the road camera:
 /// per-vertex transform and projection, back-face culling in screen space,
 /// painter's algorithm per triangle, Gouraud lighting (sun + sky/ground
@@ -79,6 +109,7 @@ class VehicleMeshPainter {
     VehicleLamps lamps = const VehicleLamps(),
     bool shadow = true,
     double shadowStrength = 1,
+    SoftwareRenderOptions options = const SoftwareRenderOptions(),
   }) {
     final n = mesh.vertexCount;
     final (nl, nw, nh) = mesh.size;
@@ -87,7 +118,8 @@ class VehicleMeshPainter {
     final cx = pose.rearX + pose.length / 2;
     final world = Float64List(n * 3);
     final wn = Float64List(n * 3);
-    final p = mesh.positions, nn = mesh.normals;
+    final p = mesh.positions;
+    final nn = options.smoothNormals ? smoothNormalsOf(mesh) : mesh.normals;
     final halfL = nl / 2;
     for (var v = 0; v < n; v++) {
       final lx = (p[v * 3] - halfL) * sx, ly = p[v * 3 + 1] * sy;
@@ -152,7 +184,7 @@ class VehicleMeshPainter {
     final vm = mesh.vertexMaterials;
     final eye = camera.eyePoint;
     final light = palette.lightDirection;
-    final env = _Env(palette);
+    final env = _Env(palette, horizonLine: options.horizonReflection);
     for (var v = 0; v < n; v++) {
       if (used[v] == 0) continue;
       final m = mats[vm[v]];
@@ -224,11 +256,30 @@ class VehicleMeshPainter {
       }
     }
     if (visible > 0) {
-      canvas.drawVertices(
-        Vertices.raw(VertexMode.triangles, pos, colors: col),
-        BlendMode.dst,
-        Paint(),
-      );
+      final vertices = Vertices.raw(VertexMode.triangles, pos, colors: col);
+      final w = maxX - minX, h = maxY - minY;
+      // Supersampling: rasterize at 2× into an offscreen image and filter
+      // it down, so silhouettes and panel seams are anti-aliased.
+      if (options.supersample && w * h > 2500 && w * h < 900000) {
+        const k = 2.0;
+        final left = minX.floorToDouble() - 1, top = minY.floorToDouble() - 1;
+        final iw = ((w + 3) * k).ceil(), ih = ((h + 3) * k).ceil();
+        final recorder = PictureRecorder();
+        Canvas(recorder)
+          ..scale(k)
+          ..translate(-left, -top)
+          ..drawVertices(vertices, BlendMode.dst, Paint());
+        final image = recorder.endRecording().toImageSync(iw, ih);
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(0, 0, iw.toDouble(), ih.toDouble()),
+          Rect.fromLTWH(left, top, iw / k, ih / k),
+          Paint()..filterQuality = FilterQuality.medium,
+        );
+        image.dispose();
+      } else {
+        canvas.drawVertices(vertices, BlendMode.dst, Paint());
+      }
     }
     for (final MapEntry(key: role, value: path) in glowPaths.entries) {
       final glow = _glowColor(role);
@@ -256,6 +307,51 @@ class VehicleMeshPainter {
       visible,
       visible == 0 ? Rect.zero : Rect.fromLTRB(minX, minY, maxX, maxY),
     );
+  }
+
+  static final _smooth = Expando<Float32List>('smoothNormals');
+
+  /// Vertex normals averaged over coincident vertices of the same material
+  /// whose faces meet at less than 40° (cached per mesh).
+  static Float32List smoothNormalsOf(VehicleMesh mesh) {
+    final cached = _smooth[mesh];
+    if (cached != null) return cached;
+    final n = mesh.vertexCount;
+    final p = mesh.positions, nn = mesh.normals, vm = mesh.vertexMaterials;
+    final groups = <String, List<int>>{};
+    for (var v = 0; v < n; v++) {
+      final key =
+          '${vm[v]}:${(p[v * 3] * 500).round()},${(p[v * 3 + 1] * 500).round()},${(p[v * 3 + 2] * 500).round()}';
+      (groups[key] ??= []).add(v);
+    }
+    final out = Float32List(n * 3);
+    const cosCrease = 0.766; // 40°
+    for (final list in groups.values) {
+      for (final v in list) {
+        var x = 0.0, y = 0.0, z = 0.0;
+        for (final u in list) {
+          final d =
+              nn[v * 3] * nn[u * 3] +
+              nn[v * 3 + 1] * nn[u * 3 + 1] +
+              nn[v * 3 + 2] * nn[u * 3 + 2];
+          if (d < cosCrease) continue;
+          x += nn[u * 3];
+          y += nn[u * 3 + 1];
+          z += nn[u * 3 + 2];
+        }
+        final l = math.sqrt(x * x + y * y + z * z);
+        if (l < 1e-9) {
+          out[v * 3] = nn[v * 3];
+          out[v * 3 + 1] = nn[v * 3 + 1];
+          out[v * 3 + 2] = nn[v * 3 + 2];
+        } else {
+          out[v * 3] = x / l;
+          out[v * 3 + 1] = y / l;
+          out[v * 3 + 2] = z / l;
+        }
+      }
+    }
+    return _smooth[mesh] = out;
   }
 
   static Color _glowColor(MeshRole role) => switch (role) {
@@ -451,7 +547,7 @@ class VehicleMeshPainter {
 
 /// Sky above the horizon, darker road/ground below, for reflections.
 class _Env {
-  _Env(ScenePalette p)
+  _Env(ScenePalette p, {this.horizonLine = false})
     : top = (p.skyTop.r, p.skyTop.g, p.skyTop.b),
       horizon = (p.skyHorizon.r, p.skyHorizon.g, p.skyHorizon.b),
       ground = (
@@ -465,8 +561,28 @@ class _Env {
   final (double, double, double) horizon;
   final (double, double, double) ground;
   final (double, double, double) dusk;
+  final bool horizonLine;
 
   (double, double, double) sample(double x, double y, double z) {
+    if (horizonLine && z.abs() < 0.08) {
+      // Studio-like horizon line: a bright band just above the horizon
+      // and a dark edge right below it, as seen on polished car bodies.
+      if (z >= 0) {
+        final t = z / 0.08;
+        final glow = 1.0 - t;
+        return (
+          horizon.$1 + (1 - horizon.$1) * glow * 0.55,
+          horizon.$2 + (1 - horizon.$2) * glow * 0.55,
+          horizon.$3 + (1 - horizon.$3) * glow * 0.55,
+        );
+      }
+      final t = -z / 0.08;
+      return (
+        ground.$1 * (0.55 + 0.45 * t),
+        ground.$2 * (0.55 + 0.45 * t),
+        ground.$3 * (0.55 + 0.45 * t),
+      );
+    }
     if (z >= 0) {
       final t = math.sqrt(z.clamp(0.0, 1.0));
       return (

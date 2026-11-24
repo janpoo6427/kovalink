@@ -132,6 +132,7 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
               speedUnit: value.speedUnit,
               showHud: value.showHud,
               nativeVehicleOverlay: value.nativeVehicleOverlay,
+              renderQuality: value.renderQuality,
             ),
             if (value.brightness < 1)
               IgnorePointer(

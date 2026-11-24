@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:kovalink/src/features/road_view/render_quality.dart';
 import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
@@ -36,6 +37,7 @@ class AppSettings {
     this.signalingEndpoint = defaultSignalingEndpoint,
     this.vehicleModelId,
     this.nativeVehicleOverlay = false,
+    this.renderQuality = RenderQuality.auto,
   });
 
   static const schemaVersion = 1;
@@ -66,6 +68,9 @@ class AppSettings {
   /// Experimental: layer the pack GLB over the chase view (Android/iOS).
   final bool nativeVehicleOverlay;
 
+  /// 화질: 자동 (GPU, 느리면 소프트웨어) / 고품질 (GPU) / 절약 (소프트웨어).
+  final RenderQuality renderQuality;
+
   SceneLayers get layers => SceneLayers(
     lanes: showLanes,
     objects: showObjects,
@@ -91,6 +96,7 @@ class AppSettings {
     String? vehicleModelId,
     bool clearVehicleModel = false,
     bool? nativeVehicleOverlay,
+    RenderQuality? renderQuality,
   }) => AppSettings(
     speedUnit: speedUnit ?? this.speedUnit,
     viewpoint: viewpoint ?? this.viewpoint,
@@ -110,6 +116,7 @@ class AppSettings {
         ? null
         : vehicleModelId ?? this.vehicleModelId,
     nativeVehicleOverlay: nativeVehicleOverlay ?? this.nativeVehicleOverlay,
+    renderQuality: renderQuality ?? this.renderQuality,
   );
 
   Map<String, dynamic> toJson() => {
@@ -130,6 +137,7 @@ class AppSettings {
     'signalingEndpoint': signalingEndpoint,
     'vehicleModelId': ?vehicleModelId,
     'nativeVehicleOverlay': nativeVehicleOverlay,
+    'renderQuality': renderQuality.name,
   };
 
   /// Tolerant parser: each unknown or invalid field falls back to its
@@ -193,6 +201,11 @@ class AppSettings {
       nativeVehicleOverlay: flag(
         'nativeVehicleOverlay',
         defaults.nativeVehicleOverlay,
+      ),
+      renderQuality: pick(
+        RenderQuality.values,
+        'renderQuality',
+        defaults.renderQuality,
       ),
     );
   }

@@ -1,11 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:kovalink/src/features/road_view/gpu_road_surface.dart';
 import 'package:kovalink/src/features/road_view/hud/drive_hud.dart';
+import 'package:kovalink/src/features/road_view/render_quality.dart';
 import 'package:kovalink/src/features/road_view/road_scene_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
+import 'package:kovalink/src/features/road_view/scene3d/scene_director.dart';
+import 'package:kovalink/src/features/road_view/scene3d/scene_markers.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
+import 'package:kovalink/src/gpu_scene/scene_look.dart';
 import 'package:kovalink/src/models/display_units.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
@@ -27,6 +32,9 @@ class RoadViewScreen extends StatefulWidget {
     this.nativeVehicleOverlay = false,
     this.speedUnit = SpeedUnit.kph,
     this.showHud = true,
+    this.renderQuality = RenderQuality.auto,
+    this.gpuSurfaceBuilder,
+    this.director,
     super.key,
   });
   final GatewayController controller;
@@ -46,12 +54,32 @@ class RoadViewScreen extends StatefulWidget {
   /// 설정 → 표시 항목 → HUD 수치.
   final bool showHud;
 
+  /// 설정 → 화질: 자동(기본) / 고품질(GPU) / 절약(소프트웨어).
+  final RenderQuality renderQuality;
+
+  /// Replaces the live GPU view (tests and worker captures draw frames
+  /// from the same renderer headlessly). Its presence also marks the GPU
+  /// path as available.
+  final GpuSurfaceBuilder? gpuSurfaceBuilder;
+
+  /// Camera operator shared with a capture tool; null = own instance.
+  final SceneDirector? director;
+
   @override
   State<RoadViewScreen> createState() => _RoadViewScreenState();
 }
 
 class _RoadViewScreenState extends State<RoadViewScreen> {
   RoadViewMode mode = RoadViewMode.scene;
+  late final SceneDirector _director = widget.director ?? SceneDirector();
+  bool _gpuFailed = false;
+
+  bool get _useGpu => RenderQualityPolicy.useGpu(
+    widget.renderQuality,
+    gpuAvailable:
+        !_gpuFailed &&
+        (widget.gpuSurfaceBuilder != null || GpuRoadSurface.supported),
+  );
 
   static bool get _supportsNativeVehicle =>
       !kIsWeb &&
@@ -71,10 +99,16 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
         return LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 680;
+            final frame = _director.update(
+              scene,
+              constraints.biggest,
+              viewpoint: widget.viewpoint,
+              vehicle: _vehicleModel.profile,
+            );
             return Stack(
               fit: StackFit.expand,
               children: [
-                _buildRoadSurface(scene),
+                _buildRoadSurface(scene, frame),
                 DriveHud(
                   scene: scene,
                   compact: compact,
@@ -104,10 +138,60 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
   VehicleModelLoadResult get _vehicleModel =>
       widget.vehicleModel?.value ?? VehicleModelLoadResult.bundledDefault;
 
-  Widget _buildRoadSurface(RoadScene scene) {
+  Widget _buildRoadSurface(RoadScene scene, DirectorFrame frame) {
     if (mode == RoadViewMode.scene) {
       final vehicleModel = _vehicleModel;
       final glbAssetPath = vehicleModel.glbAssetPath;
+      final look = SceneLook.resolve(widget.theme, scene.roadType);
+      final rain = look.rain
+          ? IgnorePointer(
+              child: CustomPaint(
+                painter: RainOverlayPainter(
+                  timeSeconds: scene.monotonicTimeNanos / 1e9,
+                ),
+              ),
+            )
+          : null;
+      if (_useGpu) {
+        final request = GpuSurfaceRequest(
+          scene: scene,
+          director: frame,
+          theme: widget.theme,
+          layers: widget.layers,
+          vehicle: vehicleModel.profile,
+          viewpoint: widget.viewpoint,
+          egoGlbPath: vehicleModel.manifest.id == 'kovalink-basic'
+              ? null
+              : glbAssetPath,
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            widget.gpuSurfaceBuilder?.call(context, request) ??
+                GpuRoadSurface(
+                  request: request,
+                  onFallback: () {
+                    if (widget.renderQuality == RenderQuality.auto) {
+                      setState(() => _gpuFailed = true);
+                    }
+                  },
+                ),
+            if (widget.layers.objects)
+              IgnorePointer(
+                child: CustomPaint(
+                  painter: SceneMarkersPainter(
+                    scene: scene,
+                    frame: frame,
+                    egoLength: vehicleModel.profile.dimensions.length,
+                    egoWidth: vehicleModel.profile.dimensions.width,
+                    fontFamily: DefaultTextStyle.of(context).style.fontFamily,
+                  ),
+                ),
+              ),
+            ?rain,
+          ],
+        );
+      }
       return Stack(
         fit: StackFit.expand,
         children: [
@@ -121,9 +205,11 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                 layers: widget.layers,
                 labelFontFamily: DefaultTextStyle.of(context).style.fontFamily,
                 egoMesh: vehicleModel.mesh,
+                director: frame,
               ),
             ),
           ),
+          ?rain,
           if (widget.nativeVehicleOverlay &&
               widget.viewpoint == SceneViewpoint.chase &&
               _supportsNativeVehicle &&

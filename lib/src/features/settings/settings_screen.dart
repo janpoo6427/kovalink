@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/features/road_view/render_quality.dart';
 import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
@@ -238,6 +239,18 @@ class _DisplaySection extends StatelessWidget {
                 ],
                 onChanged: (v) =>
                     settings.update((s) => s.copyWith(sceneTheme: v)),
+              ),
+              _Choice<RenderQuality>(
+                key: const ValueKey('setting-render-quality'),
+                label: '화질',
+                value: value.renderQuality,
+                options: const [
+                  (RenderQuality.auto, '자동'),
+                  (RenderQuality.high, '고품질'),
+                  (RenderQuality.saver, '절약'),
+                ],
+                onChanged: (v) =>
+                    settings.update((s) => s.copyWith(renderQuality: v)),
               ),
               _Choice<SpeedUnit>(
                 key: const ValueKey('setting-unit'),

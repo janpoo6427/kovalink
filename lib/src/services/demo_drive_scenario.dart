@@ -213,8 +213,11 @@ class DemoDriveScenario {
 
     final objects = <TrackedObject>[
       ..._leadVehicles(t, ego, bend),
+      ..._blindSpotCar(t, ego, bend),
       ..._backgroundTraffic(odometer, ego, _targetLaneAt(t), bend),
       if (city) ..._cones(odometer, ego, bend),
+      if (city) ..._pedestrians(t, odometer, ego, bend),
+      if (city) ..._cyclist(t, odometer, ego, bend),
     ];
 
     final braking = city
@@ -356,13 +359,16 @@ class DemoDriveScenario {
           (car.lateral - targetLane).abs() < 1.8) {
         continue;
       }
-      // Each car moves at its own speed through a wrapping window.
+      // Each car moves at its own speed through a wrapping window. Trucks
+      // keep pace with the ego well ahead (45–115 m), so a truck never
+      // drives right beside the hero car and hides it.
       final world =
           car.start +
           car.speed * (odometer / math.max(1.0, _averageSpeed)) -
           odometer;
-      final gap =
-          (world % _trafficWindow + _trafficWindow) % _trafficWindow - 30;
+      final gap = car.truck
+          ? 45 + (car.start / _trafficWindow) * 70
+          : (world % _trafficWindow + _trafficWindow) % _trafficWindow - 30;
       yield TrackedObject(
         id: car.id,
         distanceMeters: gap,
@@ -374,6 +380,73 @@ class DemoDriveScenario {
   }
 
   double get _averageSpeed => loopDistance / _seconds;
+
+  /// A car in the target lane that sits in the ego's blind spot just
+  /// before the lane change, then drops back so the change can happen.
+  Iterable<TrackedObject> _blindSpotCar(
+    double t,
+    double ego,
+    double Function(double) bend,
+  ) sync* {
+    final city = route == DemoRoute.city;
+    final (t0, t1, t2, lane) = city
+        ? (40.0, 45.0, 51.0, 3.4)
+        : (41.0, 45.0, 50.0, 3.6);
+    if (t < t0 || t > t2 + 4) return;
+    final gap = t < t1
+        ? _ramp(t, t0, t1, -16, -3.5)
+        : _ramp(t, t1 + 2, t2, -3.5, -24);
+    yield TrackedObject(
+      id: 300,
+      distanceMeters: gap,
+      leftMeters: lane - ego + bend(0),
+      relativeSpeedMps: t < t1 ? 2.5 : (t < t1 + 2 ? 0 : -4),
+    );
+  }
+
+  /// People walking on both sidewalks (world-fixed, slow).
+  Iterable<TrackedObject> _pedestrians(
+    double t,
+    double odometer,
+    double ego,
+    double Function(double) bend,
+  ) sync* {
+    for (var i = 0; i < 10; i++) {
+      final left = i.isEven;
+      final lateral = left ? 13.4 : -5.0;
+      final walk = (i % 3 == 0 ? -1.2 : 1.3) * t;
+      final world = 18.0 + i * 23 + walk;
+      final gap = world - odometer % 230;
+      if (gap < -10 || gap > 140) continue;
+      yield TrackedObject(
+        id: 600 + i,
+        distanceMeters: gap,
+        leftMeters: lateral - ego + bend(math.max(0.0, gap)),
+        relativeSpeedMps: (i % 3 == 0 ? -1.2 : 1.3) - speedAt(t),
+        kind: TrackedObjectKind.pedestrian,
+      );
+    }
+  }
+
+  /// A cyclist on the right edge, overtaken while approaching the turn.
+  Iterable<TrackedObject> _cyclist(
+    double t,
+    double odometer,
+    double ego,
+    double Function(double) bend,
+  ) sync* {
+    if (t < 58) return;
+    final world = _odometerAt(58) + 52 + 4.5 * (t - 58);
+    final gap = world - odometer;
+    if (gap < -8 || gap > 140) return;
+    yield TrackedObject(
+      id: 700,
+      distanceMeters: gap,
+      leftMeters: -2.75 - ego + bend(math.max(0.0, gap)),
+      relativeSpeedMps: 4.5 - speedAt(t),
+      kind: TrackedObjectKind.cyclist,
+    );
+  }
 
   Iterable<TrackedObject> _cones(
     double odometer,
