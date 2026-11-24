@@ -1,7 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kovalink/src/gpu_scene/glb_bounds.dart';
+import 'package:kovalink/src/models/vehicle_model_manifest.dart';
+import 'package:kovalink/src/vehicle_mesh/gltf_mesh_reader.dart';
+import 'package:kovalink/src/vehicle_mesh/vehicle_mesh.dart';
+import 'package:kovalink/src/vehicle_mesh/vehicle_mesh_loader.dart';
 import 'package:kovalink/src/features/road_view/gpu_road_surface.dart';
 import 'package:kovalink/src/features/road_view/render_quality.dart';
 import 'package:kovalink/src/features/road_view/road_view_screen.dart';
@@ -89,6 +96,40 @@ void main() {
       await tester.pumpWidget(screen(RenderQuality.saver));
       expect(find.byKey(const ValueKey('gpu-frame')), findsNothing);
       controller.dispose();
+    });
+  });
+
+  group('imported packs', () {
+    test('ToyCar fits by its body node; staging cloth is a prop', () {
+      final glb = File('assets/vehicles/toy_car/vehicle.glb').readAsBytesSync();
+      final fit = GlbBounds.vehicle(glb, body: 'ToyCar')!;
+      expect(fit.props, contains('Fabric'));
+      expect(fit.props, isNot(contains('Glass')));
+      // Sample model is a 1e-4-scaled toy: a few centimeters long.
+      expect(fit.bounds.size.z, inInclusiveRange(0.02, 0.2));
+      expect(GlbBounds.of(glb)!.size.x, greaterThan(fit.bounds.size.x));
+    });
+
+    test('ToyCar glass reads as dark see-through glass in software', () async {
+      final manifest = VehicleModelManifest.fromJson(
+        jsonDecode(
+              File('assets/vehicles/toy_car/vehicle.json').readAsStringSync(),
+            )
+            as Map<String, dynamic>,
+      );
+      final glb = File('assets/vehicles/toy_car/vehicle.glb').readAsBytesSync();
+      final mesh = GltfMeshReader.read(
+        glb,
+        options: VehicleMeshLoader.optionsFor(manifest),
+      );
+      final glass = mesh.mesh.materials
+          .where((m) => m.role == MeshRole.glass)
+          .toList();
+      expect(glass, isNotEmpty);
+      for (final g in glass) {
+        final c = Color(g.baseColor);
+        expect(c.r + c.g + c.b, lessThan(0.6));
+      }
     });
   });
 

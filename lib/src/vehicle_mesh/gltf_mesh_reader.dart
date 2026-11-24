@@ -461,11 +461,18 @@ class _Reader {
         .whereType<num>()
         .map((v) => v.toDouble())
         .toList();
+    // See-through materials (KHR_materials_transmission or blended with
+    // low alpha) are glass even without a KovaLink role name.
+    final extensions = m['extensions'] as Map? ?? const {};
+    final alpha = factor.length >= 4 ? factor[3] : 1.0;
+    final seeThrough =
+        extensions.containsKey('KHR_materials_transmission') ||
+        (m['alphaMode'] == 'BLEND' && alpha < 0.8);
     final role =
         nodeRole ??
         options.materialRoles[name] ??
         standardRoles[_stripDecal(name)] ??
-        MeshRole.other;
+        (seeThrough ? MeshRole.glass : MeshRole.other);
     _TextureRef? texture;
     final baseTexture = pbr['baseColorTexture'];
     if (baseTexture is Map) {
@@ -476,7 +483,11 @@ class _Reader {
       MeshMaterial(
         name: name,
         role: role,
-        baseColor: _argb(factor.length >= 3 ? factor : const [1, 1, 1]),
+        // Glass shows the dark cabin behind it (the software renderer adds
+        // the sky reflection), not its pale transmission tint.
+        baseColor: seeThrough
+            ? _tintedGlass(_argb(factor.length >= 3 ? factor : const [1, 1, 1]))
+            : _argb(factor.length >= 3 ? factor : const [1, 1, 1]),
         metallic: ((pbr['metallicFactor'] as num?)?.toDouble() ?? 1).clamp(
           0,
           1,
@@ -494,6 +505,12 @@ class _Reader {
       ),
       texture,
     );
+  }
+
+  static int _tintedGlass(int argb) {
+    int ch(int shift, int dark) =>
+        ((((argb >> shift) & 0xFF) * 0.1) + dark * 0.9).round().clamp(0, 255);
+    return 0xFF000000 | ch(16, 0x14) << 16 | ch(8, 0x1B) << 8 | ch(0, 0x23);
   }
 
   static String _stripDecal(String name) =>

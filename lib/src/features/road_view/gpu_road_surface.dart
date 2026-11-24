@@ -23,6 +23,8 @@ class GpuSurfaceRequest {
     required this.vehicle,
     required this.viewpoint,
     this.egoGlbPath,
+    this.egoBodyNode,
+    this.egoExcludeNodes = const {},
   });
 
   final RoadScene scene;
@@ -35,6 +37,10 @@ class GpuSurfaceRequest {
   /// GLB of an imported model pack (asset path or file path); null = the
   /// built-in KovaLink SUV with GPU materials.
   final String? egoGlbPath;
+
+  /// Manifest body node of that pack.
+  final String? egoBodyNode;
+  final Set<String> egoExcludeNodes;
 }
 
 /// Builds the GPU surface for a request. Tests and worker captures inject
@@ -113,6 +119,8 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
             viewpoint: request.viewpoint,
             egoPackGlb: _glb,
             egoPackKey: _glbPath,
+            egoBodyNode: request.egoBodyNode,
+            egoExcludeNodes: request.egoExcludeNodes,
           ),
         );
         _frames++;

@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/features/connect/connect_screen.dart';
+import 'package:kovalink/src/features/road_view/gpu_road_surface.dart';
 import 'package:kovalink/src/features/road_view/road_view_screen.dart';
+import 'package:kovalink/src/features/road_view/scene3d/scene_director.dart';
 import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
@@ -17,6 +19,8 @@ class KovaLinkHome extends StatefulWidget {
     this.settings,
     this.library,
     this.modelPicker = pickModelFileWithSystemPicker,
+    this.gpuSurfaceBuilder,
+    this.director,
     super.key,
   });
 
@@ -25,6 +29,10 @@ class KovaLinkHome extends StatefulWidget {
   final SettingsController? settings;
   final VehicleModelLibrary? library;
   final ModelFilePicker modelPicker;
+
+  /// Capture/test hooks forwarded to [RoadViewScreen].
+  final GpuSurfaceBuilder? gpuSurfaceBuilder;
+  final SceneDirector? director;
 
   @override
   State<KovaLinkHome> createState() => _KovaLinkHomeState();
@@ -114,6 +122,8 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
       return RoadViewScreen(
         controller: widget.controller,
         vehicleModel: widget.vehicleModel,
+        gpuSurfaceBuilder: widget.gpuSurfaceBuilder,
+        director: widget.director,
       );
     }
     return AnimatedBuilder(
@@ -133,6 +143,8 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
               showHud: value.showHud,
               nativeVehicleOverlay: value.nativeVehicleOverlay,
               renderQuality: value.renderQuality,
+              gpuSurfaceBuilder: widget.gpuSurfaceBuilder,
+              director: widget.director,
             ),
             if (value.brightness < 1)
               IgnorePointer(

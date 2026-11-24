@@ -121,7 +121,7 @@ class GpuMaterials {
   static double lampStrength(MeshRole role, {required bool on}) =>
       switch (role) {
         MeshRole.tail => on ? 2.2 : 0.45,
-        MeshRole.brake => on ? 5.5 : 0.05,
+        MeshRole.brake => on ? 4.0 : 0.05,
         MeshRole.turnLeft || MeshRole.turnRight => on ? 6.0 : 0.0,
         MeshRole.reverse => on ? 4.0 : 0.0,
         MeshRole.headlight => on ? 5.0 : 0.25,

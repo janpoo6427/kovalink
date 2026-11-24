@@ -6,6 +6,7 @@ import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart'
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_director.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
+import 'package:kovalink/src/gpu_scene/glb_bounds.dart';
 import 'package:kovalink/src/gpu_scene/road_world_glb.dart';
 import 'package:kovalink/src/gpu_scene/scene_look.dart';
 import 'package:kovalink/src/gpu_scene/vehicle_gpu_glb.dart';
@@ -74,7 +75,16 @@ class GpuFrameInput {
     this.egoPackGlb,
     this.egoPackKey,
     this.viewpoint = SceneViewpoint.chase,
+    this.egoBodyNode,
+    this.egoExcludeNodes = const {},
   });
+
+  /// Nodes the pack manifest excludes from display (`excludeNodes`).
+  final Set<String> egoExcludeNodes;
+
+  /// Body node of an imported pack (manifest `nodes.body`), used to fit it
+  /// and to hide staging props (cloths, stands) shipped in sample models.
+  final String? egoBodyNode;
 
   final SceneViewpoint viewpoint;
 
@@ -233,6 +243,7 @@ class GpuRoadRenderer {
   final _pools = <String, List<_Slot>>{};
   _Slot? _ego;
   String? _egoKey;
+  GlbBounds? _egoFit;
   bool _postSet = false;
 
   static const _maxLampLights = 6;
@@ -439,17 +450,20 @@ class GpuRoadRenderer {
     required double sy,
     required double sz,
     required double layoutRearX,
+    double layoutX = 0,
+    double layoutY = 0,
     double steer = 0,
     double spinDelta = 0,
   }) async {
     slot.visible = true;
     // Pack frame: +Z forward, +X left, +Y up, origin at the rear bumper
-    // (layoutRearX shifts packs whose origin is the rear axle).
+    // (layoutRearX shifts packs whose origin is the rear axle; layoutX/Y
+    // center imported packs laterally and put their wheels on the ground).
     final p = toFilament(rearX, leftY, 0);
     final m = Matrix4.translation(Vector3(p[0], p[1], p[2]))
       ..rotateY(math.pi + yaw)
       ..scaleByDouble(sy, sz, sx, 1)
-      ..translateByDouble(0, 0, -layoutRearX, 1);
+      ..translateByDouble(-layoutX, -layoutY, -layoutRearX, 1);
     await slot.asset.setTransform(m);
     if (slot.mirror case final mirror?) {
       final mm = Matrix4.diagonal3Values(1, -1, 1)..multiply(m);
@@ -537,12 +551,33 @@ class GpuRoadRenderer {
           : null;
       _ego = await _newSlot('ego', input.egoPackGlb ?? layout!.glb, layout);
       _egoKey = egoKey;
+      if (input.egoPackGlb case final glb?) {
+        final fit = GlbBounds.vehicle(
+          glb,
+          body: input.egoBodyNode,
+          exclude: input.egoExcludeNodes,
+        );
+        _egoFit = fit?.bounds;
+        for (final prop in fit?.props ?? const <String>{}) {
+          for (final target in [_ego!.asset, ?_ego!.mirror]) {
+            final e = await target.getChildEntity(prop);
+            if (e != null) {
+              await target.setTransform(
+                Matrix4.translation(Vector3(0, -1000, 0)),
+                entity: e,
+              );
+            }
+          }
+        }
+      } else {
+        _egoFit = null;
+      }
     }
     final ego = _ego!;
     final dims = input.vehicle.dimensions;
     final egoLayout = ego.layout;
     var egoScale = (1.0, 1.0, 1.0);
-    var egoRear = 0.0;
+    var egoRear = 0.0, egoX = 0.0, egoY = 0.0;
     if (egoLayout != null) {
       egoScale = (
         dims.length / egoLayout.length,
@@ -551,11 +586,16 @@ class GpuRoadRenderer {
       );
       egoRear = egoLayout.rearX;
     } else {
-      final box = await ego.asset.getBoundingBox();
-      final size = box.max - box.min;
-      final k = dims.length / math.max(1e-3, size.z);
-      egoScale = (k, k, k);
-      egoRear = box.min.z;
+      // Imported pack: fit its rendered bounds (node transforms applied)
+      // to the manifest length, centered, wheels on the ground.
+      final box = _egoFit;
+      if (box != null) {
+        final k = dims.length / math.max(1e-6, box.size.z);
+        egoScale = (k, k, k);
+        egoRear = box.min.z;
+        egoX = box.center.x;
+        egoY = box.min.y;
+      }
     }
     final steer = (scene.steeringAngleDegrees / 15.5 * math.pi / 180).clamp(
       -0.6,
@@ -575,6 +615,8 @@ class GpuRoadRenderer {
         sy: egoScale.$2,
         sz: egoScale.$3,
         layoutRearX: egoRear,
+        layoutX: egoX,
+        layoutY: egoY,
         steer: steer,
         spinDelta: scene.speedMps * dt / wheelRadius,
       );
@@ -716,33 +758,15 @@ class GpuRoadRenderer {
           ),
         );
       }
-      for (final side in const [1.0, -1.0]) {
-        final pos = toFilament(egoRearX - 0.9, side * dims.width * 0.32, 0.35);
-        lights.add(
-          DirectLight(
-            type: LightType.POINT,
-            color: const LinearColor(1.0, 0.05, 0.06),
-            intensity: (scene.brakeActive ? 70 : 22) / look.exposure,
-            position: Vector3(pos[0], pos[1], pos[2]),
-            direction: Vector3(0, -1, 0),
-            falloffRadius: 5.5,
-          ),
-        );
-      }
+      _tailGlow(
+        lights,
+        look,
+        egoRearX,
+        dims.width,
+        scene.brakeActive ? (look.night ? 0.9 : 0.6) : 0.22,
+      );
     } else if (scene.brakeActive) {
-      for (final side in const [1.0, -1.0]) {
-        final pos = toFilament(egoRearX - 0.9, side * dims.width * 0.32, 0.35);
-        lights.add(
-          DirectLight(
-            type: LightType.POINT,
-            color: const LinearColor(1.0, 0.05, 0.06),
-            intensity: 60 / look.exposure,
-            position: Vector3(pos[0], pos[1], pos[2]),
-            direction: Vector3(0, -1, 0),
-            falloffRadius: 3.0,
-          ),
-        );
-      }
+      _tailGlow(lights, look, egoRearX, dims.width, 0.4);
     }
     if (look.streetLights) {
       final lamps = [...world.lamps]
@@ -791,6 +815,35 @@ class GpuRoadRenderer {
     );
   }
 
+  /// Red light the tail/brake lamps throw on the road behind the ego: a
+  /// spot aimed backward and down from each lamp, so it lights the road
+  /// and not the car's own tailgate. [level] = on-screen road brightness.
+  void _tailGlow(
+    List<DirectLight> lights,
+    SceneLook look,
+    double rearX,
+    double width,
+    double level,
+  ) {
+    for (final side in const [1.0, -1.0]) {
+      final pos = toFilament(rearX - 0.08, side * width * 0.36, 0.85);
+      final aim = toFilament(rearX - 3.2, side * width * 0.45, 0);
+      lights.add(
+        DirectLight(
+          type: LightType.FOCUSED_SPOT,
+          color: const LinearColor(1.0, 0.04, 0.05),
+          intensity: level / look.exposure * 110,
+          position: Vector3(pos[0], pos[1], pos[2]),
+          direction: Vector3(aim[0] - pos[0], aim[1] - pos[1], aim[2] - pos[2])
+            ..normalize(),
+          falloffRadius: 7,
+          spotLightConeInner: 0.35,
+          spotLightConeOuter: 1.0,
+        ),
+      );
+    }
+  }
+
   Future<void> _syncLights(List<DirectLight> lights) async {
     // Simple and robust: recreate punctual lights each frame (few lights).
     for (final e in [..._spots, ..._points]) {
@@ -809,7 +862,7 @@ class GpuRoadRenderer {
     final camera = input.director.camera;
     final aspect = input.width / input.height;
     if (camera is PerspectiveCamera) {
-      final fov = camera.verticalFov(input.height.toDouble()) * 180 / math.pi;
+      final fov = camera.verticalFov(camera.center.dy * 2) * 180 / math.pi;
       await cam.setProjectionFromVerticalFieldOfView(
         fov,
         camera.nearDepth * 0.6,

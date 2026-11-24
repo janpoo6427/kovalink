@@ -163,6 +163,8 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
           egoGlbPath: vehicleModel.manifest.id == 'kovalink-basic'
               ? null
               : glbAssetPath,
+          egoBodyNode: vehicleModel.manifest.nodes.body,
+          egoExcludeNodes: vehicleModel.manifest.excludeNodes.toSet(),
         );
         return Stack(
           fit: StackFit.expand,
