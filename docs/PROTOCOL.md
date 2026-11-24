@@ -2,7 +2,9 @@
 
 KovaLink connects only to loopback, `.local`, private IPv4, link-local IPv6, or
 unique-local IPv6 endpoints. Public relay and comma cloud connectivity are out
-of scope.
+of scope. IPv6 ranges apply only to bracketed IPv6 literals and IPv4 ranges only
+to canonical dotted-decimal addresses; other hostnames must be `localhost` or
+end in `.local`.
 
 Plain `ws://` is allowed for first-party local development only. A paired
 production gateway should use `wss://`; the app still applies the private-host

@@ -37,19 +37,51 @@ class LocalEndpointPolicy {
     final normalized = host.toLowerCase();
     if (normalized == 'localhost' || normalized.endsWith('.local')) return true;
 
-    final ipv4 = normalized.split('.').map(int.tryParse).toList();
-    if (ipv4.length == 4 &&
-        ipv4.every((part) => part != null && part >= 0 && part <= 255)) {
-      final first = ipv4[0]!;
-      final second = ipv4[1]!;
-      return first == 10 ||
-          first == 127 ||
-          (first == 192 && second == 168) ||
-          (first == 172 && second >= 16 && second <= 31);
+    // A URI host contains ':' only when it came from a bracketed IPv6 literal.
+    // IPv6 ranges must never be matched against plain hostnames.
+    if (normalized.contains(':')) return _isLocalIPv6Literal(normalized);
+
+    final ipv4 = _parseCanonicalIPv4(normalized);
+    if (ipv4 == null) return false;
+    final first = ipv4[0];
+    final second = ipv4[1];
+    return first == 10 ||
+        first == 127 ||
+        (first == 192 && second == 168) ||
+        (first == 172 && second >= 16 && second <= 31);
+  }
+
+  /// Loopback (::1), unique-local (fc00::/7) or link-local (fe80::/10).
+  static bool _isLocalIPv6Literal(String host) {
+    final zoneStart = host.indexOf('%');
+    final address = zoneStart < 0 ? host : host.substring(0, zoneStart);
+    final List<int> bytes;
+    try {
+      bytes = Uri.parseIPv6Address(address);
+    } on FormatException {
+      return false;
     }
-    return normalized == '::1' ||
-        normalized.startsWith('fe80:') ||
-        normalized.startsWith('fc') ||
-        normalized.startsWith('fd');
+    final isLoopback =
+        bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1;
+    final isUniqueLocal = (bytes[0] & 0xfe) == 0xfc;
+    final isLinkLocal = bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80;
+    return isLoopback || isUniqueLocal || isLinkLocal;
+  }
+
+  static final RegExp _ipv4Octet = RegExp(r'^(0|[1-9][0-9]{0,2})$');
+
+  /// Strict dotted-decimal only. Resolvers read forms such as `010.0.0.1`
+  /// (octal) or `0xa.0.0.1` (hex) differently from int.tryParse.
+  static List<int>? _parseCanonicalIPv4(String host) {
+    final parts = host.split('.');
+    if (parts.length != 4) return null;
+    final octets = <int>[];
+    for (final part in parts) {
+      if (!_ipv4Octet.hasMatch(part)) return null;
+      final value = int.parse(part);
+      if (value > 255) return null;
+      octets.add(value);
+    }
+    return octets;
   }
 }
