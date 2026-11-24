@@ -338,6 +338,15 @@ void main() {
         painter.paint(Canvas(ui.PictureRecorder()), size);
       }
       record.stop();
+      final bare = RoadWorldPainter(
+        scene: _scene(),
+        layers: const SceneLayers(objects: false),
+      );
+      final roadOnly = Stopwatch()..start();
+      for (var i = 0; i < frames; i++) {
+        bare.paint(Canvas(ui.PictureRecorder()), size);
+      }
+      roadOnly.stop();
       triangles = 0;
       meshOnly.paint(Canvas(ui.PictureRecorder()), size);
       final raster = Stopwatch();
@@ -358,7 +367,8 @@ void main() {
       final rasterMs = raster.elapsedMicroseconds / 5 / 1000;
       // ignore: avoid_print
       print(
-        'KOVA_PERF scene+13 vehicles: record ${perFrame.toStringAsFixed(2)} ms/frame, '
+        'KOVA_PERF scene+13 vehicles: record ${perFrame.toStringAsFixed(2)} ms/frame '
+        '(road+scenery+ego without other cars ${(roadOnly.elapsedMicroseconds / frames / 1000).toStringAsFixed(2)} ms), '
         'raster(software) ${rasterMs.toStringAsFixed(1)} ms/frame, '
         'vehicle triangles drawn $triangles',
       );

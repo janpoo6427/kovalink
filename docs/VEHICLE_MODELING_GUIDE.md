@@ -17,7 +17,7 @@ without permission.
 2. Blender is Z-up; glTF is Y-up. Model in Blender's natural frame:
    - car front points to Blender **−Y** (the exporter's "+Y Up" option turns
      Blender −Y into glTF +Z forward),
-   - car right side points to Blender **+X**,
+   - car **left** side points to Blender **+X** (glTF +X = vehicle left),
    - roof points to Blender **+Z**.
 3. Place the origin (3D cursor at world origin) **on the ground, centered
    between the rear wheels**. Rear axle at Y = 0, front axle at
@@ -60,7 +60,7 @@ File → Export → glTF 2.0:
 - Transform: **+Y Up** checked
 - Data → Mesh: Apply Modifiers checked; UVs and Normals checked
 - Data → Material: Export; Images: Automatic
-- Compression (Draco): off
+- Compression (Draco): **off** (compressed meshes are refused)
 - Animation: off
 
 Name the file `vehicle.glb`.

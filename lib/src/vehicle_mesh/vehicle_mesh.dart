@@ -390,7 +390,7 @@ class VehicleMeshSet {
   static const lod2Triangles = 360;
 
   /// On-screen body length (pixels) above which a level is used.
-  static const lod0MinPixels = 150.0;
+  static const lod0MinPixels = 220.0;
   static const lod1MinPixels = 48.0;
 
   final VehicleMesh lod0;

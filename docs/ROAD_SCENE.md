@@ -31,16 +31,27 @@ the same image renders on every platform and in tests:
   (`highway` → grass and low-poly trees, `city` → buildings).
 - Drawing order: sky/ground → shoulders, asphalt, seams, red edge bands →
   lane lines (color, style, confidence) → rainbow path ribbon (cyan → blue
-  → violet, fades ahead, stops before the lead) → brake light pool →
+  → violet, one soft-edged outline with a screen-space gradient, fades
+  ahead, stops before the lead) → brake light pool →
   scenery and objects far-to-near → ego → lead distance bubble.
 - Lead: `isLead` from the gateway, else the nearest vehicle within ±1.5 m
   of the planned path. Lead is blue with a `34.8 m` bubble, others are
   white and fade with fog. Cones, pedestrians and cyclists have their own
   shapes.
-- Ego: built from the model pack's `dimensionsMeters` and `appearance`
-  colors (tapered body, slanted rear glass, roof, wheels, gloss highlight,
-  soft contact shadow). Brake → bright tail lamps + glow + red ground pool;
-  blinkers pulse from `monotonicTimeNanos` (0.5 s).
+- Vehicles are triangle meshes (`vehicle_mesh_painter.dart`): per-vertex
+  projection, screen-space back-face culling, painter's sort per triangle
+  (decals biased forward), Gouraud lighting (sun, sky/ground ambient,
+  viewer fill, Blinn-Phong highlight, Fresnel sky reflection), fog, lamp
+  emission with glow, two-layer blurred contact shadow. One
+  `drawVertices` per vehicle; level of detail by on-screen length.
+- Ego: the selected pack's GLB levels (read in a background isolate), or
+  the built-in KovaLink SUV in the pack's paint. Brake → lit lamp bar,
+  corner lamps and stop lamp + glow + small red road glow; blinkers pulse
+  from `monotonicTimeNanos` (0.5 s).
+- Other vehicles: built-in SUV/sedan (by track id), trucks as a box truck,
+  in the palette's lead/other colors. Size = reported `length/width/
+  heightMeters`, else the model's real size (cars 1.45–1.69 m tall, truck
+  9 × 2.5 × 3.2 m). Yawed along the planned path.
 - `SceneLayers`: lanes / objects / path / scenery toggles (설정 → 표시 항목).
 - AR camera overlay mode still uses `RoadScenePainter` with the gateway's
   `cameraProjection`.

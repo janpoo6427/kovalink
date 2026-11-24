@@ -116,15 +116,45 @@ class VehicleMeshPainter {
       _shadow(canvas, camera, palette, pose, ppm, shadowStrength);
     }
 
-    // Per-vertex lighting.
+    final mats = mesh.materials;
+    final lit = [for (final m in mats) _lampLevel(m.role, lamps)];
+
+    // Visible triangles, far to near.
+    final tCount = mesh.triangleCount;
+    final order = Int32List(tCount);
+    final keys = Float64List(tCount);
+    var visible = 0;
+    final used = Uint8List(n);
+    final topDown = camera is TopDownCamera;
+    final idx = mesh.indices, tm = mesh.triangleMaterials;
+    for (var t = 0; t < tCount; t++) {
+      final a = idx[t * 3], b = idx[t * 3 + 1], c = idx[t * 3 + 2];
+      if (depth[a] < near || depth[b] < near || depth[c] < near) continue;
+      final ax = screen[a * 2], ay = screen[a * 2 + 1];
+      final area =
+          (screen[b * 2] - ax) * (screen[c * 2 + 1] - ay) -
+          (screen[b * 2 + 1] - ay) * (screen[c * 2] - ax);
+      final m = mats[tm[t]];
+      if (area >= 0 && !m.doubleSided) continue;
+      if (area.abs() < 1e-6) continue;
+      final onTop = m.drawsOnTop;
+      keys[t] = topDown
+          ? -(world[a * 3 + 2] + world[b * 3 + 2] + world[c * 3 + 2]) / 3 -
+                (onTop ? 0.02 : 0)
+          : (depth[a] + depth[b] + depth[c]) / 3 - (onTop ? decalBias : 0);
+      order[visible++] = t;
+      used[a] = 1;
+      used[b] = 1;
+      used[c] = 1;
+    }
+    // Per-vertex lighting (only vertices of visible triangles).
     final colors = Int32List(n);
     final vm = mesh.vertexMaterials;
     final eye = camera.eyePoint;
     final light = palette.lightDirection;
-    final mats = mesh.materials;
-    final lit = [for (final m in mats) _lampLevel(m.role, lamps)];
     final env = _Env(palette);
     for (var v = 0; v < n; v++) {
+      if (used[v] == 0) continue;
       final m = mats[vm[v]];
       var base = m.role == MeshRole.paint && paintArgb != null
           ? paintArgb
@@ -161,30 +191,6 @@ class VehicleMeshPainter {
       );
     }
 
-    // Visible triangles, far to near.
-    final tCount = mesh.triangleCount;
-    final order = Int32List(tCount);
-    final keys = Float64List(tCount);
-    var visible = 0;
-    final topDown = camera is TopDownCamera;
-    final idx = mesh.indices, tm = mesh.triangleMaterials;
-    for (var t = 0; t < tCount; t++) {
-      final a = idx[t * 3], b = idx[t * 3 + 1], c = idx[t * 3 + 2];
-      if (depth[a] < near || depth[b] < near || depth[c] < near) continue;
-      final ax = screen[a * 2], ay = screen[a * 2 + 1];
-      final area =
-          (screen[b * 2] - ax) * (screen[c * 2 + 1] - ay) -
-          (screen[b * 2 + 1] - ay) * (screen[c * 2] - ax);
-      final m = mats[tm[t]];
-      if (area >= 0 && !m.doubleSided) continue;
-      if (area.abs() < 1e-6) continue;
-      final onTop = m.drawsOnTop;
-      keys[t] = topDown
-          ? -(world[a * 3 + 2] + world[b * 3 + 2] + world[c * 3 + 2]) / 3 -
-                (onTop ? 0.02 : 0)
-          : (depth[a] + depth[b] + depth[c]) / 3 - (onTop ? decalBias : 0);
-      order[visible++] = t;
-    }
     final sorted = Int32List.sublistView(order, 0, visible)
       ..sort((x, y) => keys[y].compareTo(keys[x]));
 
