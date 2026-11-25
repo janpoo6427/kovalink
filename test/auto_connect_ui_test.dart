@@ -286,10 +286,8 @@ void main() {
       expect(find.text('콤마 연결됨'), findsOneWidget);
       await _settle(tester, const Duration(milliseconds: 50));
       expect(store.data!['lastDeviceEndpoint'], 'http://192.168.0.40:8082');
-      expect(
-        store.data!['telemetryEndpoint'],
-        'ws://192.168.0.40:8082/v1/telemetry',
-      );
+      // Only the found comma is saved; every address follows it.
+      expect(store.data!.containsKey('telemetryEndpoint'), isFalse);
       // No telemetry socket on this device: the demo keeps playing, no error.
       expect(find.text('좌회전'), findsOneWidget);
 

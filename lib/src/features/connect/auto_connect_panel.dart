@@ -237,7 +237,7 @@ class AutoConnectPanel extends StatelessWidget {
   static String _progressLine(AutoConnectController c) {
     final subnets = c.scanningSubnets.join(', ');
     return switch (c.phase) {
-      AutoConnectPhase.off => '꺼져 있어요. 주소를 직접 넣어 연결할 수 있어요.',
+      AutoConnectPhase.off => '꺼져 있어요. 켜면 같은 와이파이나 핫스팟에서 콤마를 찾아 연결해요.',
       AutoConnectPhase.paused => '앱이 화면에 없을 때는 찾지 않아요.',
       AutoConnectPhase.searching =>
         '${c.attempt}번째 찾는 중 · ${subnets.isEmpty ? '네트워크 확인 중' : subnets} · ${c.planned}곳 중 ${c.probed}곳 확인',
@@ -245,12 +245,12 @@ class AutoConnectPanel extends StatelessWidget {
         '${c.attempt}번 찾았지만 없었어요. ${c.nextRetry?.inSeconds ?? 0}초 뒤 다시 찾아요.',
       AutoConnectPhase.choosing =>
         '콤마가 ${c.found.length}대 있어요. 연결할 기기를 골라 주세요.',
-      AutoConnectPhase.connected =>
-        c.device != null
-            ? c.telemetryHeld
-                  ? '${c.device!.displayName}에 연결돼 있어요. 데모를 보는 동안에는 주행 정보를 잇지 않아요.'
-                  : '${c.device!.displayName}에 연결돼 있어요.'
-            : '입력한 주소로 연결돼 있어요.',
+      AutoConnectPhase.connected => switch (c.device) {
+        final device? when c.telemetryHeld =>
+          '${device.displayName}에 연결돼 있어요. 데모를 보는 동안에는 주행 정보를 잇지 않아요.',
+        final device? => '${device.displayName}에 연결돼 있어요.',
+        null => '콤마에 연결돼 있어요.',
+      },
     };
   }
 }

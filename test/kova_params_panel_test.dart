@@ -291,57 +291,5 @@ void main() {
       expect(find.text(AppSettings.defaultSettingsEndpoint), findsOneWidget);
       expect(find.text('시점'), findsNothing);
     });
-
-    testWidgets('settings address follows the local-only policy', (
-      tester,
-    ) async {
-      final settings = SettingsController(store: MemorySettingsStore());
-      await pumpScreen(tester, settings);
-      await tester.enterText(
-        find.byKey(const ValueKey('setting-settings-endpoint')),
-        'http://example.com:8082',
-      );
-      await tester.tap(find.byKey(const ValueKey('setting-endpoint-save')));
-      await tester.pump();
-      expect(find.text('같은 네트워크 안의 주소만 쓸 수 있어요.'), findsOneWidget);
-      expect(
-        settings.value.settingsEndpoint,
-        AppSettings.defaultSettingsEndpoint,
-      );
-
-      await tester.tap(find.text('kovapilot'));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('kova-edit-address')));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('kova-address-field')),
-        'http://127.0.0.1:18082',
-      );
-      await tester.tap(find.byKey(const ValueKey('kova-address-save')));
-      await tester.pumpAndSettle();
-      expect(settings.value.settingsEndpoint, 'http://127.0.0.1:18082');
-      await tester.tap(find.byKey(const ValueKey('kova-connect')));
-      await tester.pump();
-      expect(find.text('연결됨'), findsOneWidget);
-      expect(kova.endpoint, 'http://127.0.0.1:18082');
-    });
-  });
-
-  test('settings address is stored, validated and restored', () {
-    const settings = AppSettings(settingsEndpoint: 'http://192.168.0.10:8082');
-    final restored = AppSettings.fromJson(settings.toJson());
-    expect(restored.settingsEndpoint, 'http://192.168.0.10:8082');
-    expect(
-      AppSettings.fromJson({
-        'settingsEndpoint': 'http://example.com',
-      }).settingsEndpoint,
-      AppSettings.defaultSettingsEndpoint,
-    );
-    expect(
-      AppSettings.fromJson({
-        'settingsEndpoint': 'http://127.0.0.1:1/v1/kova-params',
-      }).settingsEndpoint,
-      AppSettings.defaultSettingsEndpoint,
-    );
   });
 }

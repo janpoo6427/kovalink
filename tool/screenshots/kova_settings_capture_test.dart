@@ -187,7 +187,7 @@ void main() {
       final controller = GatewayController();
       final settings = SettingsController(
         store: MemorySettingsStore(),
-        initial: AppSettings(settingsEndpoint: address),
+        initial: AppSettings(lastDeviceEndpoint: address),
       );
       final key = GlobalKey();
       await tester.pumpWidget(

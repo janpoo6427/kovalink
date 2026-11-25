@@ -62,7 +62,7 @@ Future<KovaParamsController> _pumpHome(
     store: MemorySettingsStore(),
     initial: AppSettings(
       demoRoute: route,
-      settingsEndpoint: 'http://127.0.0.1:18082',
+      lastDeviceEndpoint: 'http://127.0.0.1:18082',
     ),
   );
   await tester.runAsync(() async {

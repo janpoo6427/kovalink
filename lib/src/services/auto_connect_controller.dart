@@ -28,7 +28,7 @@ enum AutoConnectPhase {
   /// Several devices answered; the user picks one.
   choosing,
 
-  /// A device is connected (found here, or connected by hand).
+  /// A comma found here is connected and watched.
   connected,
 }
 
@@ -49,7 +49,9 @@ class AutoConnectLogEntry {
 /// What the app does with a device. Implemented by the app wiring; tests
 /// use a recording fake.
 abstract class AutoConnectTarget {
-  /// True while the telemetry socket is live (from any source).
+  /// True while the telemetry socket is live. Telemetry only ever opens to
+  /// a comma found here (there is no address to type), so the controller
+  /// does not act on it; it is kept for the app wiring and diagnostics.
   bool get isTelemetryLive;
 
   /// A device was confirmed: remember it and open settings, and telemetry
@@ -146,16 +148,13 @@ class AutoConnectController extends ChangeNotifier {
   /// Devices that answered in the current/last pass.
   List<KovaDevice> found = const [];
 
-  /// The device being watched; null when connected by hand or not connected.
+  /// The device being watched; null when not connected.
   KovaDevice? device;
-
-  /// Connected by hand (telemetry live without a device found here).
-  bool manual = false;
 
   /// The user left live telemetry on purpose (데모 보기). The comma is still
   /// found and watched and its settings stay open, but telemetry is not
-  /// reopened behind the user's back until 지금 찾기, a manual connection or
-  /// turning 자동 연결 off and on.
+  /// reopened behind the user's back until 지금 찾기 or turning 자동 연결
+  /// off and on.
   bool telemetryHeld = false;
 
   final List<AutoConnectLogEntry> _log = [];
@@ -189,7 +188,6 @@ class AutoConnectController extends ChangeNotifier {
     if (!on) {
       _stopAll();
       device = null;
-      manual = false;
       found = const [];
       _phase = AutoConnectPhase.off;
       _add('자동 연결을 껐어요.');
@@ -220,7 +218,6 @@ class AutoConnectController extends ChangeNotifier {
   void retryNow() {
     if (!_active) return;
     device = null;
-    manual = false;
     telemetryHeld = false;
     _kick('직접 다시 찾기', reset: true);
   }
@@ -233,18 +230,12 @@ class AutoConnectController extends ChangeNotifier {
     await _connect(chosen, '직접 고름');
   }
 
-  /// The telemetry socket dropped. Check the device right away; search again
-  /// if it is gone (or if the connection was made by hand).
+  /// The telemetry socket dropped. Check the device right away; it is
+  /// searched for again if it is gone.
   void connectionLost() {
-    if (!_active) return;
-    if (device != null) {
-      _add('주행 정보 연결이 끊겼어요. 콤마를 확인해요.');
-      unawaited(_heartbeat(lossOnFirstFailure: true));
-    } else if (manual || _phase == AutoConnectPhase.connected) {
-      manual = false;
-      _add('연결이 끊겼어요. 다시 찾아요.');
-      _kick('연결 끊김', reset: true);
-    }
+    if (!_active || device == null) return;
+    _add('주행 정보 연결이 끊겼어요. 콤마를 확인해요.');
+    unawaited(_heartbeat(lossOnFirstFailure: true));
   }
 
   /// The user left live telemetry on purpose (데모 보기): keep the found comma
@@ -253,24 +244,13 @@ class AutoConnectController extends ChangeNotifier {
     if (!_active) return;
     telemetryHeld = true;
     _add('데모를 보는 동안에는 주행 정보를 다시 잇지 않아요.');
-    if (device == null && (manual || _phase == AutoConnectPhase.connected)) {
-      manual = false;
-      _kick('데모 보기', reset: true);
-      return;
-    }
     _notify();
   }
 
-  /// Telemetry went live (e.g. 연결 pressed with a typed address).
+  /// Telemetry to the found comma went live: a 데모 보기 hold is over.
   void telemetryConnected() {
+    if (!telemetryHeld) return;
     telemetryHeld = false;
-    if (!_active || device != null) return;
-    _generation++;
-    _retryTimer?.cancel();
-    manual = true;
-    found = const [];
-    _phase = AutoConnectPhase.connected;
-    _add('입력한 주소로 연결됐어요. 찾기를 멈춰요.');
     _notify();
   }
 
@@ -278,10 +258,6 @@ class AutoConnectController extends ChangeNotifier {
 
   void _resume(String reason) {
     _startWatch();
-    if (target.isTelemetryLive && device == null) {
-      telemetryConnected();
-      return;
-    }
     if (device != null) {
       _phase = AutoConnectPhase.connected;
       _notify();
@@ -452,7 +428,6 @@ class AutoConnectController extends ChangeNotifier {
 
   Future<void> _connect(KovaDevice chosen, String how) async {
     device = chosen;
-    manual = false;
     _failedPasses = 0;
     _heartbeatFailures = 0;
     nextRetry = null;
@@ -547,10 +522,8 @@ class AutoConnectController extends ChangeNotifier {
     _add('네트워크가 바뀌었어요.');
     if (device != null) {
       unawaited(_heartbeat(lossOnFirstFailure: true));
-    } else if (!manual) {
-      _kick('네트워크 바뀜', reset: true);
     } else {
-      _notify();
+      _kick('네트워크 바뀜', reset: true);
     }
   }
 

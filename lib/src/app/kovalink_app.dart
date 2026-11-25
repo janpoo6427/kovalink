@@ -6,7 +6,6 @@ import 'package:kovalink/src/app/kovalink_home.dart';
 import 'package:kovalink/src/app/kovalink_pages.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
-import 'package:kovalink/src/network/device_discovery.dart';
 import 'package:kovalink/src/services/app_auto_connect_target.dart';
 import 'package:kovalink/src/services/auto_connect_controller.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
@@ -103,8 +102,11 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
             : AutoConnectController(
                 target: target,
                 lastEndpoint: () => settings.value.lastDeviceEndpoint,
-                knownEndpoints: () => [settings.value.settingsEndpoint],
-                portsProvider: () => _ports(settings),
+                // comma.local is always worth a try besides the last comma;
+                // only kovapilot's own port is probed.
+                knownEndpoints: () => const [
+                  AppSettings.defaultSettingsEndpoint,
+                ],
               ));
     if (autoConnect case final auto?) {
       _telemetryWatch = TelemetryWatch(
@@ -133,15 +135,6 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadVehicleModel();
     settings.load();
-  }
-
-  /// The gateway default port, plus the saved settings port if different.
-  static List<int> _ports(SettingsController settings) {
-    final ports = {kovaGatewayDefaultPort};
-    final saved = settings.value.settingsEndpoint;
-    final uri = Uri.tryParse(saved);
-    if (uri != null && uri.hasPort) ports.add(uri.port);
-    return ports.toList();
   }
 
   @override

@@ -284,26 +284,6 @@ void main() {
     rig.finish();
   });
 
-  testWidgets('a manual connection stops the search', (tester) async {
-    final rig = Rig();
-    rig.probe.delay = const Duration(milliseconds: 100);
-    rig.auto.setEnabled(true);
-    await tester.pump(const Duration(milliseconds: 250));
-    rig.target.live = true;
-    rig.auto.telemetryConnected();
-    final calls = rig.probe.calls.length;
-    await settle(tester, const Duration(minutes: 1));
-    expect(rig.probe.calls.length, lessThanOrEqualTo(calls + 24));
-    expect(rig.auto.phase, AutoConnectPhase.connected);
-    expect(rig.auto.manual, isTrue);
-    // Losing that connection starts the search again.
-    rig.target.live = false;
-    rig.auto.connectionLost();
-    await settle(tester, const Duration(seconds: 30));
-    expect(rig.probe.calls.length, greaterThan(calls + 24));
-    rig.finish();
-  });
-
   testWidgets('데모 보기 keeps the comma but does not reopen telemetry', (
     tester,
   ) async {
@@ -324,28 +304,6 @@ void main() {
     rig.auto.retryNow();
     await settle(tester);
     expect(rig.target.attachedTelemetry, [true, true]);
-    rig.finish();
-  });
-
-  testWidgets('데모 보기 after a manual connection: found again, telemetry held', (
-    tester,
-  ) async {
-    final rig = Rig();
-    rig.target.live = true;
-    rig.auto.setEnabled(true);
-    await settle(tester);
-    expect(rig.auto.manual, isTrue);
-    expect(rig.probe.calls, isEmpty);
-    rig.target.live = false;
-    rig.probe.device('192.168.0.40');
-    rig.auto.telemetryLeftByUser();
-    await settle(tester);
-    expect(rig.auto.phase, AutoConnectPhase.connected);
-    expect(rig.auto.device!.host, '192.168.0.40');
-    expect(rig.target.attachedTelemetry, [false]);
-    // A manual connection lifts the hold again.
-    rig.auto.telemetryConnected();
-    expect(rig.auto.telemetryHeld, isFalse);
     rig.finish();
   });
 }

@@ -94,15 +94,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       widget.settings?.value.settingsEndpoint ??
       AppSettings.defaultSettingsEndpoint;
 
-  Future<void> _editSettingsAddress() async {
-    final settings = widget.settings;
-    if (settings == null) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => _SettingsAddressDialog(settings: settings),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
@@ -152,7 +143,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             KovaParamsPanel(
               controller: _kova,
               address: _settingsAddress,
-              onEditAddress: settings == null ? null : _editSettingsAddress,
               now: widget.now,
             ),
           ] else if (_tab == SettingsTab.session)
@@ -166,7 +156,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _LayerSection(settings: settings),
             _DemoSection(settings: settings, controller: controller),
             _AutoConnectSection(settings: settings),
-            _EndpointSection(settings: settings),
             if (widget.library != null)
               _VehicleModelSection(
                 settings: settings,
@@ -289,7 +278,7 @@ class _SessionSection extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
           child: Text(
-            '주소는 앱 탭에서 바꿀 수 있어요.',
+            '주소는 자동 연결이 찾은 콤마에 맞춰져요.',
             style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
           ),
         ),
@@ -333,62 +322,6 @@ class _StatusTile extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SettingsAddressDialog extends StatefulWidget {
-  const _SettingsAddressDialog({required this.settings});
-
-  final SettingsController settings;
-
-  @override
-  State<_SettingsAddressDialog> createState() => _SettingsAddressDialogState();
-}
-
-class _SettingsAddressDialogState extends State<_SettingsAddressDialog> {
-  late final text = TextEditingController(
-    text: widget.settings.value.settingsEndpoint,
-  );
-  String? error;
-
-  @override
-  void dispose() {
-    text.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('kovapilot 설정 주소'),
-    content: TextField(
-      key: const ValueKey('kova-address-field'),
-      controller: text,
-      keyboardType: TextInputType.url,
-      autocorrect: false,
-      decoration: InputDecoration(
-        hintText: AppSettings.defaultSettingsEndpoint,
-        errorText: error,
-        errorMaxLines: 3,
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('취소'),
-      ),
-      FilledButton(
-        key: const ValueKey('kova-address-save'),
-        onPressed: () {
-          final result = widget.settings.setSettingsEndpoint(text.text);
-          if (result == null) {
-            Navigator.of(context).pop();
-          } else {
-            setState(() => error = result);
-          }
-        },
-        child: const Text('저장'),
-      ),
-    ],
-  );
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -696,130 +629,6 @@ class _AutoConnectSection extends StatelessWidget {
             value: settings.value.autoConnect,
             onChanged: (on) =>
                 settings.update((s) => s.copyWith(autoConnect: on)),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _EndpointSection extends StatefulWidget {
-  const _EndpointSection({required this.settings});
-
-  final SettingsController settings;
-
-  @override
-  State<_EndpointSection> createState() => _EndpointSectionState();
-}
-
-class _EndpointSectionState extends State<_EndpointSection> {
-  late final telemetry = TextEditingController(
-    text: widget.settings.value.telemetryEndpoint,
-  );
-  late final signaling = TextEditingController(
-    text: widget.settings.value.signalingEndpoint,
-  );
-  late final settingsAddress = TextEditingController(
-    text: widget.settings.value.settingsEndpoint,
-  );
-  String? telemetryError;
-  String? signalingError;
-  String? settingsError;
-  String? saved;
-
-  @override
-  void dispose() {
-    telemetry.dispose();
-    signaling.dispose();
-    settingsAddress.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    setState(() {
-      telemetryError = widget.settings.setTelemetryEndpoint(telemetry.text);
-      signalingError = widget.settings.setSignalingEndpoint(signaling.text);
-      settingsError = widget.settings.setSettingsEndpoint(settingsAddress.text);
-      saved =
-          telemetryError == null &&
-              signalingError == null &&
-              settingsError == null
-          ? '저장했어요.'
-          : null;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionTitle('연결 주소'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  key: const ValueKey('setting-telemetry-endpoint'),
-                  controller: telemetry,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    labelText: '주행 정보',
-                    hintText: AppSettings.defaultTelemetryEndpoint,
-                    errorText: telemetryError,
-                    errorMaxLines: 2,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  key: const ValueKey('setting-signaling-endpoint'),
-                  controller: signaling,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    labelText: '카메라',
-                    hintText: AppSettings.defaultSignalingEndpoint,
-                    errorText: signalingError,
-                    errorMaxLines: 2,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  key: const ValueKey('setting-settings-endpoint'),
-                  controller: settingsAddress,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    labelText: 'kovapilot 설정',
-                    hintText: AppSettings.defaultSettingsEndpoint,
-                    errorText: settingsError,
-                    errorMaxLines: 2,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        saved ?? '',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF8E9DA9),
-                        ),
-                      ),
-                    ),
-                    FilledButton(
-                      key: const ValueKey('setting-endpoint-save'),
-                      onPressed: _save,
-                      child: const Text('저장'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
           ),
         ),
       ],

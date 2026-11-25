@@ -14,16 +14,14 @@ class KovaParamsPanel extends StatelessWidget {
   const KovaParamsPanel({
     required this.controller,
     required this.address,
-    this.onEditAddress,
     this.now,
     super.key,
   });
 
   final KovaParamsController controller;
 
-  /// Saved settings address (app-local setting).
+  /// kovapilot settings address of the comma 자동 연결 found (not editable).
   final String address;
-  final VoidCallback? onEditAddress;
 
   /// Clock for "n초 전" (tests/captures).
   final DateTime Function()? now;
@@ -40,7 +38,6 @@ class KovaParamsPanel extends StatelessWidget {
             KovaConnectionCard(
               controller: controller,
               address: address,
-              onEditAddress: onEditAddress,
               now: now,
             ),
             if (document == null)
@@ -85,14 +82,12 @@ class KovaConnectionCard extends StatelessWidget {
   const KovaConnectionCard({
     required this.controller,
     required this.address,
-    this.onEditAddress,
     this.now,
     super.key,
   });
 
   final KovaParamsController controller;
   final String address;
-  final VoidCallback? onEditAddress;
   final DateTime Function()? now;
 
   @override
@@ -148,24 +143,10 @@ class KovaConnectionCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    shownAddress,
-                    style: const TextStyle(color: _muted, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (onEditAddress != null &&
-                    status == KovaLinkStatus.disconnected)
-                  IconButton(
-                    key: const ValueKey('kova-edit-address'),
-                    tooltip: '주소 바꾸기',
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    onPressed: onEditAddress,
-                  ),
-              ],
+            Text(
+              shownAddress,
+              style: const TextStyle(color: _muted, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
             ),
             if (document != null || health != null)
               Text(

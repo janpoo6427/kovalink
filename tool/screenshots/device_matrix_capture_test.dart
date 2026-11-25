@@ -342,7 +342,7 @@ Future<void> _pumpHome(
     initial: AppSettings(
       sceneTheme: theme,
       demoRoute: route,
-      settingsEndpoint: 'http://127.0.0.1:18082',
+      lastDeviceEndpoint: 'http://127.0.0.1:18082',
     ),
   );
   _kova?.dispose();

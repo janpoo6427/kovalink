@@ -8,6 +8,7 @@ import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart'
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
 import 'package:kovalink/src/models/display_units.dart';
+import 'package:kovalink/src/network/kovapilot_endpoints.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 import 'package:kovalink/src/services/demo_drive_scenario.dart';
 
@@ -33,9 +34,6 @@ class AppSettings {
     this.showHud = true,
     this.demoMode = true,
     this.demoRoute = DemoRoute.city,
-    this.telemetryEndpoint = defaultTelemetryEndpoint,
-    this.signalingEndpoint = defaultSignalingEndpoint,
-    this.settingsEndpoint = defaultSettingsEndpoint,
     this.vehicleModelId,
     this.nativeVehicleOverlay = false,
     this.renderQuality = RenderQuality.auto,
@@ -44,11 +42,21 @@ class AppSettings {
   });
 
   static const schemaVersion = 1;
+
+  /// Addresses before a comma is found (`comma.local`, kovapilot's port).
   static const defaultTelemetryEndpoint = 'ws://comma.local:8082/v1/telemetry';
   static const defaultSignalingEndpoint = 'http://comma.local:8082/v1/stream';
 
   /// kovapilot settings HTTP origin (`/v1/kova-params` is appended).
   static const defaultSettingsEndpoint = 'http://comma.local:8082';
+
+  /// Address fields older versions saved. They are ignored when read and
+  /// dropped from the file ([SettingsController.load] writes it again).
+  static const legacyEndpointKeys = [
+    'telemetryEndpoint',
+    'signalingEndpoint',
+    'settingsEndpoint',
+  ];
   static const minBrightness = 0.4;
 
   final SpeedUnit speedUnit;
@@ -65,9 +73,14 @@ class AppSettings {
   final bool showHud;
   final bool demoMode;
   final DemoRoute demoRoute;
-  final String telemetryEndpoint;
-  final String signalingEndpoint;
-  final String settingsEndpoint;
+
+  /// Every kovapilot address, from the comma 자동 연결 found last
+  /// ([lastDeviceEndpoint]) or `comma.local`. Not editable.
+  KovapilotEndpoints get endpoints =>
+      KovapilotEndpoints.fromOrigin(lastDeviceEndpoint);
+  String get telemetryEndpoint => endpoints.telemetry;
+  String get signalingEndpoint => endpoints.signaling;
+  String get settingsEndpoint => endpoints.settings;
 
   /// Selected vehicle model pack id; null = default built-in.
   final String? vehicleModelId;
@@ -83,7 +96,8 @@ class AppSettings {
   final bool autoConnect;
 
   /// Settings origin of the last device found by auto-connect (tried first
-  /// next time). Same local-only policy as [settingsEndpoint].
+  /// next time; every address follows it). Only 자동 연결 sets it, under
+  /// the local-only policy.
   final String? lastDeviceEndpoint;
 
   SceneLayers get layers => SceneLayers(
@@ -106,9 +120,6 @@ class AppSettings {
     bool? showHud,
     bool? demoMode,
     DemoRoute? demoRoute,
-    String? telemetryEndpoint,
-    String? signalingEndpoint,
-    String? settingsEndpoint,
     String? vehicleModelId,
     bool clearVehicleModel = false,
     bool? nativeVehicleOverlay,
@@ -128,9 +139,6 @@ class AppSettings {
     showHud: showHud ?? this.showHud,
     demoMode: demoMode ?? this.demoMode,
     demoRoute: demoRoute ?? this.demoRoute,
-    telemetryEndpoint: telemetryEndpoint ?? this.telemetryEndpoint,
-    signalingEndpoint: signalingEndpoint ?? this.signalingEndpoint,
-    settingsEndpoint: settingsEndpoint ?? this.settingsEndpoint,
     vehicleModelId: clearVehicleModel
         ? null
         : vehicleModelId ?? this.vehicleModelId,
@@ -154,9 +162,6 @@ class AppSettings {
     'showHud': showHud,
     'demoMode': demoMode,
     'demoRoute': demoRoute.name,
-    'telemetryEndpoint': telemetryEndpoint,
-    'signalingEndpoint': signalingEndpoint,
-    'settingsEndpoint': settingsEndpoint,
     'vehicleModelId': ?vehicleModelId,
     'nativeVehicleOverlay': nativeVehicleOverlay,
     'renderQuality': renderQuality.name,
@@ -165,8 +170,9 @@ class AppSettings {
   };
 
   /// Tolerant parser: each unknown or invalid field falls back to its
-  /// default instead of discarding the whole file. Stored endpoints are
-  /// re-checked against the local-only policy.
+  /// default instead of discarding the whole file. The stored device
+  /// address is re-checked against the local-only policy; addresses saved
+  /// by older versions ([legacyEndpointKeys]) are ignored.
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     const defaults = AppSettings();
     T pick<T extends Enum>(List<T> values, String key, T fallback) {
@@ -179,16 +185,6 @@ class AppSettings {
 
     bool flag(String key, bool fallback) =>
         json[key] is bool ? json[key] as bool : fallback;
-    String endpoint(
-      String key,
-      String fallback,
-      String? Function(String) validate,
-    ) {
-      final value = json[key];
-      return value is String && validate(value) == null
-          ? value.trim()
-          : fallback;
-    }
 
     final brightness = json['brightness'];
     final modelId = json['vehicleModelId'];
@@ -208,21 +204,6 @@ class AppSettings {
       showHud: flag('showHud', defaults.showHud),
       demoMode: flag('demoMode', defaults.demoMode),
       demoRoute: pick(DemoRoute.values, 'demoRoute', defaults.demoRoute),
-      telemetryEndpoint: endpoint(
-        'telemetryEndpoint',
-        defaultTelemetryEndpoint,
-        LocalEndpointPolicy.validate,
-      ),
-      signalingEndpoint: endpoint(
-        'signalingEndpoint',
-        defaultSignalingEndpoint,
-        LocalEndpointPolicy.validateSignaling,
-      ),
-      settingsEndpoint: endpoint(
-        'settingsEndpoint',
-        defaultSettingsEndpoint,
-        LocalEndpointPolicy.validateSettings,
-      ),
       vehicleModelId:
           modelId is String &&
               RegExp(r'^[a-z0-9][a-z0-9-]{1,47}$').hasMatch(modelId)
@@ -330,7 +311,14 @@ class SettingsController extends ChangeNotifier {
   Future<void> load() async {
     try {
       final json = await store.read();
-      if (json != null) _value = AppSettings.fromJson(json);
+      if (json != null) {
+        _value = AppSettings.fromJson(json);
+        // Addresses typed into older versions are not used any more; take
+        // them out of the file too.
+        if (AppSettings.legacyEndpointKeys.any(json.containsKey)) {
+          _write(_value.toJson());
+        }
+      }
       storageError = null;
     } on Object {
       storageError = '저장된 설정을 불러오지 못해 기본값으로 시작했어요.';
@@ -344,7 +332,10 @@ class SettingsController extends ChangeNotifier {
     if (next == _value) return _pending;
     _value = next;
     notifyListeners();
-    final snapshot = next.toJson();
+    return _write(next.toJson());
+  }
+
+  Future<void> _write(Map<String, dynamic> snapshot) {
     _pending = _pending.then((_) async {
       try {
         await store.write(snapshot);
@@ -357,62 +348,15 @@ class SettingsController extends ChangeNotifier {
     return _pending;
   }
 
-  /// Saves the telemetry address only if the local-only policy accepts it.
-  /// Returns the user-facing error otherwise.
-  String? setTelemetryEndpoint(String endpoint) {
-    final error = LocalEndpointPolicy.validate(endpoint);
-    if (error == null) {
-      update((s) => s.copyWith(telemetryEndpoint: endpoint.trim()));
-    }
-    return error;
-  }
-
-  String? setSignalingEndpoint(String endpoint) {
-    final error = LocalEndpointPolicy.validateSignaling(endpoint);
-    if (error == null) {
-      update((s) => s.copyWith(signalingEndpoint: endpoint.trim()));
-    }
-    return error;
-  }
-
-  /// Saves the kovapilot settings origin under the same local-only policy.
-  String? setSettingsEndpoint(String endpoint) {
-    final error = LocalEndpointPolicy.validateSettings(endpoint);
-    if (error == null) {
-      update((s) => s.copyWith(settingsEndpoint: endpoint.trim()));
-    }
-    return error;
-  }
-
-  /// Auto-connect found a device at [host]:[port]: remember it and point the
-  /// settings, telemetry and camera addresses at it (path and scheme of the
-  /// telemetry/camera addresses are kept). Refused unless the local-only
-  /// policy accepts the new origin.
+  /// Auto-connect found a device at [host]:[port]: remember it. The
+  /// settings, telemetry and camera addresses all follow it
+  /// ([AppSettings.endpoints]). Refused unless the local-only policy
+  /// accepts the origin.
   String? rememberDevice(String host, int port) {
     final origin = Uri(scheme: 'http', host: host, port: port).toString();
     final error = LocalEndpointPolicy.validateSettings(origin);
     if (error != null) return error;
-    String moved(String endpoint, String? Function(String) validate) {
-      final uri = Uri.tryParse(endpoint);
-      if (uri == null) return endpoint;
-      final next = uri.replace(host: host, port: port).toString();
-      return validate(next) == null ? next : endpoint;
-    }
-
-    update(
-      (s) => s.copyWith(
-        lastDeviceEndpoint: origin,
-        settingsEndpoint: origin,
-        telemetryEndpoint: moved(
-          s.telemetryEndpoint,
-          LocalEndpointPolicy.validate,
-        ),
-        signalingEndpoint: moved(
-          s.signalingEndpoint,
-          LocalEndpointPolicy.validateSignaling,
-        ),
-      ),
-    );
+    update((s) => s.copyWith(lastDeviceEndpoint: origin));
     return null;
   }
 }

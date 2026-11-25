@@ -8,7 +8,10 @@ import 'package:kovalink/src/widgets/page_header.dart';
 import 'package:kovalink/src/widgets/readable_width.dart';
 import 'package:kovalink/src/widgets/status_pill.dart';
 
-class ConnectScreen extends StatefulWidget {
+/// 장치 연결: the comma 자동 연결 found, how the connections are doing, 지금
+/// 찾기 and 데모 보기. There is no address to type: KovaLink only talks to
+/// kovapilot, at the comma 자동 연결 found ([AppSettings.endpoints]).
+class ConnectScreen extends StatelessWidget {
   const ConnectScreen({
     required this.controller,
     this.settings,
@@ -18,81 +21,26 @@ class ConnectScreen extends StatefulWidget {
 
   final GatewayController controller;
 
-  /// Saved device addresses (설정 → 연결 장치 주소). Optional.
+  /// Where the found comma is remembered (the camera address follows it).
   final SettingsController? settings;
 
   /// 자동 연결 (network search). Optional.
   final AutoConnectController? autoConnect;
 
   @override
-  State<ConnectScreen> createState() => _ConnectScreenState();
-}
-
-class _ConnectScreenState extends State<ConnectScreen> {
-  late final endpointController = TextEditingController(
-    text:
-        widget.settings?.value.telemetryEndpoint ??
-        AppSettings.defaultTelemetryEndpoint,
-  );
-  late final cameraEndpointController = TextEditingController(
-    text:
-        widget.settings?.value.signalingEndpoint ??
-        AppSettings.defaultSignalingEndpoint,
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _savedTelemetry = widget.settings?.value.telemetryEndpoint;
-    _savedSignaling = widget.settings?.value.signalingEndpoint;
-    widget.settings?.addListener(_followSavedAddresses);
-  }
-
-  String? _savedTelemetry;
-  String? _savedSignaling;
-
-  /// Auto-connect moves the saved addresses to the device it found. Follow
-  /// them unless the user has typed something else.
-  void _followSavedAddresses() {
-    final value = widget.settings!.value;
-    if (value.telemetryEndpoint != _savedTelemetry) {
-      if (endpointController.text.trim() == _savedTelemetry) {
-        endpointController.text = value.telemetryEndpoint;
-      }
-      _savedTelemetry = value.telemetryEndpoint;
-    }
-    if (value.signalingEndpoint != _savedSignaling) {
-      if (cameraEndpointController.text.trim() == _savedSignaling) {
-        cameraEndpointController.text = value.signalingEndpoint;
-      }
-      _savedSignaling = value.signalingEndpoint;
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.settings?.removeListener(_followSavedAddresses);
-    endpointController.dispose();
-    cameraEndpointController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        widget.controller,
-        widget.controller.roadStream,
-      ]),
+      animation: Listenable.merge([controller, controller.roadStream]),
       builder: (context, _) => ReadableListView(
         children: [
           const PageHeader(title: '장치 연결'),
           const SizedBox(height: 22),
-          if (widget.autoConnect case final auto?) ...[
-            AutoConnectPanel(controller: auto, settings: widget.settings),
+          if (autoConnect case final auto?) ...[
+            AutoConnectPanel(controller: auto, settings: settings),
             const SizedBox(height: 14),
           ],
           Card(
+            key: const ValueKey('telemetry-card'),
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Column(
@@ -100,25 +48,20 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 children: [
                   Row(
                     children: [
+                      const Icon(
+                        Icons.speed_outlined,
+                        color: Color(0xFF58F2C2),
+                      ),
+                      const SizedBox(width: 10),
                       const Text(
                         '주행 정보',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       const Spacer(),
-                      StatusPill(mode: widget.controller.mode),
+                      StatusPill(mode: controller.mode),
                     ],
                   ),
-                  const SizedBox(height: 18),
-                  TextField(
-                    controller: endpointController,
-                    keyboardType: TextInputType.url,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      labelText: '주소',
-                      hintText: 'wss://comma.local/v1/telemetry',
-                    ),
-                  ),
-                  if (widget.controller.errorMessage case final message?) ...[
+                  if (controller.errorMessage case final message?) ...[
                     const SizedBox(height: 10),
                     Text(
                       message,
@@ -128,31 +71,24 @@ class _ConnectScreenState extends State<ConnectScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
                       Expanded(
-                        child: FilledButton.icon(
-                          onPressed:
-                              widget.controller.mode == GatewayMode.connecting
-                              ? null
-                              : () {
-                                  // Remember a valid local address; the
-                                  // policy check also runs in connect().
-                                  widget.settings?.setTelemetryEndpoint(
-                                    endpointController.text,
-                                  );
-                                  widget.controller.connect(
-                                    endpointController.text,
-                                  );
-                                },
-                          icon: const Icon(Icons.link),
-                          label: const Text('연결'),
+                        child: Text(
+                          controller.mode == GatewayMode.demo
+                              ? '지금은 예시 주행을 보여 주고 있어요.'
+                              : '차 없이 예시 주행을 볼 수 있어요.',
+                          style: const TextStyle(
+                            color: Color(0xFF8E9DA9),
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       OutlinedButton(
-                        onPressed: widget.controller.startDemo,
+                        key: const ValueKey('connect-demo'),
+                        onPressed: controller.startDemo,
                         child: const Text('데모 보기'),
                       ),
                     ],
@@ -163,8 +99,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
           ),
           const SizedBox(height: 14),
           _CameraConnectionCard(
-            controller: widget.controller,
-            endpointController: cameraEndpointController,
+            controller: controller,
+            signalingEndpoint:
+                settings?.value.signalingEndpoint ??
+                AppSettings.defaultSignalingEndpoint,
           ),
           const SizedBox(height: 14),
           const Padding(
@@ -183,11 +121,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
 class _CameraConnectionCard extends StatelessWidget {
   const _CameraConnectionCard({
     required this.controller,
-    required this.endpointController,
+    required this.signalingEndpoint,
   });
 
   final GatewayController controller;
-  final TextEditingController endpointController;
+
+  /// The found comma's camera address.
+  final String signalingEndpoint;
 
   @override
   Widget build(BuildContext context) {
@@ -199,6 +139,7 @@ class _CameraConnectionCard extends StatelessWidget {
       RoadStreamStatus.error => '연결 안 됨',
     };
     return Card(
+      key: const ValueKey('camera-card'),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -222,16 +163,6 @@ class _CameraConnectionCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: endpointController,
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-              decoration: const InputDecoration(
-                labelText: '주소',
-                hintText: 'https://comma.local:8082/v1/stream',
-              ),
-            ),
             if (stream.errorMessage case final message?) ...[
               const SizedBox(height: 10),
               Text(
@@ -247,10 +178,11 @@ class _CameraConnectionCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: FilledButton.icon(
+                    key: const ValueKey('camera-on'),
                     onPressed: stream.status == RoadStreamStatus.connecting
                         ? null
                         : () => stream.connect(
-                            signalingEndpoint: endpointController.text,
+                            signalingEndpoint: signalingEndpoint,
                           ),
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('카메라 켜기'),

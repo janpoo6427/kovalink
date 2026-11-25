@@ -75,7 +75,7 @@ void main() {
         showHud: false,
         demoMode: false,
         demoRoute: DemoRoute.highway,
-        telemetryEndpoint: 'ws://192.168.0.10:8082/v1/telemetry',
+        lastDeviceEndpoint: 'http://192.168.0.10:8082',
         vehicleModelId: 'my-car',
         nativeVehicleOverlay: true,
       );
@@ -152,10 +152,7 @@ void main() {
           speedUnit: SpeedUnit.mph,
         ),
       );
-      expect(
-        first.setTelemetryEndpoint('ws://10.0.0.7:8082/v1/telemetry'),
-        isNull,
-      );
+      expect(first.rememberDevice('10.0.0.7', 8082), isNull);
       await first.update((s) => s);
       expect(
         File('${root.path}/${FileSettingsStore.fileName}.tmp').existsSync(),
@@ -181,26 +178,6 @@ void main() {
       await controller.load();
       expect(controller.value, const AppSettings());
       expect(controller.storageError, isNotNull);
-    });
-
-    test('endpoint setters apply the local-only policy', () async {
-      final store = MemorySettingsStore();
-      final controller = SettingsController(store: store);
-      final error = controller.setTelemetryEndpoint(
-        'ws://example.com/v1/telemetry',
-      );
-      expect(error, contains('같은 네트워크'));
-      expect(
-        controller.value.telemetryEndpoint,
-        AppSettings.defaultTelemetryEndpoint,
-      );
-      expect(controller.setSignalingEndpoint('ftp://comma.local/x'), isNotNull);
-      expect(
-        controller.setSignalingEndpoint('http://192.168.1.5:8082/v1/stream'),
-        isNull,
-      );
-      await controller.update((s) => s);
-      expect(store.writes, 1);
     });
   });
 
@@ -270,35 +247,6 @@ void main() {
       expect(value.showHud, isFalse);
       expect(value.demoMode, isFalse);
       expect(find.text('ENABLE_CANFD_LONGITUDINAL_STAGING'), findsNothing);
-    });
-
-    testWidgets('rejects a public domain for the device address', (
-      tester,
-    ) async {
-      await pumpScreen(tester);
-      await tester.enterText(
-        find.byKey(const ValueKey('setting-telemetry-endpoint')),
-        'ws://example.com/v1/telemetry',
-      );
-      await tester.tap(find.byKey(const ValueKey('setting-endpoint-save')));
-      await tester.pump();
-      expect(find.text('같은 네트워크 안의 주소만 쓸 수 있어요.'), findsOneWidget);
-      expect(
-        settings.value.telemetryEndpoint,
-        AppSettings.defaultTelemetryEndpoint,
-      );
-
-      await tester.enterText(
-        find.byKey(const ValueKey('setting-telemetry-endpoint')),
-        'ws://comma.local:9000/v1/telemetry',
-      );
-      await tester.tap(find.byKey(const ValueKey('setting-endpoint-save')));
-      await tester.pump();
-      expect(find.text('저장했어요.'), findsOneWidget);
-      expect(
-        settings.value.telemetryEndpoint,
-        'ws://comma.local:9000/v1/telemetry',
-      );
     });
 
     testWidgets('imports, lists, selects and deletes a model pack', (
