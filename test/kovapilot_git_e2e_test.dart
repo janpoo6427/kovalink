@@ -344,6 +344,140 @@ void main() {
       }
     });
 
+    test('reset preview asks inside the current branch, also after a switch '
+        'on the comma', () async {
+      final controller = KovaGitController(pageSize: 10);
+      addTearDown(controller.dispose);
+      await controller.open(_origin);
+      expect(controller.resetBranch, 'master');
+      final older = controller.log[3].commit;
+      final request = controller.resetRequest(older)!;
+      expect(request.toJson(), {
+        'operation': 'reset',
+        'branch': 'master',
+        'commit': older,
+      });
+      final onMaster = await controller.preview(request);
+      expect(onMaster.plan!.branch, 'master');
+      expect(onMaster.plan!.commit, older);
+
+      // The comma moves to another branch (what a switch leaves behind).
+      await _git(repo, [
+        'checkout',
+        '-q',
+        '-b',
+        'feature/longitudinal-shadow',
+        '--track',
+        'origin/feature/longitudinal-shadow',
+      ]);
+      addTearDown(() async {
+        await _git(repo, ['checkout', '-q', 'master']);
+        await _git(repo, ['branch', '-q', '-D', 'feature/longitudinal-shadow']);
+      });
+      await controller.refresh();
+      final shadowHead = await _git(repo, [
+        'rev-parse',
+        'origin/feature/longitudinal-shadow',
+      ]);
+      expect(controller.status!.branch, 'feature/longitudinal-shadow');
+      expect(controller.status!.upstream, 'origin/feature/longitudinal-shadow');
+      expect(controller.resetBranch, 'feature/longitudinal-shadow');
+      expect(controller.log.first.commit, shadowHead);
+      expect(
+        controller.log.first.subject,
+        'fix(longitudinal): clamp shadow accel request',
+      );
+      expect(
+        controller.log.map((e) => e.commit),
+        isNot(contains(startHead)),
+        reason: "master's newest commit is not in this branch's history",
+      );
+      final shadowOlder = controller.log[1].commit;
+      final onShadow = controller.resetRequest(shadowOlder)!;
+      expect(onShadow.branch, 'feature/longitudinal-shadow');
+      final plan = (await controller.preview(onShadow)).plan!;
+      expect(plan.branch, 'feature/longitudinal-shadow');
+      expect(plan.commit, shadowOlder);
+      expect(plan.branchHead, shadowHead);
+      expect(plan.beforeBranch, 'feature/longitudinal-shadow');
+      expect(plan.beforeHead, shadowHead);
+
+      // master's head is outside this branch: the real gateway says 400
+      // and the app says why in plain words.
+      final refused = await controller.preview(
+        KovaGitPlanRequest.resetTo(
+          branch: controller.resetBranch!,
+          commit: startHead,
+        ),
+      );
+      expect(refused.failure!.kind, KovaGitFailure.invalidRequest);
+      expect(refused.failure!.statusCode, 400);
+      expect(refused.failure!.code, 'invalid_git_request');
+      expect(
+        refused.failure!.message,
+        '이 커밋은 ‘feature/longitudinal-shadow’ 브랜치 기록에 없어서 되돌릴 수 없어요.',
+      );
+    });
+
+    test('a commit made only on the comma cannot be reset to', () async {
+      await _git(repo, [
+        '-c',
+        'user.name=KovaLink Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        '-c',
+        'commit.gpgsign=false',
+        'commit',
+        '-q',
+        '--allow-empty',
+        '-m',
+        'wip: 콤마에서만 만든 커밋',
+      ]);
+      addTearDown(() => _git(repo, ['reset', '-q', '--hard', startHead]));
+      final local = await _git(repo, ['rev-parse', 'HEAD']);
+      final controller = KovaGitController(pageSize: 10);
+      addTearDown(controller.dispose);
+      await controller.open(_origin);
+      expect(controller.status!.branch, 'master');
+      expect(controller.log.first.commit, local);
+      expect(controller.log.first.subject, 'wip: 콤마에서만 만든 커밋');
+      final request = controller.resetRequest(local)!;
+      expect(request.toJson(), {
+        'operation': 'reset',
+        'branch': 'master',
+        'commit': local,
+      });
+      final refused = await controller.preview(request);
+      expect(refused.plan, isNull);
+      expect(refused.failure!.statusCode, 400);
+      expect(refused.failure!.code, 'invalid_git_request');
+      expect(refused.failure!.message, '이 커밋은 ‘master’ 브랜치 기록에 없어서 되돌릴 수 없어요.');
+      // Its parent is origin/master's head: still inside master.
+      final ok = await controller.preview(
+        controller.resetRequest(controller.log[1].commit)!,
+      );
+      expect(ok.plan!.commit, startHead);
+      expect(ok.plan!.branchHead, startHead);
+    });
+
+    test('a detached HEAD gives no reset request', () async {
+      await _git(repo, ['checkout', '-q', '--detach', 'HEAD~2']);
+      addTearDown(() => _git(repo, ['checkout', '-q', 'master']));
+      final controller = KovaGitController(pageSize: 10);
+      addTearDown(controller.dispose);
+      await controller.open(_origin);
+      expect(controller.status!.branch, isNull);
+      expect(controller.status!.upstream, isNull);
+      expect(controller.resetBlock, KovaGitResetBlock.detached);
+      expect(controller.resetRequest(controller.log[1].commit), isNull);
+      // Switching is still previewed.
+      final plan = (await controller.preview(
+        const KovaGitPlanRequest.switchTo('master'),
+      )).plan!;
+      expect(plan.beforeBranch, isNull);
+      expect(plan.commit, startHead);
+    });
+
     test(
       'apply is refused with 403 and the checkout does not change',
       () async {
