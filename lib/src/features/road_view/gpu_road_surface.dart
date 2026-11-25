@@ -95,11 +95,21 @@ abstract class GpuViewHost {
   int get renderedFrames => -1;
 
   Widget build(BuildContext context, GpuViewCallbacks callbacks);
+
+  /// Stops ([drawing] false) or restarts the native render loop while a
+  /// full-screen page covers the drive screen. Hosts without one ignore it.
+  void setDrawing(bool drawing) {}
 }
 
 /// Filament (thermion) texture view.
 class ThermionGpuViewHost extends GpuViewHost {
   const ThermionGpuViewHost();
+
+  @override
+  void setDrawing(bool drawing) {
+    final plugin = ThermionFlutterPlugin.instance;
+    drawing ? plugin.resumeFrameScheduler() : plugin.pauseFrameScheduler();
+  }
 
   static AndroidTextureSource get textureSource =>
       ThermionFlutterPlugin.instance.options.nativeOptions.androidTextureSource;
@@ -410,6 +420,56 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
   /// Foreground re-check in progress: blank snapshots seen so far.
   int? _resumeBlank;
 
+  /// Ticker mode where the surface sits: off while a full-screen page
+  /// covers the drive screen.
+  ValueListenable<TickerModeData>? _tickerMode;
+
+  /// Covered after the 3D view was confirmed: scene updates wait and the
+  /// native loop is stopped. Never while starting or re-checking, so
+  /// those checks still see frames.
+  bool _held = false;
+
+  /// Surfaces holding right now; the native loop draws again when none is
+  /// left (an attempt replaced while covered hands over without a gap).
+  static final Set<_GpuRoadSurfaceState> _holding = {};
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final mode = TickerMode.getValuesNotifier(context);
+    if (!identical(mode, _tickerMode)) {
+      _tickerMode?.removeListener(_syncHold);
+      _tickerMode = mode..addListener(_syncHold);
+    }
+    _syncHold();
+  }
+
+  void _syncHold() {
+    final covered = !(_tickerMode?.value.enabled ?? true);
+    _setHeld(covered && _verified && !_failed && mounted);
+  }
+
+  void _setHeld(bool held) {
+    if (held == _held) return;
+    _held = held;
+    final drewBefore = _holding.isEmpty;
+    held ? _holding.add(this) : _holding.remove(this);
+    if (drewBefore != _holding.isEmpty) {
+      widget.host.setDrawing(_holding.isEmpty);
+    }
+    if (held) {
+      _diag.event('화면이 가려져서 3D를 쉬어요');
+      return;
+    }
+    _diag.event('3D를 다시 그려요');
+    if (mounted && _pending != null) {
+      // Shown again: draw the newest scene that waited.
+      scheduleMicrotask(() {
+        if (mounted && !_held && _pending != null) _schedule(_pending!);
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -524,6 +584,7 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
     switch (result.verdict) {
       case GpuProbeVerdict.visible:
         _verified = true;
+        _syncHold();
         _diag.setFrames(_frameWindow());
         _diag.event('3D 화면 확인됨 (${_secs(_sinceMount.elapsedMilliseconds)})');
         widget.onVerified?.call();
@@ -557,6 +618,7 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
     // Android may hand the texture a new surface after the app was in the
     // background; confirm frames reach the screen again.
     _verified = false;
+    _syncHold();
     _resumeBlank = 0;
     _startFrameWindow();
     _diag.event('앱으로 돌아와서 3D 화면을 다시 확인해요');
@@ -570,6 +632,7 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
       case GpuProbeVerdict.visible:
         _resumeBlank = null;
         _verified = true;
+        _syncHold();
         _diag.setFrames(_frameWindow());
         _diag.event('돌아온 뒤 3D 화면 확인됨');
         widget.onVerified?.call();
@@ -634,14 +697,14 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
 
   void _schedule(GpuSurfaceRequest request) {
     _pending = request;
-    if (_busy || _sink == null) return;
+    if (_busy || _sink == null || _held) return;
     unawaited(_pump());
   }
 
   Future<void> _pump() async {
     _busy = true;
     try {
-      while (_pending != null && mounted) {
+      while (_pending != null && mounted && !_held) {
         final request = _pending!;
         _pending = null;
         if (request.egoGlbPath != _glbPath) {
@@ -727,6 +790,10 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _tickerMode?.removeListener(_syncHold);
+    if (_held && _holding.remove(this) && _holding.isEmpty) {
+      widget.host.setDrawing(true);
+    }
     _watchdog?.cancel();
     _probeTimer?.cancel();
     unawaited(_sink?.dispose());

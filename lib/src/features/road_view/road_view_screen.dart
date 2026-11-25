@@ -20,6 +20,7 @@ import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
 import 'package:kovalink/src/widgets/liquid_glass.dart';
+import 'package:kovalink/src/widgets/while_shown_builder.dart';
 import 'package:thermion_flutter/thermion_flutter.dart';
 import 'package:vector_math/vector_math_64.dart' as vector;
 
@@ -205,8 +206,11 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([
+    // A full-screen page on top turns the ticker mode off: telemetry then
+    // stops rebuilding this screen (and feeding the 3D view) until it shows
+    // again, so the page scrolls without the hidden drive screen's work.
+    return WhileShownBuilder(
+      listenable: Listenable.merge([
         widget.controller,
         widget.controller.roadStream,
         ?widget.vehicleModel,
