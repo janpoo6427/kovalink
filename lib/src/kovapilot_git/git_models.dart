@@ -269,6 +269,7 @@ class KovaGitPlan {
     required this.changedFileCount,
     required this.planDigest,
     this.beforeBranch,
+    this.dirtyKnown = true,
     this.mutationEnabled = false,
   });
 
@@ -294,6 +295,7 @@ class KovaGitPlan {
       beforeHead: _sha(map, 'beforeHead'),
       beforeBranch: _optionalString(map, 'beforeBranch'),
       dirty: _bool(map, 'dirty'),
+      dirtyKnown: _bool(map, 'dirtyKnown', fallback: true),
       requiresRestart: _bool(map, 'requiresRestart'),
       mutationEnabled: _bool(map, 'mutationEnabled', fallback: false),
       changedFileCount: count,
@@ -310,6 +312,7 @@ class KovaGitPlan {
   final String beforeHead;
   final String? beforeBranch;
   final bool dirty;
+  final bool dirtyKnown;
   final bool requiresRestart;
   final bool mutationEnabled;
   final int changedFileCount;

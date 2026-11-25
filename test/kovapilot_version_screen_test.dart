@@ -233,6 +233,25 @@ void main() {
     expect(find.byKey(const ValueKey('git-plan-dirty')), findsOneWidget);
   });
 
+  testWidgets(
+    'switch preview compares commits when local changes are unknown',
+    (tester) async {
+      final harness = await _open(
+        tester,
+        setup: (gateway) => gateway
+          ..dirtyKnown = false
+          ..dirty = true,
+      );
+      final branch = find.byKey(const ValueKey('git-branch-release/stable'));
+      await _show(tester, branch);
+      await tester.tap(branch);
+      await tester.pumpAndSettle();
+      expect(find.text('커밋 간 변경 파일'), findsOneWidget);
+      expect(find.text('콤마에서 직접 수정한 파일이 있는지 확인하지 못했어요.'), findsOneWidget);
+      expect(harness.gateway.applyCalls, 0);
+    },
+  );
+
   testWidgets('reset preview from history stays on the current branch', (
     tester,
   ) async {

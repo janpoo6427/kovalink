@@ -403,6 +403,7 @@ class FakeKovaGitGateway implements KovaParamsTransport {
       'beforeHead': head.sha,
       'beforeBranch': branch,
       'dirty': dirty,
+      if (!dirtyKnown) 'dirtyKnown': false,
       'requiresRestart': true,
       'mutationEnabled': false,
       'changedFileCount': changedFiles(head, commit),

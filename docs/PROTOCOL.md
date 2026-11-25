@@ -318,12 +318,12 @@ Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md` at
 | `GET /v1/git/status` | `{branch\|null, head, upstream\|null, dirty, dirtyKnown?, updaterState\|null, mutationEnabled: false}` |
 | `GET /v1/git/branches` | `{branches: [{name, commit}]}` (fetched `origin/*` refs, no `origin/HEAD`) |
 | `GET /v1/git/log?limit=1..100&cursor=0..10000` | `{entries: [{commit, parents, authorTime, subject}], nextCursor\|null}` (HEAD history) |
-| `POST /v1/git/plan` `{operation: switch\|reset, branch, commit?}` | `{operation, branch, commit, branchHead, beforeHead, beforeBranch, dirty, requiresRestart, mutationEnabled: false, changedFileCount, planDigest}` |
+| `POST /v1/git/plan` `{operation: switch\|reset, branch, commit?}` | `{operation, branch, commit, branchHead, beforeHead, beforeBranch, dirty, dirtyKnown?, requiresRestart, mutationEnabled: false, changedFileCount, planDigest}` |
 | `POST /v1/git/apply` | `403 git_mutation_disabled` |
 
 - `dirtyKnown: false` means inspection of local changes failed. The app
-  still shows branch and HEAD, marks the change state unknown, and can only
-  receive a preview once the gateway can confirm the change state.
+  shows the branch, HEAD and any preview based on the committed snapshots,
+  and marks the status of local changes unknown.
 - A switch sends no commit; a reset sends a full 40-character SHA that must
   be in the chosen origin branch's history. Short SHAs and out-of-range
   pages are refused in the app before sending.

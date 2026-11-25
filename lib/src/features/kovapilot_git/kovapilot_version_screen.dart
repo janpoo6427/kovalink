@@ -1202,7 +1202,7 @@ class _PlanFacts extends StatelessWidget {
               : null,
         ),
         _Fact(
-          label: '바뀌는 파일',
+          label: plan.dirtyKnown ? '바뀌는 파일' : '커밋 간 변경 파일',
           value: Text(
             plan.isNoOp ? '없어요' : '${plan.changedFileCount}개',
             key: const ValueKey('git-plan-files'),
@@ -1218,7 +1218,7 @@ class _PlanFacts extends StatelessWidget {
               style: TextStyle(height: 1.5),
             ),
           ),
-        if (plan.dirty)
+        if (!plan.dirtyKnown || plan.dirty)
           Container(
             key: const ValueKey('git-plan-dirty'),
             margin: const EdgeInsets.only(top: 8),
@@ -1228,15 +1228,17 @@ class _PlanFacts extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: _warn.withValues(alpha: 0.4)),
             ),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.warning_amber_rounded, color: _warn, size: 20),
-                SizedBox(width: 10),
+                const Icon(Icons.warning_amber_rounded, color: _warn, size: 20),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '콤마에 수정된 파일이 있어요. 바꾸면 그 수정이 사라질 수 있으니 먼저 확인해 주세요.',
-                    style: TextStyle(height: 1.45),
+                    plan.dirtyKnown
+                        ? '콤마에 수정된 파일이 있어요. 바꾸면 그 수정이 사라질 수 있으니 먼저 확인해 주세요.'
+                        : '콤마에서 직접 수정한 파일이 있는지 확인하지 못했어요.',
+                    style: const TextStyle(height: 1.45),
                   ),
                 ),
               ],
