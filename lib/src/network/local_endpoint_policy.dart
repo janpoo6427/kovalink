@@ -15,6 +15,49 @@ class LocalEndpointPolicy {
     }, 'HTTP signaling 주소(http:// 또는 https://)만 지원합니다.');
   }
 
+  /// kovapilot settings API origin, e.g. `http://comma.local:8082`. Only the
+  /// origin is used; a path other than `/` is refused so the app always
+  /// calls the documented `/v1/...` routes.
+  static String? validateSettings(String value) {
+    final error = _validate(value, const {
+      'http',
+      'https',
+    }, '설정 주소는 http:// 또는 https://만 지원합니다.');
+    if (error != null) return error;
+    final uri = Uri.parse(value.trim());
+    if ((uri.path.isNotEmpty && uri.path != '/') ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        uri.userInfo.isNotEmpty) {
+      return '설정 주소는 경로 없이 장치 주소와 포트만 적어 주세요 (예: http://comma.local:8082).';
+    }
+    return null;
+  }
+
+  /// Origin of an accepted settings address (call [validateSettings] first).
+  static Uri settingsBase(String value) {
+    final uri = Uri.parse(value.trim());
+    return Uri(
+      scheme: uri.scheme,
+      host: uri.host,
+      port: uri.hasPort ? uri.port : null,
+    );
+  }
+
+  /// True only for `localhost`, `127.0.0.1` and `::1`: the gateway's
+  /// loopback-only development bind. Every other private address is LAN.
+  static bool isLoopbackHost(String host) {
+    final normalized = host.toLowerCase();
+    if (normalized == 'localhost' || normalized == '127.0.0.1') return true;
+    if (!normalized.contains(':')) return false;
+    try {
+      final bytes = Uri.parseIPv6Address(normalized);
+      return bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1;
+    } on FormatException {
+      return false;
+    }
+  }
+
   static String? _validate(
     String value,
     Set<String> schemes,

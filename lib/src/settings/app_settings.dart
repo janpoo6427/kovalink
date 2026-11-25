@@ -35,6 +35,7 @@ class AppSettings {
     this.demoRoute = DemoRoute.city,
     this.telemetryEndpoint = defaultTelemetryEndpoint,
     this.signalingEndpoint = defaultSignalingEndpoint,
+    this.settingsEndpoint = defaultSettingsEndpoint,
     this.vehicleModelId,
     this.nativeVehicleOverlay = false,
     this.renderQuality = RenderQuality.auto,
@@ -43,6 +44,9 @@ class AppSettings {
   static const schemaVersion = 1;
   static const defaultTelemetryEndpoint = 'ws://comma.local:8082/v1/telemetry';
   static const defaultSignalingEndpoint = 'http://comma.local:8082/v1/stream';
+
+  /// kovapilot settings HTTP origin (`/v1/kova-params` is appended).
+  static const defaultSettingsEndpoint = 'http://comma.local:8082';
   static const minBrightness = 0.4;
 
   final SpeedUnit speedUnit;
@@ -61,6 +65,7 @@ class AppSettings {
   final DemoRoute demoRoute;
   final String telemetryEndpoint;
   final String signalingEndpoint;
+  final String settingsEndpoint;
 
   /// Selected vehicle model pack id; null = default built-in.
   final String? vehicleModelId;
@@ -93,6 +98,7 @@ class AppSettings {
     DemoRoute? demoRoute,
     String? telemetryEndpoint,
     String? signalingEndpoint,
+    String? settingsEndpoint,
     String? vehicleModelId,
     bool clearVehicleModel = false,
     bool? nativeVehicleOverlay,
@@ -112,6 +118,7 @@ class AppSettings {
     demoRoute: demoRoute ?? this.demoRoute,
     telemetryEndpoint: telemetryEndpoint ?? this.telemetryEndpoint,
     signalingEndpoint: signalingEndpoint ?? this.signalingEndpoint,
+    settingsEndpoint: settingsEndpoint ?? this.settingsEndpoint,
     vehicleModelId: clearVehicleModel
         ? null
         : vehicleModelId ?? this.vehicleModelId,
@@ -135,6 +142,7 @@ class AppSettings {
     'demoRoute': demoRoute.name,
     'telemetryEndpoint': telemetryEndpoint,
     'signalingEndpoint': signalingEndpoint,
+    'settingsEndpoint': settingsEndpoint,
     'vehicleModelId': ?vehicleModelId,
     'nativeVehicleOverlay': nativeVehicleOverlay,
     'renderQuality': renderQuality.name,
@@ -192,6 +200,11 @@ class AppSettings {
         'signalingEndpoint',
         defaultSignalingEndpoint,
         LocalEndpointPolicy.validateSignaling,
+      ),
+      settingsEndpoint: endpoint(
+        'settingsEndpoint',
+        defaultSettingsEndpoint,
+        LocalEndpointPolicy.validateSettings,
       ),
       vehicleModelId:
           modelId is String &&
@@ -335,6 +348,15 @@ class SettingsController extends ChangeNotifier {
     final error = LocalEndpointPolicy.validateSignaling(endpoint);
     if (error == null) {
       update((s) => s.copyWith(signalingEndpoint: endpoint.trim()));
+    }
+    return error;
+  }
+
+  /// Saves the kovapilot settings origin under the same local-only policy.
+  String? setSettingsEndpoint(String endpoint) {
+    final error = LocalEndpointPolicy.validateSettings(endpoint);
+    if (error == null) {
+      update((s) => s.copyWith(settingsEndpoint: endpoint.trim()));
     }
     return error;
   }
