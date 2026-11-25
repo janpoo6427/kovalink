@@ -1,5 +1,9 @@
 # KovaLink 설치 파일
 
+- `kovalink-1.0.0-0eac0fc-arm64-v8a.apk`는 `master@0eac0fc`의 Android arm64 빌드입니다.
+  - comma를 kovapilot `master-jh@8194c0a02` 이상으로 업데이트한 뒤, 같은 사설 네트워크에서 comma를 부팅하고 Link 앱을 열면 자동으로 연결합니다. [Gateway 동작 안내](https://github.com/janpoo6427/kovapilot/blob/8194c0a0255eb4ac1ba0246573f074ec9389eecb/docs/kovapilot/KOVALINK_GATEWAY.md)
+  - 같은 서브넷의 기기는 Gateway 주행 정보, 카메라와 허용된 설정에 접속할 수 있습니다. 조향·종방향 제어 설정은 자동 연결에서 읽기 전용입니다.
+  - 직전 `0b95c89` APK와 같은 개발 서명이므로 기존 앱 위에 설치할 수 있습니다.
 - `kovalink-1.0.0-0b95c89-arm64-v8a.apk`는 `master@0b95c89`의 Android arm64 빌드입니다.
   - **IP로 연결**에서 콤마가 응답하지 않는 경우와 다른 서비스가 응답하는 경우를 구분합니다. 초기 설정을 확인하는 안내도 추가했습니다.
   - comma를 kovapilot `master-jh@850bca875` 이상으로 업데이트한 뒤 새 Gateway 설정 스크립트를 한 번 실행하세요. [Gateway 설정 안내](https://github.com/janpoo6427/kovapilot/blob/850bca875782ee0615dd51ae355c43ca594c8641/docs/kovapilot/KOVALINK_GATEWAY.md)
