@@ -9,6 +9,7 @@
 // black3d_fallback new: after the start timeout, software renderer only
 // black3d_gpu_ok   new: healthy GPU frame confirmed, underlay removed
 // probe_calibration.txt  probe verdict on real GPU frames of every theme
+// black3d_diagnostics_card  설정 → 진단 after a fallback (example values)
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -269,7 +270,7 @@ void main() {
 
   testWidgets('diagnostics card after a fallback', (tester) async {
     await tester.runAsync(loadReviewFonts);
-    tester.view.physicalSize = const Size(1080, 1500);
+    tester.view.physicalSize = const Size(1080, 1900);
     tester.view.devicePixelRatio = _ratio;
     addTearDown(tester.view.reset);
     final diag = RendererDiagnostics.instance..reset();
@@ -295,16 +296,27 @@ void main() {
       () =>
           messenger.setMockMethodCallHandler(RendererDiagnostics.channel, null),
     );
+    // Example of the phone symptom after both texture paths: the engine
+    // started and drew frames, but nothing reached the screen.
     diag
       ..setQuality('자동')
-      ..setTexture('SurfaceProducer', 0)
-      ..event('GPU 화면 시작 (SurfaceProducer)')
-      ..event('3D 엔진 준비 412 ms')
-      ..event('첫 장면 96 ms (시작 후 520 ms)')
-      ..event('GPU 포기: 3.0초 안에 3D 화면이 안 나옴 (멈춘 단계: 텍스처 등록)')
+      ..setTexture('SurfaceTexture', 1)
+      ..event('3D 화면 켜기 시작 (SurfaceProducer)')
+      ..event('3D 엔진 켜짐 (0.41초)')
+      ..event('첫 장면 그림 (0.10초 걸림, 시작 후 0.52초)')
+      ..event('3D 포기: 3.0초 안에 3D 화면이 안 나왔어요 (멈춘 단계: 텍스처 등록)')
+      ..event('다른 연결 방식(SurfaceTexture)으로 3D를 다시 시도해요 (2번째)')
+      ..event('3D 화면 켜기 시작 (SurfaceTexture)')
+      ..event('화면 연결됨 (0.38초)')
+      ..event('3D 포기: 3D 화면이 비어 있음 (보임 0%, 밝음 0%)')
+      ..setProbe('비어 있음 (보임 0%, 밝음 0%)')
+      ..setFrames(const RendererFrames(24, 460))
       ..setState(
         RendererState.fallback,
-        reason: '3.0초 안에 3D 화면이 안 나옴 (멈춘 단계: 텍스처 등록)',
+        reason: '3D 화면이 비어 있음 (보임 0%, 밝음 0%)',
+        note:
+            '3D 화면이 비어 있었어요. 3D 그림이 화면까지 오지 못했어요. '
+            '그동안 3D 엔진은 24장을 그렸어요.',
       );
     final key = GlobalKey();
     await tester.pumpWidget(
