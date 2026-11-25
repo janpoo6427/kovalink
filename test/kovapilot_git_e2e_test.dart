@@ -21,6 +21,10 @@ import 'package:kovalink/src/kova_params/kova_params_client.dart';
 import 'package:kovalink/src/kovapilot_git/git_client.dart';
 import 'package:kovalink/src/kovapilot_git/git_controller.dart';
 import 'package:kovalink/src/kovapilot_git/git_models.dart';
+import 'package:kovalink/src/network/device_discovery.dart';
+import 'package:kovalink/src/services/auto_connect_controller.dart';
+
+import 'support/fake_auto_connect.dart';
 
 final String? _hook = Platform.environment['KOVA_E2E_GIT_HOOK'];
 final int _port =
@@ -67,6 +71,30 @@ Future<(int, Map<String, dynamic>)> _raw(
   } finally {
     http.close(force: true);
   }
+}
+
+/// Plain TCP relay host:port -> the gateway on 127.0.0.1:_port (what a
+/// phone reaching the comma by a LAN address looks like to the gateway).
+Future<ServerSocket> _relay(String host, int port) async {
+  final server = await ServerSocket.bind(host, port);
+  server.listen((client) async {
+    try {
+      final up = await Socket.connect('127.0.0.1', _port);
+      client.listen(
+        up.add,
+        onDone: () => up.destroy(),
+        onError: (Object _) => up.destroy(),
+      );
+      up.listen(
+        client.add,
+        onDone: () => client.destroy(),
+        onError: (Object _) => client.destroy(),
+      );
+    } on Object {
+      client.destroy();
+    }
+  });
+  return server;
 }
 
 /// dart:io transport that sends the Host a phone would send when it reaches
@@ -472,6 +500,43 @@ void main() {
             KovaGitFailure.transport,
           ),
         ),
+      );
+    });
+
+    test('자동 연결 through a LAN-style relay: found, not allowed yet', () async {
+      // The phone's view: the comma at 127.0.0.77, a plain TCP relay to the
+      // gateway, so the request's Host is not a loopback name. This is what
+      // the gateway's loopback-only middleware answers a phone with.
+      final relayPort = _port + 1000;
+      final relay = await _relay('127.0.0.77', relayPort);
+      addTearDown(relay.close);
+      final probe = HttpDeviceProbe();
+      addTearDown(probe.close);
+      final direct = await probe.probe('127.0.0.77', relayPort);
+      expect(direct.outcome, ProbeOutcome.localOnly);
+
+      final auto = AutoConnectController(
+        target: FakeTarget(),
+        probe: HttpDeviceProbe(),
+        listNetworks: () async => [LocalNetwork.named('wlan0', '127.0.0.5')],
+        lastEndpoint: () => 'http://127.0.0.77:$relayPort',
+        ports: [relayPort],
+      );
+      auto.setEnabled(true);
+      final watch = Stopwatch()..start();
+      while (auto.phase != AutoConnectPhase.waiting &&
+          watch.elapsed < const Duration(seconds: 30)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      final log = auto.log.map((e) => e.message).toList();
+      auto.dispose();
+      expect(auto.device, isNull);
+      expect(auto.localOnly, ['127.0.0.77:$relayPort']);
+      expect(log, contains('127.0.0.77:$relayPort · $kovaLocalOnlyMessage'));
+      expect(log, contains('$kovaLocalOnlyMessage.'));
+      expect(
+        log.where((l) => l.startsWith('127.0.0.77') && l.contains('콤마가 아니에요')),
+        isEmpty,
       );
     });
 
