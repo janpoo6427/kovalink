@@ -18,6 +18,93 @@ abstract final class HudColors {
   static const signalRed = Color(0xFFE5484D);
   static const signalYellow = Color(0xFFF0A92B);
   static const blue = Color(0xFF2F6BEA);
+
+  /// Light ring around the speed and its unit, so the dark digits also
+  /// read on a dark road view (night, no camera). On a bright sky it
+  /// melts into the background.
+  static const halo = Color(0xF2FFFFFF);
+
+  /// The unit beside the speed (km/h, mph): darker than [muted] so it
+  /// keeps 4.5:1 on white and on its [halo].
+  static const unit = Color(0xFF5A636D);
+
+  /// Gear capsule: dark, so P R N D read on a bright sky, a white
+  /// building or snow. The light edge keeps its outline on a dark view.
+  static const gearPlate = Color(0xD91A1F25);
+  static const gearPlateEdge = Color(0x40FFFFFF);
+  static const gearOn = Color(0xFFFFFFFF);
+  static const gearOff = Color(0xFFB8C0C8);
+}
+
+/// [HudColors.halo] as a thin outline [radius] wide plus a soft glow.
+List<Shadow> _halo(double radius) => [
+  for (final (dx, dy) in const [
+    (1.0, 0.0),
+    (-1.0, 0.0),
+    (0.0, 1.0),
+    (0.0, -1.0),
+    (0.7071, 0.7071),
+    (0.7071, -0.7071),
+    (-0.7071, 0.7071),
+    (-0.7071, -0.7071),
+  ])
+    Shadow(
+      color: HudColors.halo,
+      offset: Offset(dx * radius, dy * radius),
+      blurRadius: radius * 0.6,
+    ),
+  Shadow(color: HudColors.halo.withValues(alpha: 0.55), blurRadius: radius * 3),
+];
+
+/// Text widths measured the way a [Text] here lays out (default text
+/// style, text scale, bold-text setting), for boxes that must keep their
+/// size whatever text they show.
+abstract final class HudText {
+  static final _widths = <Object, double>{};
+  static var _watchingFonts = false;
+
+  /// Widest of [samples] in [style], rounded up to a whole pixel.
+  static double widest(
+    BuildContext context,
+    TextStyle style,
+    List<String> samples,
+  ) {
+    var effective = DefaultTextStyle.of(context).style.merge(style);
+    if (MediaQuery.boldTextOf(context)) {
+      effective = effective.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    if (!_watchingFonts) {
+      // A font that finishes loading later changes the widths.
+      PaintingBinding.instance.systemFonts.addListener(_widths.clear);
+      _watchingFonts = true;
+    }
+    if (_widths.length > 64) _widths.clear();
+    return _widths[(effective, scaler, samples.join('\u0000'))] ??= _measure(
+      effective,
+      scaler,
+      samples,
+    );
+  }
+
+  static double _measure(
+    TextStyle style,
+    TextScaler scaler,
+    List<String> samples,
+  ) {
+    var widest = 0.0;
+    for (final sample in samples) {
+      final painter = TextPainter(
+        text: TextSpan(text: sample, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      widest = math.max(widest, painter.width);
+      painter.dispose();
+    }
+    return widest.ceilToDouble();
+  }
 }
 
 /// Driving HUD: every value comes from [scene]; nothing is invented and
@@ -46,43 +133,55 @@ class DriveHud extends StatelessWidget {
   Widget build(BuildContext context) {
     // Notices stay above the home indicator / navigation bar.
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    return LayoutBuilder(
-      builder: (context, box) => _buildStack(
-        HudLayout(
-          box.biggest,
-          compact: compact,
-          showNumbers: showNumbers,
-          bottomInset: bottomInset,
-        ),
+    return DefaultTextStyle.merge(
+      style: const TextStyle(color: HudColors.ink),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final small = compact || HudLayout.isShort(box.biggest);
+          return _buildStack(
+            HudLayout(
+              box.biggest,
+              compact: compact,
+              showNumbers: showNumbers,
+              bottomInset: bottomInset,
+              // The same for every speed (a 3-digit box).
+              speedRowRight: showNumbers
+                  ? HudLayout.margin +
+                        SpeedCluster.rowWidth(
+                          context,
+                          compact: small,
+                          unit: unit,
+                        )
+                  : 0,
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildStack(HudLayout layout) {
     final small = layout.small;
-    return DefaultTextStyle.merge(
-      style: const TextStyle(color: HudColors.ink),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (showNumbers)
-            Positioned(
-              left: HudLayout.margin,
-              top: HudLayout.speedTop,
-              child: SpeedCluster(scene: scene, unit: unit, compact: small),
-            ),
-          Positioned.fromRect(
-            rect: layout.signalRow,
-            child: SignalPill(scene: scene, compact: small),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (showNumbers)
+          Positioned(
+            left: HudLayout.margin,
+            top: HudLayout.speedTop,
+            child: SpeedCluster(scene: scene, unit: unit, compact: small),
           ),
-          if (showNumbers)
-            Positioned(
-              right: HudLayout.margin,
-              top: HudLayout.speedTop,
-              child: SpeedLimitSign(limitKph: scene.speedLimitKph, unit: unit),
-            ),
-        ],
-      ),
+        Positioned.fromRect(
+          rect: layout.signalRow,
+          child: SignalPill(scene: scene, compact: small),
+        ),
+        if (showNumbers)
+          Positioned(
+            right: HudLayout.margin,
+            top: HudLayout.speedTop,
+            child: SpeedLimitSign(limitKph: scene.speedLimitKph, unit: unit),
+          ),
+      ],
     );
   }
 }
@@ -100,7 +199,12 @@ class HudLayout {
     required this.compact,
     required this.showNumbers,
     this.bottomInset = 0,
-  }) : short = size.height < 520 && size.width > size.height;
+    this.speedRowRight = 0,
+  }) : short = isShort(size);
+
+  /// Landscape phone shape (see [short]).
+  static bool isShort(Size size) =>
+      size.height < 520 && size.width > size.height;
 
   final Size size;
 
@@ -114,6 +218,12 @@ class HudLayout {
   /// Landscape phone (car mount): the signal row sits between the speed
   /// and the limit sign, and notices go left of [navOverlayZone].
   final bool short;
+
+  /// Right edge of the speed number row (number, unit and gear column:
+  /// [margin] plus [SpeedCluster.rowWidth]). It does not change with the
+  /// speed. The signal row keeps clear of it where it is wider than the
+  /// fixed clearances below (large text). 0: only the fixed clearances.
+  final double speedRowRight;
 
   static const margin = 18.0;
   static const gap = 12.0;
@@ -130,11 +240,19 @@ class HudLayout {
   static const buttonsClear = 22.0 + 48 + gap;
 
   /// Left edge the signal row keeps clear of on wide screens: a 3-digit
-  /// speed in the large type with the unit and gear column.
+  /// speed in the large type with the unit and gear column (further right
+  /// when [speedRowRight] says the row is wider, e.g. large text).
   static const largeSpeedClear = 264.0;
 
   /// Right edge the signal row keeps clear of: the limit sign.
   static const limitClear = margin + 64 + gap;
+
+  /// Left edge of the signal row on a landscape phone: right of a 3-digit
+  /// speed in the small type with the unit and gear column.
+  static const shortSpeedClear = 200.0;
+
+  /// Narrowest signal row: both blinkers and room for the light between.
+  static const minSignalWidth = 2 * SignalPill.height + 12 + 96.0;
 
   bool get small => compact || short;
 
@@ -144,15 +262,25 @@ class HudLayout {
   /// The blinker row: same place and size with or without a traffic
   /// light.
   Rect get signalRow {
-    final left = short && showNumbers ? 200.0 : 0.0;
+    final speedClear = speedRowRight + gap;
+    final left = short && showNumbers
+        ? math.max(shortSpeedClear, speedClear)
+        : 0.0;
     final right = size.width - (short && showNumbers ? 100.0 : 0.0);
-    final width = math.min(SignalPill.width, math.max(0.0, right - left));
+    var width = math.min(SignalPill.width, math.max(0.0, right - left));
     var x = (left + right - width) / 2;
     if (showNumbers && !small) {
       // Same row as the large speed and the limit sign: centered when it
-      // clears both, else nudged right of the speed.
-      final max = size.width - limitClear - width;
-      if (max >= largeSpeedClear) x = x.clamp(largeSpeedClear, max);
+      // clears both, else nudged right of the speed; with large text on a
+      // narrow screen it narrows to fit between them.
+      final clear = math.max(largeSpeedClear, speedClear);
+      final room = size.width - limitClear - clear;
+      if (room >= width) {
+        x = x.clamp(clear, size.width - limitClear - width);
+      } else if (room >= minSignalWidth) {
+        width = room;
+        x = clear;
+      }
     }
     return Rect.fromLTWH(x, signalTop, width, SignalPill.height);
   }
@@ -217,6 +345,64 @@ class SpeedCluster extends StatelessWidget {
   final SpeedUnit unit;
   final bool compact;
 
+  /// Space between the speed number and the unit / gear column.
+  static const unitGap = 10.0;
+
+  static final _speedHalo = _halo(2.2);
+  static final _unitHalo = _halo(1.5);
+
+  /// The speed digits. Tabular figures give every digit the same width.
+  static TextStyle numberStyle({required bool compact}) => TextStyle(
+    fontSize: compact ? 64 : 82,
+    height: 0.92,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -3,
+    color: HudColors.ink,
+    fontFeatures: const [FontFeature.tabularFigures()],
+    shadows: _speedHalo,
+  );
+
+  static TextStyle get unitStyle => TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    color: HudColors.unit,
+    shadows: _unitHalo,
+  );
+
+  static const _threeDigits = [
+    '000',
+    '111',
+    '222',
+    '333',
+    '444',
+    '555',
+    '666',
+    '777',
+    '888',
+    '999',
+  ];
+
+  /// Width of the box the speed number sits in: the widest three digits in
+  /// this font, size and text scale. Any speed from 0 to 999 takes the same
+  /// room, so the unit, the gear and the parts beside the cluster stay put
+  /// as the speed changes.
+  static double numberWidth(BuildContext context, {required bool compact}) =>
+      HudText.widest(context, numberStyle(compact: compact), _threeDigits);
+
+  /// Width of the number row (number, unit and gear): the same for every
+  /// speed.
+  static double rowWidth(
+    BuildContext context, {
+    required bool compact,
+    required SpeedUnit unit,
+  }) =>
+      numberWidth(context, compact: compact) +
+      unitGap +
+      math.max(
+        HudText.widest(context, unitStyle, [unit.label]),
+        GearRow.width(context),
+      );
+
   @override
   Widget build(BuildContext context) {
     final speed = unit.roundedFromMps(scene.speedMps);
@@ -236,31 +422,28 @@ class SpeedCluster extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                '$speed',
-                style: TextStyle(
-                  fontSize: compact ? 64 : 82,
-                  height: 0.92,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -3,
-                  color: HudColors.ink,
+              // Right-aligned like a speedometer: the ones digit stays put
+              // and the number keeps hugging its unit, as before.
+              SizedBox(
+                key: const ValueKey('speed-number'),
+                width: numberWidth(context, compact: compact),
+                child: Text(
+                  '$speed',
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: numberStyle(compact: compact),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: unitGap),
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      unit.label,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: HudColors.muted,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
+                    Text(unit.label, style: unitStyle),
+                    const SizedBox(height: 5),
                     GearRow(gear: scene.gear),
                   ],
                 ),
@@ -325,35 +508,83 @@ class SpeedCluster extends StatelessWidget {
   }
 }
 
+/// P R N D on a dark capsule, the current gear white and larger, so it
+/// reads on a bright sky, a white building or snow as well as at night.
+/// Every letter has a fixed slot: the capsule keeps its size whichever
+/// gear is in.
 class GearRow extends StatelessWidget {
   const GearRow({required this.gear, super.key});
 
   final VehicleGear gear;
 
+  static const _gears = [
+    (VehicleGear.park, 'P'),
+    (VehicleGear.reverse, 'R'),
+    (VehicleGear.neutral, 'N'),
+    (VehicleGear.drive, 'D'),
+  ];
+
+  static const onStyle = TextStyle(
+    fontSize: 18,
+    height: 1.1,
+    fontWeight: FontWeight.w900,
+    color: HudColors.gearOn,
+  );
+  static const offStyle = TextStyle(
+    fontSize: 13,
+    height: 1.1,
+    fontWeight: FontWeight.w700,
+    color: HudColors.gearOff,
+  );
+
+  /// Every letter on the current gear's line: one baseline, one height.
+  static const _strut = StrutStyle(
+    fontSize: 18,
+    height: 1.1,
+    forceStrutHeight: true,
+  );
+
+  static const _padding = EdgeInsets.symmetric(horizontal: 5, vertical: 2);
+  static const _slotPadding = 3.0;
+
+  static double _slotWidth(BuildContext context) =>
+      HudText.widest(context, onStyle, const ['P', 'R', 'N', 'D']) +
+      2 * _slotPadding;
+
+  /// Width of the capsule here (font, text scale).
+  static double width(BuildContext context) =>
+      _gears.length * _slotWidth(context) + _padding.horizontal;
+
   @override
   Widget build(BuildContext context) {
-    const gears = [
-      (VehicleGear.park, 'P'),
-      (VehicleGear.reverse, 'R'),
-      (VehicleGear.neutral, 'N'),
-      (VehicleGear.drive, 'D'),
-    ];
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (value, label) in gears)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: value == gear ? 18 : 13,
-                fontWeight: value == gear ? FontWeight.w900 : FontWeight.w700,
-                color: value == gear ? HudColors.ink : HudColors.faint,
+    final slot = _slotWidth(context);
+    return DecoratedBox(
+      key: const ValueKey('gear-plate'),
+      decoration: BoxDecoration(
+        color: HudColors.gearPlate,
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: HudColors.gearPlateEdge),
+      ),
+      child: Padding(
+        padding: _padding,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (value, label) in _gears)
+              SizedBox(
+                width: slot,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  softWrap: false,
+                  strutStyle: _strut,
+                  style: value == gear ? onStyle : offStyle,
+                ),
               ),
-            ),
-          ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 }
