@@ -48,6 +48,17 @@ Future<void> _scrollTo(
   await tester.pump();
 }
 
+/// The e2e fixture keeps an older copy of the steering description; show
+/// the wording kovapilot's bundled kova_params.json ships today.
+void _useBundledSteeringCopy(FakeKovaGateway gateway) {
+  final steering = (gateway.catalog['settings'] as List)
+      .cast<Map<String, dynamic>>()
+      .firstWhere((s) => s['key'] == 'steering.always_on');
+  (steering['description'] as Map)['ko'] =
+      '크루즈를 켜지 않아도 조향 보조를 쓸 수 있게 해요. 지원하는 차에서 안전 조건이 맞을 때만 '
+      '동작해요. 실제로 쓰려면 차량 쪽 기능과 안전 검증이 따로 필요해요.';
+}
+
 void main() {
   const loopback = 'http://127.0.0.1:18082';
   final shots = <(String, String, _Setup?)>[
@@ -176,6 +187,7 @@ void main() {
       tester.view.devicePixelRatio = 2.625;
       addTearDown(tester.view.reset);
       final gateway = FakeKovaGateway();
+      _useBundledSteeringCopy(gateway);
       final kova = KovaParamsController(
         clientFactory: (endpoint, onError) => KovaParamsClient.tryCreate(
           endpoint,
