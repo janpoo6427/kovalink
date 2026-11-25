@@ -1,5 +1,10 @@
 # KovaLink 설치 파일
 
+- `kovalink-1.0.0-c499d88-arm64-v8a.apk`는 `master@c499d88`의 Android arm64 빌드입니다.
+  - 콤마를 kovapilot `master-jh@01079ba` 이상으로 업데이트하세요. 같은 사설 네트워크에서 콤마를 부팅하고 Link를 열면 자동으로 연결합니다. [Gateway 동작 안내](https://github.com/janpoo6427/kovapilot/blob/01079ba2dc1ae061f9f853335da788e990a03fb1/docs/kovapilot/KOVALINK_GATEWAY.md)
+  - P 완전 정차에서 순정 ACC 동기화 진단을 바꿀 수 있습니다. 설정 화면은 P 정차 조건과 시동을 꺼야 하는 조건을 구분해 보여 줍니다.
+  - 버전 화면은 콤마의 브랜치와 커밋을 표시합니다. Git 작업 트리 조회가 지연되면 변경 여부만 확인하지 못했다고 표시합니다.
+  - 직전 `0eac0fc` APK와 같은 개발 서명이므로 기존 앱 위에 설치할 수 있습니다.
 - `kovalink-1.0.0-0eac0fc-arm64-v8a.apk`는 `master@0eac0fc`의 Android arm64 빌드입니다.
   - comma를 kovapilot `master-jh@8194c0a02` 이상으로 업데이트한 뒤, 같은 사설 네트워크에서 comma를 부팅하고 Link 앱을 열면 자동으로 연결합니다. [Gateway 동작 안내](https://github.com/janpoo6427/kovapilot/blob/8194c0a0255eb4ac1ba0246573f074ec9389eecb/docs/kovapilot/KOVALINK_GATEWAY.md)
   - 같은 서브넷의 기기는 Gateway 주행 정보, 카메라와 허용된 설정에 접속할 수 있습니다. 조향·종방향 제어 설정은 자동 연결에서 읽기 전용입니다.
