@@ -4,8 +4,8 @@
 // off screen / in the insets / covering each other, the camera notice in
 // the navigation overlay zone, clipped text) to $KOVA_SHOT_DIR/report.json.
 //
-// Screens: drive_city (traffic light, turn sign, lanes), drive_city_nolight
-// (same road, no light: the blinkers must not move), drive_highway,
+// Screens: drive_city (traffic light), drive_city_nolight (same road, no
+// light: the blinkers must not move), drive_highway,
 // drive_camera (camera view without a camera; the orange box marks where a
 // navigation app such as T map floats its overlay, drawn in the capture
 // only), connect and the three settings tabs.
@@ -78,8 +78,8 @@ Future<ui.Image> _renderGpu(GpuSurfaceRequest r, int width, int height) async {
   return done.future;
 }
 
-/// Drive scenes: the city one has the most HUD parts at once (signal,
-/// route card, turn sign, lane guidance); the highway one has the alerts.
+/// Drive scenes: the city one has the traffic light in the signal row;
+/// the highway one is engaged with a set speed.
 const _driveScenes = <(String, DemoRoute, double, SceneTheme)>[
   ('drive_city', DemoRoute.city, 85, SceneTheme.clear),
   ('drive_city_nolight', DemoRoute.city, 58, SceneTheme.clear),
@@ -360,25 +360,28 @@ Future<void> _pumpHome(
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: KovaLinkApp.theme(Brightness.dark),
-        home: RepaintBoundary(
+        // Around the navigator: connect and settings are routes above the
+        // drive screen now, and the capture has to include them.
+        builder: (context, child) => RepaintBoundary(
           key: _key,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              KovaLinkHome(
-                controller: controller,
-                settings: settings,
-                library: VehicleModelLibrary(storageRoot: () async => root),
-                kovaParams: _kova,
-                director: director,
-                gpuSurfaceBuilder: gpuBuilder,
-              ),
+              child!,
               if (navZone != null)
                 IgnorePointer(
                   child: CustomPaint(painter: _NavZonePainter(navZone)),
                 ),
             ],
           ),
+        ),
+        home: KovaLinkHome(
+          controller: controller,
+          settings: settings,
+          library: VehicleModelLibrary(storageRoot: () async => root),
+          kovaParams: _kova,
+          director: director,
+          gpuSurfaceBuilder: gpuBuilder,
         ),
       ),
     );
@@ -388,9 +391,10 @@ Future<void> _pumpHome(
 }
 
 /// Lets tab and page transitions finish (no pumpAndSettle: the HUD and
-/// kovapilot panel may keep animating).
+/// kovapilot panel may keep animating). Pages are routes with the 450 ms
+/// platform transition, plus a frame.
 Future<void> _settle(WidgetTester tester) async {
-  for (var i = 0; i < 4; i++) {
+  for (var i = 0; i < 5; i++) {
     await tester.pump(const Duration(milliseconds: 150));
   }
 }
