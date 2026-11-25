@@ -148,6 +148,10 @@ class AutoConnectController extends ChangeNotifier {
   /// Devices that answered in the current/last pass.
   List<KovaDevice> found = const [];
 
+  /// Commas that answered in the current/last pass but do not accept phones
+  /// yet (403 `local_client_required`), by on-screen name.
+  List<String> localOnly = const [];
+
   /// The device being watched; null when not connected.
   KovaDevice? device;
 
@@ -175,6 +179,8 @@ class AutoConnectController extends ChangeNotifier {
     AutoConnectPhase.off => '자동 연결 꺼짐',
     AutoConnectPhase.paused => '자동 연결 멈춤',
     AutoConnectPhase.searching => '콤마 찾는 중 · $attempt번째',
+    AutoConnectPhase.waiting when localOnly.isNotEmpty =>
+      '콤마 찾음 · 휴대폰 연결 아직 허용 안 됨',
     AutoConnectPhase.waiting => '콤마 없음 · ${nextRetry?.inSeconds ?? 0}초 뒤 다시',
     AutoConnectPhase.choosing => '콤마 ${found.length}대 찾음',
     AutoConnectPhase.connected => '콤마 연결됨',
@@ -289,6 +295,7 @@ class AutoConnectController extends ChangeNotifier {
     probed = 0;
     planned = 0;
     found = const [];
+    localOnly = const [];
     scanningSubnets = const [];
     _add('$attempt번째 찾기 시작 ($reason)');
     _notify();
@@ -346,7 +353,7 @@ class AutoConnectController extends ChangeNotifier {
     if (generation != _generation) return;
 
     if (results.isEmpty) {
-      _add('콤마를 찾지 못했어요.');
+      _add(localOnly.isEmpty ? '콤마를 찾지 못했어요.' : '$kovaLocalOnlyMessage.');
       _scheduleRetry(generation);
     } else if (results.length == 1) {
       await _connect(results.single, '네트워크 검색');
@@ -376,6 +383,11 @@ class AutoConnectController extends ChangeNotifier {
         );
       } else if (result.outcome == ProbeOutcome.kova) {
         _add('${candidate.displayName} · 콤마가 답했어요');
+      } else if (result.outcome == ProbeOutcome.localOnly) {
+        _add('${candidate.displayName} · $kovaLocalOnlyMessage');
+        if (!localOnly.contains(candidate.displayName)) {
+          localOnly = List.unmodifiable([...localOnly, candidate.displayName]);
+        }
       }
       return result;
     } on Object {

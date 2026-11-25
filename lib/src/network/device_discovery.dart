@@ -372,7 +372,16 @@ enum ProbeOutcome {
 
   /// `/v1/health` returned `status: ok` with schema major 1.
   kova,
+
+  /// A kovapilot gateway answered 403 `local_client_required`: the comma is
+  /// there, but its gateway only accepts clients on the comma itself for
+  /// now (loopback-only development bind). Not usable, and not "not a
+  /// comma" either.
+  localOnly,
 }
+
+/// What KovaLink says when a comma refuses phones for now.
+const kovaLocalOnlyMessage = '콤마를 찾았지만 아직 휴대폰 연결을 허용하지 않아요';
 
 class ProbeResult {
   const ProbeResult.noAnswer()
@@ -384,6 +393,10 @@ class ProbeResult {
       device = null;
   const ProbeResult.kova(KovaDevice this.device)
     : outcome = ProbeOutcome.kova,
+      detail = null;
+  const ProbeResult.localOnly()
+    : outcome = ProbeOutcome.localOnly,
+      device = null,
       detail = null;
 
   final ProbeOutcome outcome;
@@ -397,15 +410,33 @@ abstract class DeviceProbe {
   void close();
 }
 
+/// True for the kovapilot gateway's 403 `local_client_required` body.
+bool isKovaLocalOnlyRefusal(int statusCode, String body) {
+  if (statusCode != 403) return false;
+  try {
+    final json = jsonDecode(body);
+    return json is Map &&
+        json['error'] is Map &&
+        (json['error'] as Map)['code'] == 'local_client_required';
+  } on FormatException {
+    return false;
+  }
+}
+
 /// Reads [body] as a kovapilot `/v1/health` answer. A plain open port or
 /// another web server is not enough: the JSON must say `status: "ok"` and
-/// carry a supported schema major.
+/// carry a supported schema major. A 403 `local_client_required` is a
+/// kovapilot gateway that does not accept phones yet
+/// ([ProbeOutcome.localOnly]).
 ProbeResult judgeHealthResponse(
   String host,
   int port,
   int statusCode,
   String body,
 ) {
+  if (isKovaLocalOnlyRefusal(statusCode, body)) {
+    return const ProbeResult.localOnly();
+  }
   if (statusCode != 200) return const ProbeResult.notKova(null);
   final Object? json;
   try {
