@@ -2,6 +2,7 @@
 // 콤마 등록 (token hidden, pin pasted or from server.pem, nothing saved
 // until the comma agrees), the registered comma card and the error lines.
 // Network replaced by fakes (widget tests cannot open sockets).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -110,6 +111,21 @@ void main() {
     link.dispose();
     settings.dispose();
   });
+
+  /// Registers the fixture comma (device_a at 192.168.43.20). The value is
+  /// set at once; its file write is not awaited, because inside a widget
+  /// test body that future never completes (the store was made in setUp,
+  /// outside the test's fake clock).
+  void registerFixtureComma() => unawaited(
+    settings.update(
+      (s) => s.copyWith(
+        registeredComma: RegisteredComma(
+          pin: fixturePin(pinDeviceA),
+          host: '192.168.43.20',
+        ),
+      ),
+    ),
+  );
 
   Future<void> pumpConnect(
     WidgetTester tester, {
@@ -236,14 +252,7 @@ void main() {
     testWidgets('the registered comma at the typed IP is connected', (
       tester,
     ) async {
-      await settings.update(
-        (s) => s.copyWith(
-          registeredComma: RegisteredComma(
-            pin: fixturePin(pinDeviceA),
-            host: '192.168.43.20',
-          ),
-        ),
-      );
+      registerFixtureComma();
       probe.answers['192.168.43.31:8082'] = ProbeResult.kova(
         _comma('192.168.43.31'),
       );
@@ -257,14 +266,7 @@ void main() {
     testWidgets('another certificate than the registered comma is said first', (
       tester,
     ) async {
-      await settings.update(
-        (s) => s.copyWith(
-          registeredComma: RegisteredComma(
-            pin: fixturePin(pinDeviceA),
-            host: '192.168.43.20',
-          ),
-        ),
-      );
+      registerFixtureComma();
       probe.answers['192.168.43.20:8082'] = ProbeResult.kova(
         _comma('192.168.43.20', pinDeviceB),
       );
@@ -451,6 +453,8 @@ void main() {
         );
         await tester.tap(find.byKey(const ValueKey('register-submit')));
         await _settle(tester);
+        // The page closes with the usual page transition.
+        await tester.pump(const Duration(seconds: 1));
         expect(result?.pin?.hex, pinDeviceA);
         expect(result?.host, '192.168.43.20');
         expect(tokens.tokens, {pinDeviceA: testToken});
@@ -466,14 +470,7 @@ void main() {
       tester,
     ) async {
       await tokens.write(fixturePin(pinDeviceA), testToken);
-      await settings.update(
-        (s) => s.copyWith(
-          registeredComma: RegisteredComma(
-            pin: fixturePin(pinDeviceA),
-            host: '192.168.43.20',
-          ),
-        ),
-      );
+      registerFixtureComma();
       await pumpConnect(tester);
       expect(
         find.byKey(const ValueKey('registered-comma-card')),

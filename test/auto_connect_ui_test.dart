@@ -158,11 +158,6 @@ void main() {
       expect(find.text('자동 연결 꺼짐'), findsOneWidget);
       auto.setEnabled(true);
       await _settle(tester);
-      // Networks and the activity log are folded under 자세히 보기.
-      await tester.tap(
-        find.byKey(const ValueKey('auto-connect-details-toggle')),
-      );
-      await _settle(tester);
       expect(find.text('와이파이'), findsOneWidget);
       expect(find.text('192.168.0.23'), findsOneWidget);
       expect(find.text('모바일 데이터'), findsOneWidget);

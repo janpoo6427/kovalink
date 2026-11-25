@@ -56,12 +56,12 @@ abstract final class KovaLinkText {
       '콤마가 켜져 있는지, 콤마에서 휴대폰 연결이 켜져 있는지 확인해 주세요. '
           '앱은 잠시 뒤 다시 확인해요.',
     KovaLinkProblem.tokenRejected =>
-      '콤마가 응답 코드 401로 토큰을 거절했어요. 관리자가 콤마의 토큰을 바꿨다면 새 토큰으로 다시 등록해 주세요.',
+      '콤마가 이 토큰을 거절했어요. 관리자가 콤마의 토큰을 바꿨다면 새 토큰으로 다시 등록해 주세요.',
     KovaLinkProblem.identityMismatch =>
       '이 주소의 콤마가 보여 준 인증서 지문이 등록한 지문과 달라요. 다른 콤마이거나 콤마의 인증서가 바뀌었을 수 있어요. '
           '인증서를 바꿨다면 새 지문으로 다시 등록해 주세요.',
     KovaLinkProblem.notAllowed =>
-      '콤마가 응답 코드 403으로 거절했어요. 휴대폰과 콤마가 같은 와이파이·핫스팟에 있는지, '
+      '콤마가 이 휴대폰의 연결을 받지 않았어요. 휴대폰과 콤마가 같은 와이파이·핫스팟에 있는지, '
           '콤마의 IP로 바로 연결했는지 확인해 주세요.',
     KovaLinkProblem.versionMismatch => '콤마가 알려 준 버전을 이 앱이 읽지 못해요.',
     KovaLinkProblem.needsRegistration =>

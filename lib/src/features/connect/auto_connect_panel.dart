@@ -84,18 +84,17 @@ class AutoConnectStatusChip extends StatelessWidget {
   }
 }
 
-/// The Finder on the connection screen: status, the commas found on this
-/// Wi-Fi or hotspot (connect the registered one, register a new one),
-/// 지금 찾기 and IP로 연결. Networks, the search range and the activity
-/// log are folded under 자세히 보기.
-class AutoConnectPanel extends StatefulWidget {
+/// The Finder on the connection screen, comma_finder style: current
+/// networks, search progress, the commas found on this Wi-Fi or hotspot
+/// (connect the registered one, register a new one), 지금 찾기, IP로 연결
+/// and a live activity log.
+class AutoConnectPanel extends StatelessWidget {
   const AutoConnectPanel({
     required this.controller,
     this.settings,
     this.link,
     this.onRegister,
     this.onConnectByIp,
-    this.initiallyExpanded = false,
     super.key,
   });
 
@@ -111,24 +110,15 @@ class AutoConnectPanel extends StatefulWidget {
   /// Opens IP entry. Null hides the button.
   final VoidCallback? onConnectByIp;
 
-  /// 자세히 보기 open at first (captures).
-  final bool initiallyExpanded;
-
-  @override
-  State<AutoConnectPanel> createState() => _AutoConnectPanelState();
-}
-
-class _AutoConnectPanelState extends State<AutoConnectPanel> {
-  late bool _expanded = widget.initiallyExpanded;
-
   @override
   Widget build(BuildContext context) {
-    final settings = widget.settings;
-    final link = widget.link;
+    final settings = this.settings;
+    final link = this.link;
+    final onRegister = this.onRegister;
     return AnimatedBuilder(
-      animation: Listenable.merge([widget.controller, ?settings, ?link]),
+      animation: Listenable.merge([controller, ?settings, ?link]),
       builder: (context, _) {
-        final c = widget.controller;
+        final c = controller;
         final color = autoConnectColor(c.phase);
         const muted = Color(0xFF8E9DA9);
         final problem = c.problem ?? link?.problem;
@@ -176,6 +166,51 @@ class _AutoConnectPanelState extends State<AutoConnectPanel> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                _Label('현재 네트워크'),
+                if (c.networks.isEmpty)
+                  Text(
+                    c.phase == AutoConnectPhase.off
+                        ? '자동 연결을 켜면 네트워크를 확인해요.'
+                        : '연결된 와이파이·핫스팟이 없어요.',
+                    style: const TextStyle(color: muted, fontSize: 12),
+                  )
+                else
+                  for (final n in c.networks)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(
+                        children: [
+                          Icon(_networkIcon(n.kind), size: 16, color: muted),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 92,
+                            child: Text(
+                              n.kind.label,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              n.address,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                          Text(
+                            n.scannable ? '찾아봐요' : '안 찾아요',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: n.scannable
+                                  ? const Color(0xFF58F2C2)
+                                  : muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                const SizedBox(height: 14),
                 _Label('콤마 찾기'),
                 if (c.phase == AutoConnectPhase.searching) ...[
                   LinearProgressIndicator(
@@ -216,12 +251,12 @@ class _AutoConnectPanelState extends State<AutoConnectPanel> {
                           ? () => c.connectTo(d, how: '다시 연결')
                           : null,
                       onRegister:
-                          widget.onRegister != null &&
+                          onRegister != null &&
                               d != c.device &&
                               (!c.canAttach(d) ||
                                   problem == KovaLinkProblem.tokenRejected ||
                                   problem == KovaLinkProblem.needsToken)
-                          ? () => widget.onRegister!(d)
+                          ? () => onRegister(d)
                           : null,
                     ),
                 ],
@@ -230,7 +265,7 @@ class _AutoConnectPanelState extends State<AutoConnectPanel> {
                   spacing: 10,
                   runSpacing: 8,
                   children: [
-                    if (widget.onConnectByIp case final byIp? when nothingFound)
+                    if (onConnectByIp case final byIp? when nothingFound)
                       FilledButton.icon(
                         key: const ValueKey('connect-by-ip'),
                         onPressed: byIp,
@@ -258,8 +293,7 @@ class _AutoConnectPanelState extends State<AutoConnectPanel> {
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('지금 찾기'),
                     ),
-                    if (widget.onConnectByIp case final byIp?
-                        when !nothingFound)
+                    if (onConnectByIp case final byIp? when !nothingFound)
                       OutlinedButton.icon(
                         key: const ValueKey('connect-by-ip'),
                         onPressed: byIp,
@@ -268,13 +302,9 @@ class _AutoConnectPanelState extends State<AutoConnectPanel> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                _Fold(
-                  key: const ValueKey('auto-connect-details'),
-                  expanded: _expanded,
-                  onToggle: () => setState(() => _expanded = !_expanded),
-                  child: _Details(controller: c),
-                ),
+                const SizedBox(height: 14),
+                _Label('활동 로그'),
+                _ActivityLog(entries: c.log),
               ],
             ),
           ),
@@ -284,11 +314,12 @@ class _AutoConnectPanelState extends State<AutoConnectPanel> {
   }
 
   static String _progressLine(AutoConnectController c) {
+    final subnets = c.scanningSubnets.join(', ');
     return switch (c.phase) {
       AutoConnectPhase.off => '꺼져 있어요. 켜면 같은 와이파이나 핫스팟에서 콤마를 찾아 연결해요.',
       AutoConnectPhase.paused => '앱이 화면에 없을 때는 찾지 않아요.',
       AutoConnectPhase.searching =>
-        '${c.attempt}번째 찾는 중 · 같은 와이파이·핫스팟에서 ${c.planned}곳 중 ${c.probed}곳 확인',
+        '${c.attempt}번째 찾는 중 · ${subnets.isEmpty ? '네트워크 확인 중' : subnets} · ${c.planned}곳 중 ${c.probed}곳 확인',
       AutoConnectPhase.waiting when c.localOnly.isNotEmpty =>
         '${c.localOnly.join(', ')}: $kovaLocalOnlyMessage. 지금 kovapilot은 콤마 안에서 여는 연결만 받아요. ${c.nextRetry?.inSeconds ?? 0}초 뒤 다시 확인해요.',
       AutoConnectPhase.waiting =>
@@ -384,105 +415,6 @@ class _LinkProblemNoteState extends State<LinkProblemNote> {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _Fold extends StatelessWidget {
-  const _Fold({
-    required this.expanded,
-    required this.onToggle,
-    required this.child,
-    super.key,
-  });
-
-  final bool expanded;
-  final VoidCallback onToggle;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      TextButton.icon(
-        key: const ValueKey('auto-connect-details-toggle'),
-        onPressed: onToggle,
-        style: TextButton.styleFrom(padding: EdgeInsets.zero),
-        icon: Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 18),
-        label: Text(expanded ? '접기' : '자세히 보기'),
-      ),
-      if (expanded) child,
-    ],
-  );
-}
-
-/// Networks, the search range and the activity log.
-class _Details extends StatelessWidget {
-  const _Details({required this.controller});
-
-  final AutoConnectController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = controller;
-    const muted = Color(0xFF8E9DA9);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 4),
-        _Label('현재 네트워크'),
-        if (c.networks.isEmpty)
-          Text(
-            c.phase == AutoConnectPhase.off
-                ? '자동 연결을 켜면 네트워크를 확인해요.'
-                : '연결된 와이파이·핫스팟이 없어요.',
-            style: const TextStyle(color: muted, fontSize: 12),
-          )
-        else
-          for (final n in c.networks)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                children: [
-                  Icon(_networkIcon(n.kind), size: 16, color: muted),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 92,
-                    child: Text(
-                      n.kind.label,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      n.address,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ),
-                  Text(
-                    n.scannable ? '찾아봐요' : '안 찾아요',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: n.scannable ? const Color(0xFF58F2C2) : muted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        if (c.scanningSubnets.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            '찾는 범위: ${c.scanningSubnets.join(', ')}',
-            style: const TextStyle(color: muted, fontSize: 12),
-          ),
-        ],
-        const SizedBox(height: 14),
-        _Label('활동 로그'),
-        _ActivityLog(entries: c.log),
-      ],
     );
   }
 }

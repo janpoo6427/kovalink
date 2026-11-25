@@ -18,6 +18,13 @@ import 'package:kovalink/src/kova_params/kova_params_client.dart';
 import 'package:kovalink/src/network/gateway_pin.dart';
 import 'package:kovalink/src/network/kovapilot_endpoints.dart';
 
+/// TCP connected but the TLS handshake never finished: something holds the
+/// port without answering. A [SocketException] so every client treats it
+/// as a transport failure; the Finder reads it as "found, no answer".
+class GatewayHandshakeTimeout extends SocketException {
+  const GatewayHandshakeTimeout() : super('TLS handshake timed out');
+}
+
 /// What the administrator gave the user for one comma.
 @immutable
 class GatewayCredentials {
@@ -85,14 +92,20 @@ HttpClient gatewayTlsClient({
       onConnected?.call();
       final SecureSocket socket;
       try {
-        socket = await SecureSocket.secure(
-          plain,
-          host: uri.host,
-          context: trust(),
-          // The handshake may finish whatever the chain is; the decision
-          // is the pin check below, before any byte is written.
-          onBadCertificate: (_) => true,
-        ).timeout(handshakeTimeout);
+        socket =
+            await SecureSocket.secure(
+              plain,
+              host: uri.host,
+              context: trust(),
+              // The handshake may finish whatever the chain is; the decision
+              // is the pin check below, before any byte is written.
+              onBadCertificate: (_) => true,
+            ).timeout(
+              handshakeTimeout,
+              // Not a TimeoutException: HttpClient would take that for its own
+              // connectionTimeout and drop the reason.
+              onTimeout: () => throw const GatewayHandshakeTimeout(),
+            );
       } on Object {
         plain.destroy();
         rethrow;

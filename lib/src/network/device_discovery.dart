@@ -714,6 +714,8 @@ class GatewayDeviceProbe implements DeviceProbe {
       return reached
           ? const ProbeResult.notKova(ProbeResult.silentDetail)
           : const ProbeResult.noAnswer();
+    } on GatewayHandshakeTimeout {
+      return const ProbeResult.notKova(ProbeResult.silentDetail);
     } on SocketException {
       return reached
           ? const ProbeResult.notKova(null)

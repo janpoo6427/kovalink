@@ -148,7 +148,7 @@ class _CommaRegisterPageState extends State<CommaRegisterPage> {
       _pinError = pin == null
           ? (_pinText.text.trim().isEmpty
                 ? '인증서 지문을 넣거나 server.pem 파일을 골라 주세요.'
-                : '지문을 읽지 못했어요. 64자리 지문이나 base64 값을 넣어 주세요.')
+                : '지문을 읽지 못했어요. 관리자에게 받은 64자리 지문을 그대로 넣어 주세요.')
           : null;
       _problem = null;
     });
@@ -258,15 +258,17 @@ class _CommaRegisterPageState extends State<CommaRegisterPage> {
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     labelText: '인증서 지문 붙여넣기',
-                    hintText: '64자리 지문 또는 base64',
+                    hintText: '64자리 지문',
                     errorText: _pinError,
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const Text('또는', style: TextStyle(color: muted)),
-                    const SizedBox(width: 10),
                     OutlinedButton.icon(
                       key: const ValueKey('register-pick-pem'),
                       onPressed: _busy ? null : _pickPem,

@@ -155,8 +155,11 @@ void main() {
         }
         await server.close();
       });
+      // The connect itself is instant on loopback; a roomy connect timeout
+      // keeps a busy machine from mistaking it for nobody there. Only the
+      // missing TLS answer is under test.
       final quick = GatewayDeviceProbe(
-        connectTimeout: const Duration(milliseconds: 300),
+        connectTimeout: const Duration(seconds: 2),
         responseTimeout: const Duration(milliseconds: 300),
       );
       addTearDown(quick.close);

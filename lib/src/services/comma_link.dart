@@ -171,9 +171,12 @@ class CommaLink extends ChangeNotifier {
       await tokens.delete(previous.pin);
     }
     await tokens.write(pin, token);
-    await settings.update(
-      (s) => s.copyWith(
-        registeredComma: RegisteredComma(pin: pin, host: host, port: port),
+    // In memory at once; the settings file follows like every other change.
+    unawaited(
+      settings.update(
+        (s) => s.copyWith(
+          registeredComma: RegisteredComma(pin: pin, host: host, port: port),
+        ),
       ),
     );
     return _ok(candidate, result.health);
