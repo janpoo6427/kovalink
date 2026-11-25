@@ -30,6 +30,38 @@ void main() {
 
   tearDown(() => kova.dispose());
 
+  test(
+    'preflight checks reviewed value and sends the latest revision',
+    () async {
+      await kova.connect('http://127.0.0.1:18082');
+      final before = kova.document!.setting('e2e.level')!;
+      gateway.externalWrite('e2e.level', 5);
+      // A poll can refresh the screen while the confirmation is open.
+      await kova.refresh();
+      expect(
+        await kova.setValue('e2e.level', 8, reviewedSetting: before),
+        isA<KovaUpdateConflict>(),
+      );
+      expect(kova.document!.setting('e2e.level')!.value, 5);
+      expect(gateway.posts, isEmpty);
+
+      gateway.externalWrite('e2e.mode', 'calm');
+      expect(await kova.setValue('e2e.level', 8), isA<KovaUpdateApplied>());
+      expect(gateway.posts.single['expectedRevision'], 2);
+    },
+  );
+
+  test('a failed preflight sends no update and keeps no draft', () async {
+    await kova.connect('http://127.0.0.1:18082');
+    gateway.down = true;
+    expect(await kova.setValue('e2e.level', 8), isA<KovaUpdateFailed>());
+    expect(kova.pending, isEmpty);
+    expect(gateway.posts, isEmpty);
+    gateway.down = false;
+    await kova.refresh();
+    expect(gateway.posts, isEmpty);
+  });
+
   test('starts disconnected and locked; no request is made', () async {
     expect(kova.status, KovaLinkStatus.disconnected);
     expect(kova.writeLock, KovaWriteLock.notConnected);
@@ -93,9 +125,12 @@ void main() {
         expect(doc.deviceOffroad, isFalse);
         expect(
           kova.lockReasonFor(doc.setting('steering.always_on')!),
-          contains('주행 중'),
+          contains('시동을 끈 뒤'),
         );
-        expect(kova.lockReasonFor(doc.setting('e2e.gain')!), contains('주행 중'));
+        expect(
+          kova.lockReasonFor(doc.setting('e2e.gain')!),
+          contains('시동을 끈 뒤'),
+        );
         expect(kova.lockReasonFor(doc.setting('e2e.level')!), isNull);
         expect(
           kova.lockReasonFor(doc.setting('e2e.build_label')!),
@@ -123,7 +158,10 @@ void main() {
           kova.notices['steering.always_on']!.kind,
           KovaNoticeKind.rejected,
         );
-        expect(kova.notices['steering.always_on']!.message, contains('주행 중'));
+        expect(
+          kova.notices['steering.always_on']!.message,
+          contains('시동을 끈 뒤'),
+        );
         expect(kova.document!.setting('steering.always_on')!.value, isFalse);
       },
     );
@@ -159,21 +197,19 @@ void main() {
       expect(gateway.posts, isEmpty);
     });
 
-    test(
-      'a gateway rejection keeps the old value and shows the reason',
-      () async {
-        // Bypass the local check by changing the catalog bound after reading.
-        final setting = (gateway.catalog['settings'] as List)
-            .cast<Map<String, dynamic>>()
-            .firstWhere((s) => s['key'] == 'e2e.level');
-        setting['maximum'] = 5;
-        final outcome = await kova.setValue('e2e.level', 8);
-        expect(outcome, isA<KovaUpdateRejected>());
-        expect(kova.notices['e2e.level']!.message, contains('범위'));
-        expect(kova.document!.setting('e2e.level')!.value, 3);
-        expect(kova.pending, isEmpty);
-      },
-    );
+    test('a changed catalog limit is checked before the write', () async {
+      // Change the catalog bound after the original read.
+      final setting = (gateway.catalog['settings'] as List)
+          .cast<Map<String, dynamic>>()
+          .firstWhere((s) => s['key'] == 'e2e.level');
+      setting['maximum'] = 5;
+      final outcome = await kova.setValue('e2e.level', 8);
+      expect(outcome, isA<KovaUpdateRejected>());
+      expect(kova.notices['e2e.level']!.message, contains('0–5'));
+      expect(gateway.posts, isEmpty);
+      expect(kova.document!.setting('e2e.level')!.value, 3);
+      expect(kova.pending, isEmpty);
+    });
 
     test(
       'a revision conflict re-reads and asks the user to choose again',

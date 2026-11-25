@@ -173,10 +173,9 @@ vehicle-side livestream processes to idle.
 ## Settings HTTP (kovapilot `kova_params`)
 
 KovaLink reads and changes kovapilot user settings through the gateway's JSON
-HTTP API on the same local origin as telemetry. The app stores only the
-origin (`settingsEndpoint`, default `http://comma.local:8082`); a path, query,
-fragment or user-info in that address is refused. The same local-only host
-policy applies.
+HTTP API on the same local origin as telemetry. The app derives every
+transport from the registered Gateway origin and applies the same local-only
+host policy. The device token is held in platform secure storage.
 
 The setting list, groups, order, translations, constraints and apply policy
 all come from the document. The app does not hard-code any of them.
@@ -208,7 +207,8 @@ KovaLink refuses a gateway whose `schemaVersion` major is not 1.
   "settings": [
     {
       "key": "steering.always_on", "groupId": "steering", "order": 100,
-      "type": "boolean", "defaultValue": false, "value": true,
+      "type": "enum", "control": "switch", "options": [0, 1],
+      "defaultValue": 0, "value": 1,
       "title": {"ko": "항시 조향", "en": "Always-on steering"},
       "description": {"ko": "…", "en": "…"},
       "access": "readWrite", "risk": "control", "applyPolicy": "offroad",
@@ -223,12 +223,21 @@ KovaLink refuses a gateway whose `schemaVersion` major is not 1.
 - `integer`/`number` may add `minimum`, `maximum`, `step` and a localized
   `unit`. `enum` has `options` (strings or integers, matched with the exact
   JSON type) and may add localized `optionTitles` keyed by the option text.
+  The bundled settings use numeric values. A numeric switch declares
+  `"control": "switch"` with enum options `[0, 1]`, for off and on.
 - `access`: `readOnly` | `readWrite`. `applyPolicy`: `immediate` (used right
-  away), `offroad` (may only change while the device is offroad) or `restart`
-  (used after openpilot restarts). `availability`/`applyStatus`: `available`,
+  away), `offroad` (may only change while the device is offroad), `parked`
+  (may change offroad or in P with the vehicle stationary and disengaged), or `restart`
+  (used when the consuming process next starts). Optional `savePolicy: anytime`
+  enables authorized saves independently of ignition and gear. Older
+  documents without the field keep their existing write restrictions.
+  A restart setting can report `applyState` of `awaitingStart`,
+  `pendingRestart`, or `applied` with the optional `appliedValue` from
+  the running process. `availability`/`applyStatus`: `available`,
   `pendingConsumer` (value is stored but nothing uses it yet), `unsupported`.
-- `device.offroad` is read by the gateway from the device's own `IsOffroad`.
-  It is informational; the gateway enforces the policy on update.
+- `device.offroad` comes from `IsOffroad`. Optional `device.parked` comes from
+  fresh, valid vehicle and selfdrive messages. The gateway evaluates these
+  conditions again on update.
 - `503 kova_params_unavailable`: stored state failed validation.
 
 KovaLink parsing rules:
@@ -236,7 +245,7 @@ KovaLink parsing rules:
 - Unknown fields are ignored. A minor version (`"1.4"`) is accepted; any
   other major `schemaVersion` closes the document (nothing is drawn).
 - Text is shown in Korean, then English, then `defaultLocale`.
-- Widgets: `boolean` → switch; ranged `integer`/`number` → slider plus number
+- Widgets: numeric switch or legacy `boolean` → switch; ranged `integer`/`number` → slider plus number
   input; unranged numbers → number input; `enum` → pick sheet; `string`,
   `readOnly`, an unknown `type`/`access`/`applyPolicy`, or a current value that
   does not fit its type → read-only. `hidden: true` or `visibility: "hidden"`
@@ -249,7 +258,7 @@ KovaLink parsing rules:
 Request body has exactly these fields:
 
 ```json
-{"key": "steering.always_on", "value": true, "expectedRevision": 3}
+{"key": "steering.always_on", "value": 1, "expectedRevision": 3}
 ```
 
 | Status | `error.code` | Meaning | KovaLink |
@@ -273,25 +282,87 @@ KovaLink write rules:
   a `200` document. A timeout or transport failure is never a success: the
   app re-reads the document and shows whatever the device holds (the device
   may have stored the value after the app gave up).
-- While the document says `device.offroad == false`, `offroad` and `restart`
-  settings are locked in the app. (The gateway itself rejects only `offroad`
-  settings onroad.)
+- Older gateways use device state to guard `offroad`, `restart`, and
+  `parked` settings. Settings advertising `savePolicy: anytime` can be
+  saved with write permission in any vehicle state.
 - `risk: control` settings ask for confirmation first.
-- Writes are locked while the connection is stale (last read failed or older
-  than 45 s).
+- Link fetches the latest settings immediately before each write, then uses
+  that revision and permissions. If the value the user reviewed changed, Link
+  shows the current value and leaves the save for a new explicit request.
+  A failed preflight makes no update request.
 
-### Write lock before pairing (decision pending)
+### Wi-Fi connection
 
-The gateway has no pairing, TLS or credential yet and binds to `127.0.0.1`
-only. Until pairing exists KovaLink sends writes only when the settings
-address is loopback (`127.0.0.1`, `::1`, `localhost`), i.e. a development
-connection on the same machine. Every LAN address (`.local`, private IPv4,
-link-local/ULA IPv6) is read-only. A future paired session may unlock LAN
-writes; `GatewayController.gatewayAuthenticated` and `canEditSettings`
-(telemetry socket) are unchanged and do not affect this lock.
+A supported HTTPS health response with `bindScope: "wifi"` and
+`authentication: "localNetwork"` lets Link connect automatically on the
+same private subnet. It pins the certificate observed during discovery for
+HTTPS and WSS. The Gateway grants writable catalog preferences, subject
+to their save and apply policies. Git maintenance needs an authorized session.
+
+An explicitly provisioned Gateway can instead answer with a Bearer
+challenge. Link uses the saved registration or asks for its token and
+certificate on first connection to that device.
 
 ### End-to-end test
 
 `test/kovapilot_gateway_e2e_test.dart` drives a real gateway process through
 `tool/e2e/kovapilot_gateway_hook.sh` (container with `--network host`, an
 isolated `PARAMS_ROOT`). It is skipped unless `KOVA_E2E_GATEWAY_HOOK` is set.
+
+## Git maintenance HTTP (kovapilot version screen)
+
+Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md`. Client: `lib/src/kovapilot_git/`; screen:
+설정 → kovapilot → kovapilot 버전 (`/settings/kovapilot/version`).
+
+| Request | Answer |
+| --- | --- |
+| `GET /v1/git/status` | `{branch\|null, head, upstream\|null, dirty, dirtyKnown?, updaterState\|null, mutationEnabled, maintenance?}` |
+| `GET /v1/git/branches` | `{branches: [{name, commit}]}` (fetched `origin/*` refs, no `origin/HEAD`) |
+| `GET /v1/git/log?limit=1..100&cursor=0..10000` | `{entries: [{commit, parents, authorTime, subject}], nextCursor\|null}` (HEAD history) |
+| `POST /v1/git/plan` `{operation: switch\|reset, branch, commit?}` | `{operation, branch, commit, branchHead, beforeHead, beforeBranch, dirty, dirtyKnown?, requiresRestart, mutationEnabled, changedFileCount, planDigest}` |
+| `POST /v1/git/apply` `{operation, branch, commit?, planDigest}` | `202 {maintenance: {phase: queued, branch, commit}}` |
+
+- `dirtyKnown: false` means inspection of local changes failed. The app
+  shows the branch, HEAD and any preview based on the committed snapshots,
+  and marks the status of local changes unknown.
+- A switch sends no commit; a reset sends a full 40-character SHA that must
+  be in the chosen origin branch's history. Short SHAs and out-of-range
+  pages are refused in the app before sending.
+- Branch first: the history is HEAD's, so a reset only goes back inside the
+  current branch. Its `branch` is the tracked origin branch (else the origin
+  branch of the same name; `KovaGitController.resetBranch`) and there is no
+  way to pick another one. A commit of another branch is reached by
+  switching to that branch first and picking from its history after the next
+  read. On a detached HEAD, or a branch origin does not have, tapping a
+  commit opens no preview (long press still copies) and the history says why
+  with a way to the branch list. A `400 invalid_git_request` on a reset (for
+  example a commit made only on the comma) reads
+  "이 커밋은 ‘<branch>’ 브랜치 기록에 없어서 되돌릴 수 없어요."; other 400s
+  keep the general line.
+- Errors: `400 invalid_git_request`, `503 git_busy` (one inspection at a time;
+  the app reads status, branches and log one after another),
+  `503 git_unavailable`, `403 local_client_required`. Each is one plain line on
+  screen; the gateway's message is never shown.
+- The app enables 적용 when status and preview both allow mutation and the
+  worktree is known and clean. The server rechecks both conditions and the
+  preview digest. Wi-Fi maintenance uses an authenticated session. Link
+  requests staging. The comma can install the staged update on restart.
+- `cruise.openpilot_longitudinal` reports a numeric saved and applied
+  value. Link sends `expectedValue` with this setting's update. Its
+  `savePolicy: parked` requires a live Park state before saving.
+
+### Loopback-only gateway (`403 local_client_required`)
+
+Without Wi-Fi provisioning the Gateway only listens on
+`127.0.0.1:8082`. If a local-only Gateway answers through a proxy with
+`403 local_client_required`, the app reports that the device was found and
+phone access is unavailable.
+
+### End-to-end test
+
+`test/kovapilot_git_e2e_test.dart` runs kovapilot's own `create_app` and
+`GitRepository` (no kovapilot change) in the dev container through
+`tool/e2e/kovapilot_git_gateway_hook.sh` and
+`tool/e2e/git_gateway_fixture.py`, against a throwaway repository (4 origin
+branches, 25 commits; dirty, updater text, hidden checkout and slow-git
+switches). Skipped unless `KOVA_E2E_GIT_HOOK` is set.

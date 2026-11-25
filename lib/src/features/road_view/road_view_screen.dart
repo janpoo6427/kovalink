@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:kovalink/src/features/road_view/gpu_road_surface.dart';
 import 'package:kovalink/src/features/road_view/hud/drive_hud.dart';
 import 'package:kovalink/src/features/road_view/render_quality.dart';
+import 'package:kovalink/src/features/road_view/renderer_diagnostics.dart';
 import 'package:kovalink/src/features/road_view/road_scene_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
@@ -17,6 +20,7 @@ import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
 import 'package:kovalink/src/widgets/liquid_glass.dart';
+import 'package:kovalink/src/widgets/while_shown_builder.dart';
 import 'package:thermion_flutter/thermion_flutter.dart';
 import 'package:vector_math/vector_math_64.dart' as vector;
 
@@ -34,6 +38,8 @@ class RoadViewScreen extends StatefulWidget {
     this.showHud = true,
     this.renderQuality = RenderQuality.auto,
     this.gpuSurfaceBuilder,
+    this.gpuViewHost,
+    this.gpuRetry,
     this.director,
     super.key,
   });
@@ -62,6 +68,16 @@ class RoadViewScreen extends StatefulWidget {
   /// path as available.
   final GpuSurfaceBuilder? gpuSurfaceBuilder;
 
+  /// Replaces the native view inside [GpuRoadSurface] (tests: fake viewers
+  /// that stay blank, throw, or behave). Its presence also marks the GPU path
+  /// as available. Unlike [gpuSurfaceBuilder] the watchdog stays active.
+  final GpuViewHost? gpuViewHost;
+
+  /// Decides whether a failed GPU view gets another attempt (attempt is the
+  /// number of earlier attempts) and prepares it. Null = the app policy:
+  /// one retry on Android with SurfaceTexture instead of SurfaceProducer.
+  final bool Function(GpuFailure failure, int attempt)? gpuRetry;
+
   /// Camera operator shared with a capture tool; null = own instance.
   final SceneDirector? director;
 
@@ -74,12 +90,114 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
   late final SceneDirector _director = widget.director ?? SceneDirector();
   bool _gpuFailed = false;
 
+  /// Number of GPU view attempts replaced so far (remounts the surface).
+  int _gpuAttempt = 0;
+
+  /// A GPU frame was confirmed on screen; the software underlay can go.
+  bool _gpuVerified = false;
+  GpuFailure? _gpuFailure;
+
+  final _diag = RendererDiagnostics.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _diag.loadDevice();
+  }
+
+  @override
+  void didUpdateWidget(covariant RoadViewScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.renderQuality != widget.renderQuality) {
+      // Choosing a quality again is the user's retry: after a failure the
+      // whole chain (first texture path, then the retry) runs again.
+      if (_gpuFailed || _gpuFailure != null) {
+        _gpuAttempt++;
+        _gpuRetries = 0;
+        if (widget.gpuRetry == null) ThermionGpuViewHost.restoreTextureSource();
+      }
+      _gpuFailed = false;
+      _gpuFailure = null;
+      _gpuVerified = false;
+    }
+  }
+
   bool get _useGpu => RenderQualityPolicy.useGpu(
     widget.renderQuality,
     gpuAvailable:
         !_gpuFailed &&
-        (widget.gpuSurfaceBuilder != null || GpuRoadSurface.supported),
+        (widget.gpuSurfaceBuilder != null ||
+            widget.gpuViewHost != null ||
+            GpuRoadSurface.supported),
   );
+
+  static bool _defaultRetry(GpuFailure failure, int attempt) {
+    if (!failure.retryable || attempt > 0) return false;
+    if (!ThermionGpuViewHost.canRetryWithSurfaceTexture) return false;
+    ThermionGpuViewHost.useSurfaceTexture();
+    return true;
+  }
+
+  /// Retries used in the current chain (the retry policy's `attempt`).
+  int _gpuRetries = 0;
+
+  void _onGpuFailure(GpuFailure failure) {
+    if (!mounted) return;
+    final retry = (widget.gpuRetry ?? _defaultRetry)(failure, _gpuRetries);
+    if (retry) {
+      final label = (widget.gpuViewHost ?? const ThermionGpuViewHost()).label;
+      _diag.event('다른 연결 방식($label)으로 3D를 다시 시도해요 (${_gpuRetries + 2}번째)');
+      setState(() {
+        _gpuAttempt++;
+        _gpuRetries++;
+        _gpuVerified = false;
+      });
+      return;
+    }
+    // Last attempt failed: the next GPU view (vehicle overlay, a later
+    // retry) starts from the original texture path again.
+    if (widget.gpuRetry == null) ThermionGpuViewHost.restoreTextureSource();
+    setState(() {
+      _gpuFailure = failure;
+      if (widget.renderQuality == RenderQuality.auto) _gpuFailed = true;
+    });
+  }
+
+  void _onGpuVerified() {
+    if (!mounted) return;
+    setState(() => _gpuVerified = true);
+  }
+
+  /// The app came back to the foreground; show the software road until the
+  /// GPU view is confirmed again.
+  void _onGpuUnverified() {
+    if (!mounted) return;
+    setState(() => _gpuVerified = false);
+  }
+
+  /// Mirrors the current renderer into 설정 → 진단 (after this frame).
+  void _report({required bool gpu, required bool injected}) {
+    final quality = RenderQualityPolicy.label(widget.renderQuality);
+    final RendererState state;
+    String? reason = _gpuFailure?.reason;
+    String? note = _gpuFailure?.note;
+    if (!gpu) {
+      state = _gpuFailed ? RendererState.fallback : RendererState.software;
+      if (!_gpuFailed) reason = note = null;
+    } else if (injected || _gpuVerified) {
+      state = RendererState.gpu;
+      reason = note = null;
+    } else {
+      state = RendererState.checking;
+      if (reason != null) reason = '$reason — 화질이 고품질이라 3D를 계속 켜 둬요';
+    }
+    final source = gpu && !injected
+        ? (widget.gpuViewHost ?? const ThermionGpuViewHost()).label
+        : null;
+    _diag.setQuality(quality);
+    if (source != null) _diag.setTexture(source, _gpuRetries);
+    _diag.setState(state, reason: reason, note: note);
+  }
 
   static bool get _supportsNativeVehicle =>
       !kIsWeb &&
@@ -88,8 +206,11 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([
+    // A full-screen page on top turns the ticker mode off: telemetry then
+    // stops rebuilding this screen (and feeding the 3D view) until it shows
+    // again, so the page scrolls without the hidden drive screen's work.
+    return WhileShownBuilder(
+      listenable: Listenable.merge([
         widget.controller,
         widget.controller.roadStream,
         ?widget.vehicleModel,
@@ -99,6 +220,12 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
         return LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 680;
+            final notice = HudLayout(
+              constraints.biggest,
+              compact: compact,
+              showNumbers: widget.showHud,
+              bottomInset: MediaQuery.paddingOf(context).bottom,
+            ).noticeArea;
             final frame = _director.update(
               scene,
               constraints.biggest,
@@ -108,7 +235,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
             return Stack(
               fit: StackFit.expand,
               children: [
-                _buildRoadSurface(scene, frame),
+                _buildRoadSurface(scene, frame, notice),
                 DriveHud(
                   scene: scene,
                   compact: compact,
@@ -117,10 +244,12 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                 ),
                 Positioned(
                   left: 18,
-                  bottom: 22,
+                  bottom: 22 + MediaQuery.paddingOf(context).bottom,
                   child: _ModeButton(
                     mode: mode,
                     onPressed: () => setState(() {
+                      // The GPU view remounts on return; confirm it again.
+                      _gpuVerified = false;
                       mode =
                           RoadViewMode.values[(mode.index + 1) %
                               RoadViewMode.values.length];
@@ -138,7 +267,30 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
   VehicleModelLoadResult get _vehicleModel =>
       widget.vehicleModel?.value ?? VehicleModelLoadResult.bundledDefault;
 
-  Widget _buildRoadSurface(RoadScene scene, DirectorFrame frame) {
+  Widget _softwareWorld(
+    RoadScene scene,
+    DirectorFrame frame,
+    VehicleModelLoadResult vehicleModel,
+  ) => RepaintBoundary(
+    child: CustomPaint(
+      painter: RoadWorldPainter(
+        scene: scene,
+        vehicle: vehicleModel.profile,
+        viewpoint: widget.viewpoint,
+        theme: widget.theme,
+        layers: widget.layers,
+        labelFontFamily: DefaultTextStyle.of(context).style.fontFamily,
+        egoMesh: vehicleModel.mesh,
+        director: frame,
+      ),
+    ),
+  );
+
+  Widget _buildRoadSurface(
+    RoadScene scene,
+    DirectorFrame frame,
+    NoticeArea notice,
+  ) {
     if (mode == RoadViewMode.scene) {
       final vehicleModel = _vehicleModel;
       final glbAssetPath = vehicleModel.glbAssetPath;
@@ -166,19 +318,30 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
           egoBodyNode: vehicleModel.manifest.nodes.body,
           egoExcludeNodes: vehicleModel.manifest.excludeNodes.toSet(),
         );
+        final injected = widget.gpuSurfaceBuilder?.call(context, request);
+        _report(gpu: true, injected: injected != null);
+        // Until a GPU frame is confirmed on screen the software road is
+        // drawn underneath, so a blank texture can never leave the road
+        // empty (2026-11-25 phone: HUD over the scaffold colour only).
+        final underlay = injected == null && !_gpuVerified;
         return Stack(
           fit: StackFit.expand,
           children: [
-            widget.gpuSurfaceBuilder?.call(context, request) ??
+            if (underlay)
+              KeyedSubtree(
+                key: const ValueKey('gpu-software-underlay'),
+                child: _softwareWorld(scene, frame, vehicleModel),
+              ),
+            injected ??
                 GpuRoadSurface(
+                  key: ValueKey('gpu-road-$_gpuAttempt'),
                   request: request,
-                  onFallback: () {
-                    if (widget.renderQuality == RenderQuality.auto) {
-                      setState(() => _gpuFailed = true);
-                    }
-                  },
+                  host: widget.gpuViewHost ?? const ThermionGpuViewHost(),
+                  onFallback: _onGpuFailure,
+                  onVerified: _onGpuVerified,
+                  onUnverified: _onGpuUnverified,
                 ),
-            if (widget.layers.objects)
+            if (widget.layers.objects && !underlay)
               IgnorePointer(
                 child: CustomPaint(
                   painter: SceneMarkersPainter(
@@ -194,23 +357,11 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
           ],
         );
       }
+      _report(gpu: false, injected: false);
       return Stack(
         fit: StackFit.expand,
         children: [
-          RepaintBoundary(
-            child: CustomPaint(
-              painter: RoadWorldPainter(
-                scene: scene,
-                vehicle: vehicleModel.profile,
-                viewpoint: widget.viewpoint,
-                theme: widget.theme,
-                layers: widget.layers,
-                labelFontFamily: DefaultTextStyle.of(context).style.fontFamily,
-                egoMesh: vehicleModel.mesh,
-                director: frame,
-              ),
-            ),
-          ),
+          _softwareWorld(scene, frame, vehicleModel),
           ?rain,
           if (widget.nativeVehicleOverlay &&
               widget.viewpoint == SceneViewpoint.chase &&
@@ -237,6 +388,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
       return _CameraPlaceholder(
         status: stream.status,
         errorMessage: stream.errorMessage,
+        notice: notice,
       );
     }
 
@@ -259,11 +411,10 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
             ),
           ),
         if (mode == RoadViewMode.overlay && scene.cameraProjection == null)
-          const Positioned(
-            left: 18,
-            right: 18,
-            top: 116,
-            child: _CalibrationWarning(),
+          _NoticeSlot(
+            notice: notice,
+            maxWidth: 360,
+            child: const _CalibrationWarning(),
           ),
       ],
     );
@@ -353,13 +504,18 @@ class _CalibrationWarning extends StatelessWidget {
 }
 
 class _CameraPlaceholder extends StatelessWidget {
-  const _CameraPlaceholder({required this.status, this.errorMessage});
+  const _CameraPlaceholder({
+    required this.status,
+    required this.notice,
+    this.errorMessage,
+  });
   final RoadStreamStatus status;
+  final NoticeArea notice;
   final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -367,29 +523,127 @@ class _CameraPlaceholder extends StatelessWidget {
           colors: [Color(0xFF1B2939), Color(0xFF070B11)],
         ),
       ),
-      child: Center(
-        child: LiquidGlass(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.videocam_off_outlined, size: 44),
-              const SizedBox(height: 12),
-              Text(
-                status == RoadStreamStatus.connecting
-                    ? '카메라 연결 중'
-                    : '카메라가 연결되지 않았어요',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                errorMessage ?? '연결 화면에서 카메라를 켜 주세요.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFB5C0CB), fontSize: 12),
-              ),
-            ],
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _NoticeSlot(
+            notice: notice,
+            maxWidth: 380,
+            child: _CameraNotice(
+              title: status == RoadStreamStatus.connecting
+                  ? '카메라 연결 중'
+                  : '카메라가 연결되지 않았어요',
+              detail: errorMessage ?? '연결 화면에서 카메라를 켜 주세요.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Puts a notice in the room the HUD leaves free (see
+/// [HudLayout.noticeArea]): never under the HUD parts, the bottom buttons
+/// or a navigation app's overlay on the right. Scales down instead of
+/// overflowing when the room is tight.
+class _NoticeSlot extends StatelessWidget {
+  const _NoticeSlot({
+    required this.notice,
+    required this.maxWidth,
+    required this.child,
+  });
+
+  final NoticeArea notice;
+  final double maxWidth;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Positioned.fromRect(
+    rect: notice.area,
+    child: LayoutBuilder(
+      builder: (context, box) => Align(
+        alignment: notice.alignment,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: notice.alignment,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.max(120, math.min(maxWidth, box.maxWidth)),
+            ),
+            child: child,
           ),
         ),
       ),
+    ),
+  );
+}
+
+/// Lets Korean text wrap only between words: Flutter otherwise breaks
+/// lines between any two syllables ("연결되 / 지"). Word joiners (U+2060,
+/// invisible) go between the letters of each word.
+String _keepWords(String text) =>
+    text.split(' ').map((word) => word.characters.join('\u2060')).join(' ');
+
+/// Camera state card: icon beside the text when there is room for one
+/// row, icon above it on narrow spots.
+class _CameraNotice extends StatelessWidget {
+  const _CameraNotice({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final wide = box.maxWidth >= 300;
+        final titleText = Text(
+          _keepWords(title),
+          textAlign: wide ? TextAlign.start : TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        );
+        final detailText = Text(
+          _keepWords(detail),
+          textAlign: wide ? TextAlign.start : TextAlign.center,
+          style: const TextStyle(color: Color(0xFFB5C0CB), fontSize: 12),
+        );
+        const icon = Icon(Icons.videocam_off_outlined, size: 32);
+        return LiquidGlass(
+          key: const ValueKey('camera-notice'),
+          padding: wide
+              ? const EdgeInsets.fromLTRB(16, 12, 20, 12)
+              : const EdgeInsets.all(12),
+          child: wide
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    icon,
+                    const SizedBox(width: 14),
+                    Flexible(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          titleText,
+                          const SizedBox(height: 4),
+                          detailText,
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    icon,
+                    const SizedBox(height: 8),
+                    titleText,
+                    const SizedBox(height: 4),
+                    detailText,
+                  ],
+                ),
+        );
+      },
     );
   }
 }

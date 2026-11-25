@@ -14,16 +14,15 @@ class KovaParamsPanel extends StatelessWidget {
   const KovaParamsPanel({
     required this.controller,
     required this.address,
-    this.onEditAddress,
     this.now,
     super.key,
   });
 
   final KovaParamsController controller;
 
-  /// Saved settings address (app-local setting).
-  final String address;
-  final VoidCallback? onEditAddress;
+  /// kovapilot settings address of the comma found or entered (not
+  /// editable); null before there is one.
+  final String? address;
 
   /// Clock for "n초 전" (tests/captures).
   final DateTime Function()? now;
@@ -40,7 +39,6 @@ class KovaParamsPanel extends StatelessWidget {
             KovaConnectionCard(
               controller: controller,
               address: address,
-              onEditAddress: onEditAddress,
               now: now,
             ),
             if (document == null)
@@ -85,14 +83,14 @@ class KovaConnectionCard extends StatelessWidget {
   const KovaConnectionCard({
     required this.controller,
     required this.address,
-    this.onEditAddress,
     this.now,
     super.key,
   });
 
   final KovaParamsController controller;
-  final String address;
-  final VoidCallback? onEditAddress;
+
+  /// The found comma's settings address; null before one is found.
+  final String? address;
   final DateTime Function()? now;
 
   @override
@@ -108,7 +106,7 @@ class KovaConnectionCard extends StatelessWidget {
     final lock = controller.writeLock;
     final health = controller.health;
     final clock = now ?? DateTime.now;
-    final shownAddress = controller.endpoint ?? address;
+    final shownAddress = controller.endpoint ?? address ?? '아직 찾은 콤마가 없어요';
     return Card(
       key: const ValueKey('kova-connection-card'),
       child: Padding(
@@ -148,24 +146,10 @@ class KovaConnectionCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    shownAddress,
-                    style: const TextStyle(color: _muted, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (onEditAddress != null &&
-                    status == KovaLinkStatus.disconnected)
-                  IconButton(
-                    key: const ValueKey('kova-edit-address'),
-                    tooltip: '주소 바꾸기',
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    onPressed: onEditAddress,
-                  ),
-              ],
+            Text(
+              shownAddress,
+              style: const TextStyle(color: _muted, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
             ),
             if (document != null || health != null)
               Text(
@@ -186,13 +170,22 @@ class KovaConnectionCard extends StatelessWidget {
                           : '설정을 바꿀 수 있어요.')
                     : KovaParamsController.writeLockReason(lock),
               ),
-              if (document.deviceOffroad == false) ...[
+              if (document.deviceOffroad == false &&
+                  document.deviceParked != true &&
+                  document.settings.values.any(
+                    (s) =>
+                        !s.saveAnytime &&
+                        s.access == KovaParamAccess.readWrite &&
+                        (s.applyPolicy == KovaApplyPolicy.offroad ||
+                            s.applyPolicy == KovaApplyPolicy.parked ||
+                            s.applyPolicy == KovaApplyPolicy.restart),
+                  )) ...[
                 const SizedBox(height: 6),
                 const _Banner(
                   key: ValueKey('kova-onroad-banner'),
                   color: _warn,
                   icon: Icons.directions_car_filled_outlined,
-                  text: '주행 중이에요. 일부 설정은 차를 세운 뒤 바꿀 수 있어요.',
+                  text: '일부 설정은 P 정차 또는 시동 종료가 필요해요.',
                 ),
               ],
             ],
@@ -211,7 +204,9 @@ class KovaConnectionCard extends StatelessWidget {
                 if (status == KovaLinkStatus.disconnected)
                   FilledButton.icon(
                     key: const ValueKey('kova-connect'),
-                    onPressed: () => controller.connect(address),
+                    onPressed: address == null
+                        ? null
+                        : () => controller.connect(address!),
                     icon: const Icon(Icons.link, size: 18),
                     label: const Text('연결'),
                   )
@@ -361,6 +356,7 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
   }
 
   Future<void> _change(Object? value) async {
+    final reviewed = s;
     setState(() => _inputError = null);
     if (s.risk == KovaRisk.control) {
       final confirmed = await showDialog<bool>(
@@ -370,7 +366,11 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
       );
       if (confirmed != true || !mounted) return;
     }
-    await widget.controller.setValue(s.key, value);
+    await widget.controller.setValue(
+      reviewed.key,
+      value,
+      reviewedSetting: reviewed,
+    );
     if (mounted) setState(() => _drag = null);
   }
 
@@ -461,8 +461,8 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
     if (control == KovaParamControl.toggle) {
       trailing = Switch(
         key: ValueKey('kova-toggle-${s.key}'),
-        value: shown == true,
-        onChanged: editable ? (v) => _change(v) : null,
+        value: s.isToggleOn(shown),
+        onChanged: editable ? (v) => _change(s.toggleValue(v)) : null,
       );
     } else if (control != KovaParamControl.slider) {
       trailing = Text(
@@ -575,14 +575,32 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
   /// and control-risk items already say so in the lock line / confirm
   /// dialog.
   List<Widget> _badges() {
-    final policy = switch (s.applyPolicy) {
-      KovaApplyPolicy.offroad => ('정차 중에만 변경', _warn),
-      KovaApplyPolicy.restart => ('재시작 후 적용', const Color(0xFF72A7FF)),
-      KovaApplyPolicy.immediate || KovaApplyPolicy.unknown => null,
+    if (s.status == KovaAvailability.unsupported) return [];
+    final currentState = widget.controller.status == KovaLinkStatus.connected
+        ? s.applyState
+        : null;
+    final policy = switch ((s.applyPolicy, currentState)) {
+      (KovaApplyPolicy.parked, 'pendingParked') => ('저장됨 · P 정차 시 적용', _warn),
+      (KovaApplyPolicy.parked, 'awaitingStart') => ('플래너 시작 대기', _muted),
+      (KovaApplyPolicy.parked, 'applied') => ('적용됨', _accent),
+      (KovaApplyPolicy.restart, 'pendingRestart') => (
+        '저장됨 · 다음 시작 때 적용',
+        _warn,
+      ),
+      (KovaApplyPolicy.restart, 'awaitingStart') => ('다음 시작 때 확인', _muted),
+      (KovaApplyPolicy.restart, 'applied') => ('적용됨', _accent),
+      (KovaApplyPolicy.offroad, _) when !s.saveAnytime => ('시동을 끈 뒤 변경', _warn),
+      (KovaApplyPolicy.parked, _) => (
+        s.saveAnytime ? 'P 정차 중 적용' : 'P 정차 중 변경',
+        _warn,
+      ),
+      (KovaApplyPolicy.restart, _) => ('재시작 후 적용', const Color(0xFF72A7FF)),
+      _ => null,
     };
     return [
       if (policy case (final text, final color))
         _Badge(text, color, key: ValueKey('kova-badge-policy-${s.key}')),
+      if (s.saveParkedOnly) _Badge('P 정차 중 저장', _warn),
       if (s.status == KovaAvailability.pendingConsumer)
         _Badge('준비 중', _muted, key: ValueKey('kova-badge-pending-${s.key}')),
     ];
@@ -689,10 +707,15 @@ class _Details extends StatelessWidget {
         '범위: ${s.describe(s.minimum, defaultLocale: locale)} – ${s.describe(s.maximum, defaultLocale: locale)}',
       '적용: ${switch (s.applyPolicy) {
         KovaApplyPolicy.immediate => '바로 적용돼요.',
-        KovaApplyPolicy.offroad => '차를 세웠을 때만 바꿀 수 있어요.',
-        KovaApplyPolicy.restart => 'kovapilot을 다시 시작하면 적용돼요. 주행 중에는 바꿀 수 없어요.',
+        KovaApplyPolicy.offroad => s.saveAnytime ? '언제든 값을 저장할 수 있어요.' : '시동을 끈 뒤 바꿀 수 있어요.',
+        KovaApplyPolicy.parked => s.saveAnytime ? '값은 언제든 저장할 수 있고, P에 두고 완전히 정차하면 반영돼요.' : 'P에 두고 완전히 정차했을 때 바꿀 수 있어요.',
+        KovaApplyPolicy.restart => s.saveAnytime ? '언제든 저장하고, 담당 프로세스가 다음에 시작할 때 반영해요.' : 'kovapilot을 다시 시작하면 적용돼요. 주행 중에는 바꿀 수 없어요.',
         KovaApplyPolicy.unknown => '언제 적용되는지 알 수 없어 앱에서는 바꿀 수 없어요.',
       }}',
+      if ((s.applyState == 'pendingRestart' ||
+              s.applyState == 'pendingParked') &&
+          s.appliedValue != null)
+        '현재 적용값: ${s.describe(s.appliedValue, defaultLocale: locale)}',
       if (s.status == KovaAvailability.pendingConsumer)
         '상태: 준비 중이에요. 값은 저장되지만 차 동작은 아직 바뀌지 않아요.',
       if (s.requiredCapabilities.isNotEmpty)

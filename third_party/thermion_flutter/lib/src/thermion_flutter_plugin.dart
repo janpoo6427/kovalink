@@ -53,6 +53,11 @@ abstract class ThermionFlutterPlugin {
 
   void resumeFrameScheduler();
 
+  /// KovaLink: frames the native frame scheduler has dispatched to the
+  /// renderer since start-up (monotonic), or -1 where this is unknown. Lets
+  /// a caller tell "never rendered" apart from "rendered but not shown".
+  int get renderedFrameCount => -1;
+
   /// Initialize the plugin and create the default swapchain.
   ///
   /// [canvasId] is web-only: the DOM id of the canvas this viewer's engine

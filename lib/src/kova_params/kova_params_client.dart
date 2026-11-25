@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:kovalink/src/kova_params/kova_params_document.dart';
+import 'package:kovalink/src/network/comma_link_text.dart';
+import 'package:kovalink/src/network/gateway_pin.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 
 class KovaHttpResponse {
@@ -22,10 +24,15 @@ abstract class KovaParamsTransport {
 }
 
 /// dart:io transport. Bodies over [maxBodyBytes] are refused; a timed-out
-/// request is aborted.
+/// request is aborted. A comma on Wi-Fi passes its session's client, which
+/// checks the certificate pin, and [decorate] adds the token; [ownsClient]
+/// false leaves that shared client open on [close].
 class IoKovaParamsTransport implements KovaParamsTransport {
-  IoKovaParamsTransport({HttpClient? client})
-    : _client = client ?? HttpClient() {
+  IoKovaParamsTransport({
+    HttpClient? client,
+    this.decorate,
+    this.ownsClient = true,
+  }) : _client = client ?? HttpClient() {
     _client.connectionTimeout = const Duration(seconds: 3);
     // Never use a system proxy for a local device.
     _client.findProxy = (_) => 'DIRECT';
@@ -33,6 +40,10 @@ class IoKovaParamsTransport implements KovaParamsTransport {
 
   static const maxBodyBytes = 1024 * 1024;
   final HttpClient _client;
+
+  /// Called on every request before anything is sent (token header).
+  final void Function(HttpClientRequest request)? decorate;
+  final bool ownsClient;
 
   Future<KovaHttpResponse> _send(
     Future<HttpClientRequest> Function() open,
@@ -43,6 +54,7 @@ class IoKovaParamsTransport implements KovaParamsTransport {
     Future<KovaHttpResponse> run() async {
       request = await open();
       request!.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      decorate?.call(request!);
       if (body != null) {
         final bytes = utf8.encode(body);
         request!.headers.contentType = ContentType.json;
@@ -80,10 +92,27 @@ class IoKovaParamsTransport implements KovaParamsTransport {
       _send(() => _client.postUrl(uri), timeout, body);
 
   @override
-  void close() => _client.close(force: true);
+  void close() {
+    if (ownsClient) _client.close(force: true);
+  }
 }
 
-enum KovaFailureKind { timeout, transport, http, format, schema }
+enum KovaFailureKind {
+  timeout,
+  transport,
+  http,
+  format,
+  schema,
+
+  /// 401: the token was refused.
+  unauthorized,
+
+  /// 403 `wifi_client_required` / `local_client_required`.
+  notAllowed,
+
+  /// The certificate pin is not the registered comma's; nothing was sent.
+  identity,
+}
 
 class KovaParamsException implements Exception {
   const KovaParamsException(this.kind, this.message, {this.statusCode});
@@ -152,8 +181,9 @@ class KovaUpdateFailed extends KovaUpdateOutcome {
 String kovaRejectionReason(String code, String message) {
   final lower = message.toLowerCase();
   return switch (code) {
-    'update_forbidden' when lower.contains('offroad') =>
-      '주행 중에는 바꿀 수 없어요. 차를 세운 뒤 다시 해 주세요.',
+    'update_forbidden' when lower.contains('parked') =>
+      'P에 두고 완전히 정차한 뒤 다시 해 주세요.',
+    'update_forbidden' when lower.contains('offroad') => '시동을 끈 뒤 다시 해 주세요.',
     'update_forbidden' when lower.contains('read-only') =>
       '읽기 전용 항목이라 바꿀 수 없어요.',
     'update_forbidden' => '차에서 이 변경을 막았어요.',
@@ -164,6 +194,11 @@ String kovaRejectionReason(String code, String message) {
     'invalid_value' => '차에서 받을 수 없는 값이에요.',
     'invalid_request' || 'invalid_json' => '차가 요청을 읽지 못했어요. 앱을 업데이트해 주세요.',
     'kova_params_unavailable' => '차에서 설정을 불러올 수 없어요. 잠시 뒤 다시 해 주세요.',
+    'local_client_required' => '콤마를 찾았지만 아직 휴대폰 연결을 허용하지 않아요.',
+    'authentication_required' => KovaLinkText.message(
+      KovaLinkProblem.tokenRejected,
+    ),
+    'wifi_client_required' => KovaLinkText.message(KovaLinkProblem.notAllowed),
     _ => '차에서 변경을 막았어요.',
   };
 }
@@ -215,12 +250,52 @@ class KovaParamsClient {
         KovaFailureKind.format,
         '차에서 받은 내용을 읽을 수 없어요.',
       );
+    } on GatewayIdentityMismatch {
+      throw KovaParamsException(
+        KovaFailureKind.identity,
+        KovaLinkText.message(KovaLinkProblem.identityMismatch),
+      );
+    } on GatewayOriginRefused {
+      throw const KovaParamsException(
+        KovaFailureKind.transport,
+        '차에 연결할 수 없어요. 같은 네트워크에 있는지 확인해 주세요.',
+      );
     } on IOException {
       throw const KovaParamsException(
         KovaFailureKind.transport,
         '차에 연결할 수 없어요. 같은 네트워크에 있는지 확인해 주세요.',
       );
     }
+  }
+
+  /// 401 and 403 answers from a comma on Wi-Fi, or null for others.
+  static KovaParamsException? _accessError(KovaHttpResponse response) {
+    if (response.statusCode == 401) {
+      return KovaParamsException(
+        KovaFailureKind.unauthorized,
+        KovaLinkText.message(KovaLinkProblem.tokenRejected),
+        statusCode: 401,
+      );
+    }
+    if (response.statusCode == 403) {
+      Object? json;
+      try {
+        json = jsonDecode(response.body);
+      } on FormatException {
+        json = null;
+      }
+      final code = _error(json)?.$1;
+      // local_client_required (a loopback-only gateway) keeps its own
+      // message: see kovaRejectionReason.
+      if (code == 'wifi_client_required') {
+        return KovaParamsException(
+          KovaFailureKind.notAllowed,
+          KovaLinkText.message(KovaLinkProblem.notAllowed),
+          statusCode: 403,
+        );
+      }
+    }
+    return null;
   }
 
   static Object? _decode(String body) {
@@ -248,6 +323,7 @@ class KovaParamsClient {
     final response = await _guard(
       () => transport.get(_uri('/v1/health'), timeout),
     );
+    if (_accessError(response) case final error?) throw error;
     if (response.statusCode != 200) {
       throw KovaParamsException(
         KovaFailureKind.http,
@@ -299,6 +375,7 @@ class KovaParamsClient {
     final response = await _guard(
       () => transport.get(_uri('/v1/kova-params'), timeout),
     );
+    if (_accessError(response) case final error?) throw error;
     final json = _decode(response.body);
     if (response.statusCode != 200) {
       final error = _error(json);
@@ -316,12 +393,14 @@ class KovaParamsClient {
   Future<KovaUpdateOutcome> update(
     String key,
     Object? value,
-    int expectedRevision,
-  ) async {
+    int expectedRevision, {
+    Object? expectedValue,
+  }) async {
     final body = jsonEncode({
       'key': key,
       'value': value,
       'expectedRevision': expectedRevision,
+      'expectedValue': ?expectedValue,
     });
     final KovaHttpResponse response;
     try {

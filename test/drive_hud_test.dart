@@ -5,6 +5,8 @@ import 'package:kovalink/src/models/display_units.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/services/demo_drive_scenario.dart';
 
+import 'support/hud_probe.dart';
+
 Duration _s(double seconds) => Duration(milliseconds: (seconds * 1000).round());
 
 Future<void> _pumpHud(
@@ -51,7 +53,7 @@ void main() {
   });
 
   group('drive HUD', () {
-    testWidgets('city stop: standby pill, red light countdown, turn row', (
+    testWidgets('city stop: standby pill, red light countdown, no route card', (
       tester,
     ) async {
       await _pumpHud(tester, DemoDriveScenario().sceneAt(_s(0.5)));
@@ -62,55 +64,63 @@ void main() {
       expect(find.text('신호등 12 m'), findsOneWidget);
       expect(find.text('제한속도'), findsOneWidget);
       expect(find.text('50'), findsWidgets);
-      expect(find.text('좌회전'), findsOneWidget);
-      expect(find.text('서울대학로278번길'), findsOneWidget);
-      expect(find.text('목적지까지'), findsOneWidget);
+      // No turn-by-turn guidance on screen (kovapilot sends none).
+      expect(find.text('좌회전'), findsNothing);
+      expect(find.text('서울대학로278번길'), findsNothing);
+      expect(find.text('목적지까지'), findsNothing);
       expect(find.byType(TrafficLightGlyph), findsOneWidget);
     });
 
-    testWidgets('city turn approach shows the green sign and lane guidance', (
+    testWidgets('city turn approach: no turn sign, route card or lanes', (
       tester,
     ) async {
       final scene = DemoDriveScenario().sceneAt(_s(85));
+      // The demo still carries a turn and lane guidance; none is drawn.
+      expect(scene.tbt, isNotNull);
+      expect(scene.laneGuidance, isNotEmpty);
       await _pumpHud(tester, scene);
-      expect(find.byType(TurnSign), findsOneWidget);
-      expect(find.byType(LaneGuidancePill), findsOneWidget);
+      expect(
+        find.text(formatDistanceCompact(scene.tbt!.distanceMeters)),
+        findsNothing,
+      );
       expect(
         find.text(formatDistanceCompact(scene.tbt!.nextDistanceMeters!)),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
-        find.text('좌회전'),
-        findsOneWidget,
-        reason: 'label only in the info card',
+        find.text(formatDistance(scene.tbt!.distanceMeters)),
+        findsNothing,
       );
+      expect(find.text('좌회전'), findsNothing);
+      // Traffic light / blinker row and the limit sign stay.
+      expect(find.byType(SignalPill), findsOneWidget);
+      expect(find.byType(SpeedLimitSign), findsOneWidget);
     });
 
-    testWidgets('highway: engaged, set speed, camera, tollgate, destination', (
+    testWidgets('highway: engaged and set speed, no route card', (
       tester,
     ) async {
       final scene = DemoDriveScenario(route: DemoRoute.highway).sceneAt(_s(10));
       await _pumpHud(tester, scene);
       expect(find.text('조향 보조 작동 중'), findsOneWidget);
       expect(find.text('설정'), findsOneWidget);
-      expect(find.text('과속 카메라'), findsOneWidget);
-      expect(find.text(' · 100 km/h'), findsOneWidget);
-      expect(find.text('톨게이트'), findsOneWidget);
-      expect(find.text('경부고속도로'), findsOneWidget);
-      expect(find.byType(TurnSign), findsNothing);
+      // The route card (road name, cameras, tollgate) is not drawn.
+      expect(find.text('과속 카메라'), findsNothing);
+      expect(find.text(' · 100 km/h'), findsNothing);
+      expect(find.text('톨게이트'), findsNothing);
+      expect(find.text('경부고속도로'), findsNothing);
       expect(find.byType(TrafficLightGlyph), findsNothing);
       expect(find.text('100'), findsWidgets);
     });
 
-    testWidgets('mph converts speed, set speed, limit and camera limit', (
-      tester,
-    ) async {
+    testWidgets('mph converts speed, set speed and limit', (tester) async {
       final scene = DemoDriveScenario(route: DemoRoute.highway).sceneAt(_s(10));
       await _pumpHud(tester, scene, unit: SpeedUnit.mph);
       expect(find.text('mph'), findsOneWidget);
       expect(find.text('km/h'), findsNothing);
       expect(find.text('62'), findsWidgets);
-      expect(find.text(' · 62 mph'), findsOneWidget);
+      // The camera limit was in the route card, which is gone.
+      expect(find.text(' · 62 mph'), findsNothing);
     });
 
     testWidgets('HUD numbers can be hidden', (tester) async {
@@ -160,6 +170,95 @@ void main() {
             expect(tester.takeException(), isNull, reason: '$route $t s $size');
           }
         }
+      }
+    });
+  });
+
+  group('speed box and gear capsule', () {
+    testWidgets('the speed sits in the same 3-digit box at any speed', (
+      tester,
+    ) async {
+      final base = DemoDriveScenario().sceneAt(_s(85));
+      for (final size in const [Size(392, 850), Size(1200, 900)]) {
+        Rect? box;
+        for (final kph in const [0.0, 9.0, 10.0, 99.0, 100.0, 199.0]) {
+          await _pumpHud(tester, sceneWith(base, kph: kph), size: size);
+          final at = tester.getRect(find.byKey(const ValueKey('speed-number')));
+          box ??= at;
+          expect(at, box, reason: '$kph km/h on $size');
+          // The number is drawn right-aligned in the box, inside it (glyph
+          // boxes may reach half the -3 letter spacing past the ends).
+          final digits = speedGlyphs(tester, '${kph.round()}');
+          expect(digits.right, moreOrLessEquals(at.right, epsilon: 2));
+          expect(digits.left, greaterThanOrEqualTo(at.left - 2));
+        }
+      }
+    });
+
+    testWidgets('the gear capsule keeps its size whichever gear is in', (
+      tester,
+    ) async {
+      final base = DemoDriveScenario().sceneAt(_s(85));
+      Rect? plate;
+      for (final gear in VehicleGear.values) {
+        await _pumpHud(tester, sceneWith(base, kph: 50, gear: gear));
+        final at = tester.getRect(find.byKey(const ValueKey('gear-plate')));
+        plate ??= at;
+        expect(at, plate, reason: gear.name);
+        final lit = tester
+            .widgetList<Text>(
+              find.descendant(
+                of: find.byType(GearRow),
+                matching: find.byType(Text),
+              ),
+            )
+            .where((t) => t.style == GearRow.onStyle)
+            .map((t) => t.data)
+            .toList();
+        expect(lit, switch (gear) {
+          VehicleGear.park => ['P'],
+          VehicleGear.reverse => ['R'],
+          VehicleGear.neutral => ['N'],
+          VehicleGear.drive => ['D'],
+          VehicleGear.unknown => isEmpty,
+        }, reason: gear.name);
+      }
+    });
+
+    test('speed, unit and gear colors keep 4.5:1 on bright and dark views', () {
+      const views = {
+        'white': Color(0xFFFFFFFF),
+        'sky': Color(0xFFC9E2F8),
+        'grey road': Color(0xFF808080),
+        'night': Color(0xFF1E2634),
+        'black': Color(0xFF000000),
+      };
+      for (final MapEntry(key: name, value: view) in views.entries) {
+        // The digits and the unit sit on their light halo, the gear
+        // letters on the dark capsule; both are see-through, so on top
+        // of the view.
+        final halo = over(HudColors.halo, view);
+        final plate = over(HudColors.gearPlate, view);
+        expect(
+          contrastRatio(HudColors.ink, halo),
+          greaterThanOrEqualTo(4.5),
+          reason: 'speed on $name',
+        );
+        expect(
+          contrastRatio(HudColors.unit, halo),
+          greaterThanOrEqualTo(4.5),
+          reason: 'unit on $name',
+        );
+        expect(
+          contrastRatio(HudColors.gearOn, plate),
+          greaterThanOrEqualTo(4.5),
+          reason: 'current gear on $name',
+        );
+        expect(
+          contrastRatio(HudColors.gearOff, plate),
+          greaterThanOrEqualTo(4.5),
+          reason: 'other gears on $name',
+        );
       }
     });
   });

@@ -1,19 +1,26 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:kovalink/src/features/connect/connect_screen.dart';
+import 'package:kovalink/src/app/kova_routes.dart';
+import 'package:kovalink/src/app/kovalink_pages.dart';
+import 'package:kovalink/src/features/connect/auto_connect_panel.dart';
 import 'package:kovalink/src/features/road_view/gpu_road_surface.dart';
 import 'package:kovalink/src/features/road_view/road_view_screen.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_director.dart';
 import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
+import 'package:kovalink/src/services/auto_connect_controller.dart';
+import 'package:kovalink/src/services/comma_link.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
 import 'package:kovalink/src/vehicle_pack/vehicle_model_library.dart';
-import 'package:kovalink/src/widgets/liquid_glass.dart';
+import 'package:kovalink/src/widgets/glass_nav_button.dart';
 
-class KovaLinkHome extends StatefulWidget {
+/// The drive screen ([KovaRoutes.drive]), at the bottom of the route stack.
+/// Its buttons push the connect and settings routes; system back here
+/// leaves the app.
+class KovaLinkHome extends StatelessWidget {
   const KovaLinkHome({
     required this.controller,
     this.vehicleModel,
@@ -21,8 +28,11 @@ class KovaLinkHome extends StatefulWidget {
     this.library,
     this.modelPicker = pickModelFileWithSystemPicker,
     this.gpuSurfaceBuilder,
+    this.gpuViewHost,
     this.director,
     this.kovaParams,
+    this.autoConnect,
+    this.link,
     super.key,
   });
 
@@ -35,87 +45,82 @@ class KovaLinkHome extends StatefulWidget {
   /// kovapilot settings connection shown in the settings tab.
   final KovaParamsController? kovaParams;
 
+  /// 자동 연결; shown as a small chip on the road view.
+  final AutoConnectController? autoConnect;
+
+  /// Registered comma and its session (connect screen).
+  final CommaLink? link;
+
   /// Capture/test hooks forwarded to [RoadViewScreen].
   final GpuSurfaceBuilder? gpuSurfaceBuilder;
+  final GpuViewHost? gpuViewHost;
   final SceneDirector? director;
 
-  @override
-  State<KovaLinkHome> createState() => _KovaLinkHomeState();
-}
-
-class _KovaLinkHomeState extends State<KovaLinkHome> {
-  int selectedIndex = 0;
+  KovaLinkPages get _pages => KovaLinkPages(
+    controller: controller,
+    vehicleModel: vehicleModel,
+    settings: settings,
+    library: library,
+    modelPicker: modelPicker,
+    kovaParams: kovaParams,
+    autoConnect: autoConnect,
+    link: link,
+  );
 
   @override
   Widget build(BuildContext context) {
-    final settings = widget.settings;
+    final settings = this.settings;
+    final library = this.library;
+    void openConnect() => KovaRoutes.open(context, _pages.connectPage());
+    // The road view runs under the bottom inset (home indicator, gesture
+    // or button nav bar); the buttons stay above it.
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            IndexedStack(
-              index: selectedIndex,
-              children: [
-                _roadView(),
-                ConnectScreen(
-                  controller: widget.controller,
-                  settings: settings,
-                ),
-                SettingsScreen(
-                  controller: widget.controller,
-                  vehicleModel: widget.vehicleModel,
-                  settings: settings,
-                  library: widget.library,
-                  modelPicker: widget.modelPicker,
-                  kovaParams: widget.kovaParams,
-                ),
-              ],
-            ),
-            if (selectedIndex == 0)
-              Positioned(
-                right: 16,
-                bottom: 18,
-                child: Row(
-                  children: [
-                    if (settings != null && widget.library != null) ...[
-                      _GlassNavButton(
-                        tooltip: '차량 모델 가져오기',
-                        icon: Icons.file_download_outlined,
-                        onPressed: () => VehicleModelImportFlow.run(
-                          context,
-                          library: widget.library!,
-                          settings: settings,
-                          picker: widget.modelPicker,
-                        ),
+            _roadView(),
+            Positioned(
+              right: 16,
+              bottom: 18 + bottomInset,
+              child: Row(
+                children: [
+                  if (autoConnect case final auto?) ...[
+                    AutoConnectStatusChip(controller: auto, onTap: openConnect),
+                    const SizedBox(width: 10),
+                  ],
+                  if (settings != null && library != null) ...[
+                    GlassNavButton(
+                      tooltip: '차량 모델 가져오기',
+                      icon: Icons.file_download_outlined,
+                      onPressed: () => VehicleModelImportFlow.run(
+                        context,
+                        library: library,
+                        settings: settings,
+                        picker: modelPicker,
                       ),
-                      const SizedBox(width: 10),
-                    ],
-                    _GlassNavButton(
-                      tooltip: '장치 연결',
-                      icon: Icons.link_rounded,
-                      onPressed: () => setState(() => selectedIndex = 1),
                     ),
                     const SizedBox(width: 10),
-                    _GlassNavButton(
-                      tooltip: '설정',
-                      icon: Icons.settings_outlined,
-                      onPressed: () => setState(() => selectedIndex = 2),
-                    ),
                   ],
-                ),
-              )
-            else
-              Positioned(
-                left: 16,
-                top: 14,
-                child: _GlassNavButton(
-                  tooltip: '주행 화면으로 돌아가기',
-                  icon: Icons.arrow_back_rounded,
-                  onPressed: () => setState(() => selectedIndex = 0),
-                ),
+                  GlassNavButton(
+                    tooltip: '장치 연결',
+                    icon: Icons.link_rounded,
+                    onPressed: openConnect,
+                  ),
+                  const SizedBox(width: 10),
+                  GlassNavButton(
+                    tooltip: '설정',
+                    icon: Icons.settings_outlined,
+                    onPressed: () => KovaRoutes.open(
+                      context,
+                      _pages.settingsPage(SettingsTab.app),
+                    ),
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -123,13 +128,14 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
   }
 
   Widget _roadView() {
-    final settings = widget.settings;
+    final settings = this.settings;
     if (settings == null) {
       return RoadViewScreen(
-        controller: widget.controller,
-        vehicleModel: widget.vehicleModel,
-        gpuSurfaceBuilder: widget.gpuSurfaceBuilder,
-        director: widget.director,
+        controller: controller,
+        vehicleModel: vehicleModel,
+        gpuSurfaceBuilder: gpuSurfaceBuilder,
+        gpuViewHost: gpuViewHost,
+        director: director,
       );
     }
     return AnimatedBuilder(
@@ -140,8 +146,8 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
           fit: StackFit.expand,
           children: [
             RoadViewScreen(
-              controller: widget.controller,
-              vehicleModel: widget.vehicleModel,
+              controller: controller,
+              vehicleModel: vehicleModel,
               viewpoint: value.viewpoint,
               theme: value.sceneTheme,
               layers: value.layers,
@@ -149,8 +155,9 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
               showHud: value.showHud,
               nativeVehicleOverlay: value.nativeVehicleOverlay,
               renderQuality: value.renderQuality,
-              gpuSurfaceBuilder: widget.gpuSurfaceBuilder,
-              director: widget.director,
+              gpuSurfaceBuilder: gpuSurfaceBuilder,
+              gpuViewHost: gpuViewHost,
+              director: director,
             ),
             if (value.brightness < 1)
               IgnorePointer(
@@ -164,36 +171,6 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
           ],
         );
       },
-    );
-  }
-}
-
-class _GlassNavButton extends StatelessWidget {
-  const _GlassNavButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: LiquidGlass(
-        radius: 24,
-        blur: 18,
-        tint: const Color(0x8CFFFFFF),
-        padding: EdgeInsets.zero,
-        child: IconButton(
-          onPressed: onPressed,
-          icon: Icon(icon, color: const Color(0xFF15191E)),
-          iconSize: 21,
-        ),
-      ),
     );
   }
 }

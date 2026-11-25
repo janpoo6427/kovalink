@@ -75,7 +75,7 @@ enum KovaParamType { boolean, integer, number, string, choice, unknown }
 
 enum KovaParamAccess { readOnly, readWrite, unknown }
 
-enum KovaApplyPolicy { immediate, offroad, restart, unknown }
+enum KovaApplyPolicy { immediate, offroad, parked, restart, unknown }
 
 enum KovaAvailability { available, pendingConsumer, unsupported, unknown }
 
@@ -131,11 +131,16 @@ class KovaParamSetting {
     required this.value,
     required this.defaultValue,
     this.applyStatus,
+    this.saveAnytime = false,
+    this.saveParkedOnly = false,
+    this.applyState,
+    this.appliedValue,
     this.minimum,
     this.maximum,
     this.step,
     this.unit,
     this.options = const [],
+    this.numericSwitch = false,
     this.hidden = false,
     this.requiredCapabilities = const [],
   });
@@ -148,6 +153,10 @@ class KovaParamSetting {
   final KovaApplyPolicy applyPolicy;
   final KovaAvailability availability;
   final String? applyStatus;
+  final bool saveAnytime;
+  final bool saveParkedOnly;
+  final String? applyState;
+  final Object? appliedValue;
   final KovaRisk risk;
   final LocalizedText title;
   final LocalizedText? description;
@@ -158,6 +167,7 @@ class KovaParamSetting {
   final num? step;
   final LocalizedText? unit;
   final List<KovaParamOption> options;
+  final bool numericSwitch;
   final bool hidden;
   final List<String> requiredCapabilities;
 
@@ -213,6 +223,12 @@ class KovaParamSetting {
       applyStatus: json['applyStatus'] is String
           ? json['applyStatus'] as String
           : null,
+      saveAnytime: json['savePolicy'] == 'anytime',
+      saveParkedOnly: json['savePolicy'] == 'parked',
+      applyState: json['applyState'] is String
+          ? json['applyState'] as String
+          : null,
+      appliedValue: json['appliedValue'],
       risk: _pick(KovaRisk.values, json['risk'], KovaRisk.unknown),
       title: title,
       description: LocalizedText.tryParse(json['description']),
@@ -223,6 +239,12 @@ class KovaParamSetting {
       step: _finite(json['step']),
       unit: LocalizedText.tryParse(json['unit']),
       options: options,
+      numericSwitch:
+          type == KovaParamType.choice &&
+          json['control'] == 'switch' &&
+          options.length == 2 &&
+          options.any((option) => option.matches(0)) &&
+          options.any((option) => option.matches(1)),
       hidden: json['hidden'] == true || json['visibility'] == 'hidden',
       requiredCapabilities: [
         if (capabilities is List)
@@ -273,13 +295,22 @@ class KovaParamSetting {
       KovaParamType.integer || KovaParamType.number =>
         hasRange ? KovaParamControl.slider : KovaParamControl.numberField,
       KovaParamType.choice =>
-        options.isEmpty ? KovaParamControl.readOnly : KovaParamControl.choice,
+        numericSwitch
+            ? KovaParamControl.toggle
+            : options.isEmpty
+            ? KovaParamControl.readOnly
+            : KovaParamControl.choice,
       // The contract has no string constraints yet, so strings are shown
       // but not edited.
       KovaParamType.string ||
       KovaParamType.unknown => KovaParamControl.readOnly,
     };
   }
+
+  Object toggleValue(bool enabled) =>
+      numericSwitch ? (enabled ? 1 : 0) : enabled;
+
+  bool isToggleOn(Object? value) => numericSwitch ? value == 1 : value == true;
 
   String formatNumber(num? v) {
     if (v == null) return '';
@@ -341,6 +372,7 @@ class KovaParamsDocument {
     required this.groups,
     required this.settings,
     this.deviceOffroad,
+    this.deviceParked,
   });
 
   final int schemaVersion;
@@ -356,6 +388,9 @@ class KovaParamsDocument {
 
   /// `device.offroad` from the gateway; null when the gateway did not say.
   final bool? deviceOffroad;
+
+  /// True when the Gateway verified P, standstill and disengagement.
+  final bool? deviceParked;
 
   KovaParamSetting? setting(String key) => settings[key];
 
@@ -452,6 +487,9 @@ class KovaParamsDocument {
     final offroad = device is Map && device['offroad'] is bool
         ? device['offroad'] as bool
         : null;
+    final parked = device is Map && device['parked'] is bool
+        ? device['parked'] as bool
+        : null;
     return KovaParamsDocument(
       schemaVersion: major,
       revision: revision,
@@ -460,6 +498,7 @@ class KovaParamsDocument {
       groups: groups,
       settings: settings,
       deviceOffroad: offroad,
+      deviceParked: parked,
     );
   }
 }

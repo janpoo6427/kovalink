@@ -77,7 +77,7 @@ void main() {
       find.byKey(const ValueKey('kova-lock-e2e.build_label')),
       findsOneWidget,
     );
-    expect(find.text('정차 중에만 변경'), findsOneWidget);
+    expect(find.text('시동을 끈 뒤 변경'), findsOneWidget);
     expect(find.text('재시작 후 적용'), findsOneWidget);
     expect(find.text('준비 중'), findsOneWidget);
     expect(find.textContaining('개발용 연결'), findsOneWidget);
@@ -172,6 +172,36 @@ void main() {
     expect(find.text('활발하게'), findsWidgets);
   });
 
+  testWidgets('numeric switch sends integer values in both directions', (
+    tester,
+  ) async {
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((setting) => setting['key'] == 'steering.always_on');
+    setting
+      ..['type'] = 'enum'
+      ..['control'] = 'switch'
+      ..['options'] = [0, 1]
+      ..['defaultValue'] = 0
+      ..['optionTitles'] = {
+        '0': {'ko': '끔', 'en': 'Off'},
+        '1': {'ko': '켬', 'en': 'On'},
+      };
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    final toggle = find.byKey(const ValueKey('kova-toggle-steering.always_on'));
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    for (final value in [1, 0]) {
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('kova-confirm-change')));
+      await tester.pumpAndSettle();
+      expect(gateway.posts.last['value'], isA<int>());
+      expect(gateway.posts.last['value'], value);
+      expect(tester.widget<Switch>(toggle).value, value == 1);
+    }
+  });
+
   testWidgets('number input rejects out-of-range text locally', (tester) async {
     await kova.connect('http://127.0.0.1:18082');
     await _pumpPanel(tester, kova);
@@ -194,12 +224,45 @@ void main() {
     expect(kova.document!.setting('e2e.level')!.value, 8);
   });
 
+  testWidgets('native longitudinal saves the reviewed value only in Park', (
+    tester,
+  ) async {
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((item) => item['key'] == 'steering.always_on');
+    setting
+      ..['key'] = 'cruise.openpilot_longitudinal'
+      ..['type'] = 'enum'
+      ..['control'] = 'switch'
+      ..['options'] = [0, 1]
+      ..['defaultValue'] = 0
+      ..['applyPolicy'] = 'restart'
+      ..['savePolicy'] = 'parked';
+    gateway.offroad = false;
+    gateway.parked = false;
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    final toggle = find.byKey(
+      const ValueKey('kova-toggle-cruise.openpilot_longitudinal'),
+    );
+    expect(tester.widget<Switch>(toggle).onChanged, isNull);
+    gateway.parked = true;
+    await kova.refresh();
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('kova-confirm-change')));
+    await tester.pumpAndSettle();
+    expect(gateway.posts.single['expectedValue'], 0);
+    expect(gateway.posts.single['value'], 1);
+  });
+
   testWidgets('LAN connection is read-only with every control disabled', (
     tester,
   ) async {
     await kova.connect('http://192.168.0.10:8082');
     await _pumpPanel(tester, kova);
-    expect(find.textContaining('보기만 할 수 있어요'), findsWidgets);
+    expect(find.textContaining('이 연결에는 설정을 바꿀 권한이 없어요'), findsOneWidget);
     final toggle = tester.widget<Switch>(
       find.byKey(const ValueKey('kova-toggle-steering.always_on')),
     );
@@ -231,6 +294,78 @@ void main() {
     expect(find.byKey(const ValueKey('kova-lock-e2e.level')), findsNothing);
   });
 
+  testWidgets(
+    'onroad a saved restart setting stays editable and shows pending',
+    (tester) async {
+      gateway.offroad = false;
+      final setting = (gateway.catalog['settings'] as List)
+          .cast<Map<String, dynamic>>()
+          .firstWhere((setting) => setting['key'] == 'e2e.level');
+      setting
+        ..['applyPolicy'] = 'restart'
+        ..['savePolicy'] = 'anytime'
+        ..['applyState'] = 'pendingRestart'
+        ..['appliedValue'] = 4;
+      await kova.connect('http://127.0.0.1:18082');
+      await _pumpPanel(tester, kova);
+      expect(
+        tester
+            .widget<Slider>(find.byKey(const ValueKey('kova-slider-e2e.level')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(find.text('저장됨 · 다음 시작 때 적용'), findsOneWidget);
+      setting['applyState'] = 'applied';
+      await kova.refresh();
+      await tester.pump();
+      expect(find.text('적용됨'), findsOneWidget);
+    },
+  );
+
+  testWidgets('P unlocks parked settings without unlocking offroad settings', (
+    tester,
+  ) async {
+    gateway.offroad = false;
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((setting) => setting['key'] == 'e2e.level');
+    setting['applyPolicy'] = 'parked';
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    expect(find.text('P에 두고 완전히 정차한 뒤 바꿀 수 있어요.'), findsOneWidget);
+    gateway.parked = true;
+    await kova.refresh();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('kova-lock-e2e.level')), findsNothing);
+    expect(find.text('시동을 끈 뒤 바꿀 수 있어요.'), findsWidgets);
+    await kova.setValue('e2e.level', 8);
+    expect(gateway.posts.single['value'], 8);
+  });
+
+  testWidgets('saved Park setting distinguishes pending from applied', (
+    tester,
+  ) async {
+    gateway.offroad = false;
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((setting) => setting['key'] == 'e2e.level');
+    setting
+      ..['applyPolicy'] = 'parked'
+      ..['savePolicy'] = 'anytime'
+      ..['applyState'] = 'pendingParked'
+      ..['appliedValue'] = 4;
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    final slider = find.byKey(const ValueKey('kova-slider-e2e.level'));
+    expect(tester.widget<Slider>(slider).onChanged, isNotNull);
+    expect(find.text('저장됨 · P 정차 시 적용'), findsOneWidget);
+    setting['applyState'] = 'applied';
+    gateway.parked = true;
+    await kova.refresh();
+    await tester.pump();
+    expect(find.text('적용됨'), findsOneWidget);
+  });
+
   testWidgets('conflict and rejection notices are drawn', (tester) async {
     await kova.connect('http://127.0.0.1:18082');
     await _pumpPanel(tester, kova);
@@ -243,7 +378,7 @@ void main() {
     await kova.refresh();
     await kova.setValue('steering.always_on', true);
     await tester.pump();
-    expect(find.textContaining('주행 중에는 바꿀 수 없어요. 차를 세운 뒤'), findsOneWidget);
+    expect(find.textContaining('시동을 끈 뒤 다시 해 주세요.'), findsOneWidget);
   });
 
   group('settings screen', () {
@@ -288,60 +423,9 @@ void main() {
         find.byKey(const ValueKey('kova-connection-card')),
         findsOneWidget,
       );
-      expect(find.text(AppSettings.defaultSettingsEndpoint), findsOneWidget);
+      // No comma found yet: no address (there is no comma.local default).
+      expect(find.text('아직 찾은 콤마가 없어요'), findsWidgets);
       expect(find.text('시점'), findsNothing);
     });
-
-    testWidgets('settings address follows the local-only policy', (
-      tester,
-    ) async {
-      final settings = SettingsController(store: MemorySettingsStore());
-      await pumpScreen(tester, settings);
-      await tester.enterText(
-        find.byKey(const ValueKey('setting-settings-endpoint')),
-        'http://example.com:8082',
-      );
-      await tester.tap(find.byKey(const ValueKey('setting-endpoint-save')));
-      await tester.pump();
-      expect(find.text('같은 네트워크 안의 주소만 쓸 수 있어요.'), findsOneWidget);
-      expect(
-        settings.value.settingsEndpoint,
-        AppSettings.defaultSettingsEndpoint,
-      );
-
-      await tester.tap(find.text('kovapilot'));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('kova-edit-address')));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('kova-address-field')),
-        'http://127.0.0.1:18082',
-      );
-      await tester.tap(find.byKey(const ValueKey('kova-address-save')));
-      await tester.pumpAndSettle();
-      expect(settings.value.settingsEndpoint, 'http://127.0.0.1:18082');
-      await tester.tap(find.byKey(const ValueKey('kova-connect')));
-      await tester.pump();
-      expect(find.text('연결됨'), findsOneWidget);
-      expect(kova.endpoint, 'http://127.0.0.1:18082');
-    });
-  });
-
-  test('settings address is stored, validated and restored', () {
-    const settings = AppSettings(settingsEndpoint: 'http://192.168.0.10:8082');
-    final restored = AppSettings.fromJson(settings.toJson());
-    expect(restored.settingsEndpoint, 'http://192.168.0.10:8082');
-    expect(
-      AppSettings.fromJson({
-        'settingsEndpoint': 'http://example.com',
-      }).settingsEndpoint,
-      AppSettings.defaultSettingsEndpoint,
-    );
-    expect(
-      AppSettings.fromJson({
-        'settingsEndpoint': 'http://127.0.0.1:1/v1/kova-params',
-      }).settingsEndpoint,
-      AppSettings.defaultSettingsEndpoint,
-    );
   });
 }

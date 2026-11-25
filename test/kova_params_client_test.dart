@@ -90,7 +90,7 @@ void main() {
     final onroad = await client.update('steering.always_on', true, 1);
     expect(onroad, isA<KovaUpdateRejected>());
     expect((onroad as KovaUpdateRejected).code, 'update_forbidden');
-    expect(onroad.reason, contains('주행 중'));
+    expect(onroad.reason, contains('시동을 끈 뒤'));
 
     final range = await client.update('e2e.level', 99, 1) as KovaUpdateRejected;
     expect(range.code, 'invalid_value');

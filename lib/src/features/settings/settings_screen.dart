@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/features/kovapilot_git/kovapilot_version_screen.dart';
 import 'package:kovalink/src/features/road_view/render_quality.dart';
 import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
 import 'package:kovalink/src/features/settings/kova_params_panel.dart';
+import 'package:kovalink/src/features/settings/renderer_diagnostics_card.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/models/display_units.dart';
@@ -18,6 +20,7 @@ import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
 import 'package:kovalink/src/vehicle_pack/vehicle_model_library.dart';
 import 'package:kovalink/src/widgets/page_header.dart';
+import 'package:kovalink/src/widgets/readable_width.dart';
 
 /// Which settings the screen shows. They live in different places and are
 /// never mixed: the app's own settings (this phone), the current gateway
@@ -34,6 +37,7 @@ class SettingsScreen extends StatefulWidget {
     this.modelPicker = pickModelFileWithSystemPicker,
     this.kovaParams,
     this.initialTab = SettingsTab.app,
+    this.onTabSelected,
     this.now,
     super.key,
   });
@@ -51,6 +55,11 @@ class SettingsScreen extends StatefulWidget {
   /// until the user taps 연결).
   final KovaParamsController? kovaParams;
   final SettingsTab initialTab;
+
+  /// Another tab was picked. The app replaces this page with that tab's
+  /// route, so back from any tab goes to the drive screen. Null switches
+  /// the tab in place (the screen used on its own, e.g. in tests).
+  final ValueChanged<SettingsTab>? onTabSelected;
 
   /// Clock for "n초 전" labels (captures).
   final DateTime Function()? now;
@@ -72,18 +81,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  String get _settingsAddress =>
-      widget.settings?.value.settingsEndpoint ??
-      AppSettings.defaultSettingsEndpoint;
-
-  Future<void> _editSettingsAddress() async {
-    final settings = widget.settings;
-    if (settings == null) return;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => _SettingsAddressDialog(settings: settings),
-    );
+  void _select(SettingsTab tab) {
+    if (tab == _tab) return;
+    final open = widget.onTabSelected;
+    if (open != null) {
+      open(tab);
+    } else {
+      setState(() => _tab = tab);
+    }
   }
+
+  /// The found comma's settings address; null before one is found.
+  String? get _settingsAddress => widget.settings?.value.settingsEndpoint;
 
   @override
   Widget build(BuildContext context) {
@@ -93,13 +102,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final modelPicker = widget.modelPicker;
     return AnimatedBuilder(
       animation: Listenable.merge([
-        controller,
+        controller.status,
         ?vehicleModel,
         ?settings,
         _kova,
       ]),
-      builder: (context, _) => ListView(
-        padding: const EdgeInsets.fromLTRB(20, 64, 20, 32),
+      builder: (context, _) => ReadableListView(
         children: [
           const PageHeader(title: '설정'),
           const SizedBox(height: 16),
@@ -112,30 +120,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ButtonSegment(
                   value: SettingsTab.app,
                   icon: Icon(Icons.phone_iphone, size: 18),
-                  label: Text('앱'),
+                  label: _TabLabel('앱'),
                 ),
                 ButtonSegment(
                   value: SettingsTab.session,
                   icon: Icon(Icons.cable, size: 18),
-                  label: Text('연결 상태'),
+                  label: _TabLabel('연결 상태'),
                 ),
                 ButtonSegment(
                   value: SettingsTab.kovapilot,
                   icon: Icon(Icons.directions_car_outlined, size: 18),
-                  label: Text('kovapilot'),
+                  label: _TabLabel('kovapilot'),
                 ),
               ],
               selected: {_tab},
-              onSelectionChanged: (s) => setState(() => _tab = s.first),
+              onSelectionChanged: (s) => _select(s.first),
             ),
           ),
           const SizedBox(height: 6),
           if (_tab == SettingsTab.kovapilot) ...[
             const SizedBox(height: 10),
+            KovapilotVersionEntry(
+              endpoint: _kova.endpoint ?? _settingsAddress,
+              sessionFor: _kova.sessionFor,
+            ),
             KovaParamsPanel(
               controller: _kova,
               address: _settingsAddress,
-              onEditAddress: settings == null ? null : _editSettingsAddress,
               now: widget.now,
             ),
           ] else if (_tab == SettingsTab.session)
@@ -148,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _DisplaySection(settings: settings),
             _LayerSection(settings: settings),
             _DemoSection(settings: settings, controller: controller),
-            _EndpointSection(settings: settings),
+            _AutoConnectSection(settings: settings),
             if (widget.library != null)
               _VehicleModelSection(
                 settings: settings,
@@ -158,6 +169,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     VehicleModelLoadResult.bundledDefault,
                 picker: modelPicker,
               ),
+            const DiagnosticsEntry(),
             if (settings.storageError case final error?)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
@@ -179,6 +191,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+
+/// Tab label that shrinks to fit a narrow phone instead of wrapping.
+class _TabLabel extends StatelessWidget {
+  const _TabLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => FittedBox(
+    fit: BoxFit.scaleDown,
+    child: Text(text, maxLines: 1, softWrap: false),
+  );
+}
+
+const _noComma = '아직 찾은 콤마가 없어요';
 
 /// Current gateway session facts. Nothing here is stored on the car.
 class _SessionSection extends StatelessWidget {
@@ -222,16 +249,14 @@ class _SessionSection extends StatelessWidget {
                 address:
                     controller.connectedEndpoint ??
                     settings?.value.telemetryEndpoint ??
-                    AppSettings.defaultTelemetryEndpoint,
+                    _noComma,
               ),
               const Divider(height: 1, indent: 56),
               _StatusTile(
                 icon: Icons.videocam_outlined,
                 title: '카메라',
                 status: '볼 때만 연결돼요',
-                address:
-                    settings?.value.signalingEndpoint ??
-                    AppSettings.defaultSignalingEndpoint,
+                address: settings?.value.signalingEndpoint ?? _noComma,
               ),
               const Divider(height: 1, indent: 56),
               _StatusTile(
@@ -241,15 +266,21 @@ class _SessionSection extends StatelessWidget {
                 address:
                     kova.endpoint ??
                     settings?.value.settingsEndpoint ??
-                    AppSettings.defaultSettingsEndpoint,
+                    _noComma,
               ),
               const Divider(height: 1, indent: 56),
               _StatusTile(
-                icon: controller.gatewayAuthenticated
+                icon:
+                    controller.gatewayAuthenticated ||
+                        settings?.value.registeredComma != null
                     ? Icons.verified_user_outlined
                     : Icons.no_encryption_gmailerrorred_outlined,
                 title: '기기 등록',
-                status: controller.gatewayAuthenticated ? '등록됨' : '아직 등록 전이에요',
+                status: controller.gatewayAuthenticated
+                    ? '등록됨 · 연결 토큰 확인됨'
+                    : settings?.value.registeredComma != null
+                    ? '등록됨'
+                    : '아직 등록 전이에요',
               ),
             ],
           ),
@@ -257,7 +288,7 @@ class _SessionSection extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
           child: Text(
-            '주소는 앱 탭에서 바꿀 수 있어요.',
+            '주소는 자동 연결이 찾은 콤마에 맞춰져요.',
             style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
           ),
         ),
@@ -301,62 +332,6 @@ class _StatusTile extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SettingsAddressDialog extends StatefulWidget {
-  const _SettingsAddressDialog({required this.settings});
-
-  final SettingsController settings;
-
-  @override
-  State<_SettingsAddressDialog> createState() => _SettingsAddressDialogState();
-}
-
-class _SettingsAddressDialogState extends State<_SettingsAddressDialog> {
-  late final text = TextEditingController(
-    text: widget.settings.value.settingsEndpoint,
-  );
-  String? error;
-
-  @override
-  void dispose() {
-    text.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('kovapilot 설정 주소'),
-    content: TextField(
-      key: const ValueKey('kova-address-field'),
-      controller: text,
-      keyboardType: TextInputType.url,
-      autocorrect: false,
-      decoration: InputDecoration(
-        hintText: AppSettings.defaultSettingsEndpoint,
-        errorText: error,
-        errorMaxLines: 3,
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('취소'),
-      ),
-      FilledButton(
-        key: const ValueKey('kova-address-save'),
-        onPressed: () {
-          final result = widget.settings.setSettingsEndpoint(text.text);
-          if (result == null) {
-            Navigator.of(context).pop();
-          } else {
-            setState(() => error = result);
-          }
-        },
-        child: const Text('저장'),
-      ),
-    ],
-  );
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -584,7 +559,7 @@ class _LayerSection extends StatelessWidget {
               ),
               toggle(
                 'hud',
-                '속도와 길 안내',
+                '속도와 제한속도',
                 value.showHud,
                 (s, on) => s.copyWith(showHud: on),
               ),
@@ -645,123 +620,25 @@ class _DemoSection extends StatelessWidget {
   }
 }
 
-class _EndpointSection extends StatefulWidget {
-  const _EndpointSection({required this.settings});
+class _AutoConnectSection extends StatelessWidget {
+  const _AutoConnectSection({required this.settings});
 
   final SettingsController settings;
-
-  @override
-  State<_EndpointSection> createState() => _EndpointSectionState();
-}
-
-class _EndpointSectionState extends State<_EndpointSection> {
-  late final telemetry = TextEditingController(
-    text: widget.settings.value.telemetryEndpoint,
-  );
-  late final signaling = TextEditingController(
-    text: widget.settings.value.signalingEndpoint,
-  );
-  late final settingsAddress = TextEditingController(
-    text: widget.settings.value.settingsEndpoint,
-  );
-  String? telemetryError;
-  String? signalingError;
-  String? settingsError;
-  String? saved;
-
-  @override
-  void dispose() {
-    telemetry.dispose();
-    signaling.dispose();
-    settingsAddress.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    setState(() {
-      telemetryError = widget.settings.setTelemetryEndpoint(telemetry.text);
-      signalingError = widget.settings.setSignalingEndpoint(signaling.text);
-      settingsError = widget.settings.setSettingsEndpoint(settingsAddress.text);
-      saved =
-          telemetryError == null &&
-              signalingError == null &&
-              settingsError == null
-          ? '저장했어요.'
-          : null;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('연결 주소'),
+        const _SectionTitle('자동 연결'),
         Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  key: const ValueKey('setting-telemetry-endpoint'),
-                  controller: telemetry,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    labelText: '주행 정보',
-                    hintText: AppSettings.defaultTelemetryEndpoint,
-                    errorText: telemetryError,
-                    errorMaxLines: 2,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  key: const ValueKey('setting-signaling-endpoint'),
-                  controller: signaling,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    labelText: '카메라',
-                    hintText: AppSettings.defaultSignalingEndpoint,
-                    errorText: signalingError,
-                    errorMaxLines: 2,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  key: const ValueKey('setting-settings-endpoint'),
-                  controller: settingsAddress,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    labelText: 'kovapilot 설정',
-                    hintText: AppSettings.defaultSettingsEndpoint,
-                    errorText: settingsError,
-                    errorMaxLines: 2,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        saved ?? '',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF8E9DA9),
-                        ),
-                      ),
-                    ),
-                    FilledButton(
-                      key: const ValueKey('setting-endpoint-save'),
-                      onPressed: _save,
-                      child: const Text('저장'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          child: SwitchListTile(
+            key: const ValueKey('setting-auto-connect'),
+            title: const Text('콤마 자동으로 찾기'),
+            subtitle: const Text('같은 와이파이나 핫스팟에 있는 콤마를 찾아서 연결해요.'),
+            value: settings.value.autoConnect,
+            onChanged: (on) =>
+                settings.update((s) => s.copyWith(autoConnect: on)),
           ),
         ),
       ],

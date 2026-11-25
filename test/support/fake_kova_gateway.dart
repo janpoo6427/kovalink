@@ -22,6 +22,7 @@ class FakeKovaGateway implements KovaParamsTransport {
 
   final Map<String, dynamic> catalog;
   bool offroad;
+  bool parked = false;
   bool reportOffroad = true;
   bool down = false;
   int revision = 0;
@@ -56,7 +57,7 @@ class FakeKovaGateway implements KovaParamsTransport {
       s['value'] = valueOf(s['key'] as String);
       s['applyStatus'] = s['availability'];
     }
-    if (reportOffroad) doc['device'] = {'offroad': offroad};
+    if (reportOffroad) doc['device'] = {'offroad': offroad, 'parked': parked};
     doc.addAll(extra);
     return doc;
   }
@@ -103,12 +104,15 @@ class FakeKovaGateway implements KovaParamsTransport {
   };
 
   KovaHttpResponse _apply(Map<String, dynamic> body) {
-    if (body.keys.toSet().difference({
-          'key',
-          'value',
-          'expectedRevision',
-        }).isNotEmpty ||
-        body.length != 3) {
+    final nativeLongitudinal = body['key'] == 'cruise.openpilot_longitudinal';
+    final fields = {
+      'key',
+      'value',
+      'expectedRevision',
+      if (nativeLongitudinal) 'expectedValue',
+    };
+    if (body.keys.toSet().difference(fields).isNotEmpty ||
+        body.length != fields.length) {
       return _error(
         400,
         'invalid_request',
@@ -119,6 +123,14 @@ class FakeKovaGateway implements KovaParamsTransport {
     final value = body['value'];
     final s = _setting(key);
     if (s == null) return _error(400, 'invalid_value', 'unknown setting: $key');
+    if (nativeLongitudinal &&
+        body['expectedValue'] != (values[key] ?? s['defaultValue'])) {
+      return _error(
+        409,
+        'revision_conflict',
+        'longitudinal preference changed',
+      );
+    }
     if (s['access'] != 'readWrite') {
       return _error(403, 'update_forbidden', 'setting is read-only: $key');
     }
@@ -127,6 +139,13 @@ class FakeKovaGateway implements KovaParamsTransport {
         403,
         'update_forbidden',
         'setting can only be changed offroad: $key',
+      );
+    }
+    if (s['applyPolicy'] == 'parked' && !offroad && !parked) {
+      return _error(
+        403,
+        'update_forbidden',
+        'setting can only be changed when parked or offroad: $key',
       );
     }
     if (!_typeOk(s, value)) {

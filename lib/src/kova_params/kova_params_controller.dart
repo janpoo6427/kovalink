@@ -2,18 +2,16 @@
 // API, the last authoritative document, per-setting "보내는 중" state and
 // the write lock.
 //
-// Write lock (decision pending, see docs/PROTOCOL.md): the gateway has no
-// pairing or authentication yet and binds only to loopback. KovaLink
-// therefore sends writes only when the settings address is loopback
-// (`127.0.0.1`, `::1`, `localhost`) — a development connection on the same
-// machine — or when [isAuthenticated] reports a paired session (always false
-// until pairing exists). Any LAN address stays read-only.
+// Write lock (docs/PROTOCOL.md): writes are sent only on a loopback
+// development connection or when a pinned Wi-Fi session and /v1/health
+// agree on the access method. The Gateway reports which settings are writable.
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:kovalink/src/kova_params/kova_params_client.dart';
 import 'package:kovalink/src/kova_params/kova_params_document.dart';
+import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 
 enum KovaLinkStatus { disconnected, connecting, connected, stale }
@@ -49,10 +47,11 @@ typedef KovaClientFactory =
 class KovaParamsController extends ChangeNotifier {
   KovaParamsController({
     KovaClientFactory? clientFactory,
-    this.pollInterval = const Duration(seconds: 15),
+    this.pollInterval = const Duration(seconds: 5),
     this.staleAfter = const Duration(seconds: 45),
     DateTime Function()? clock,
     bool Function()? isAuthenticated,
+    this.sessionFor,
   }) : _clientFactory =
            clientFactory ??
            ((endpoint, onError) =>
@@ -63,6 +62,19 @@ class KovaParamsController extends ChangeNotifier {
   final KovaClientFactory _clientFactory;
   final DateTime Function() _clock;
   final bool Function() _isAuthenticated;
+
+  /// The open session to the comma at a settings address (the app's
+  /// registered comma), used when [connect] is not given one.
+  final GatewaySession? Function(String address)? sessionFor;
+
+  GatewaySession? _session;
+  bool _sessionAuthenticated = false;
+
+  /// Why the last connect or read failed, or null.
+  KovaFailureKind? lastFailure;
+
+  /// True on a Wi-Fi session the comma authenticated.
+  bool get isAuthenticatedSession => _sessionAuthenticated;
 
   /// Background re-read while connected; null disables polling (tests).
   final Duration? pollInterval;
@@ -109,7 +121,9 @@ class KovaParamsController extends ChangeNotifier {
   KovaWriteLock get writeLock {
     if (document == null || _client == null) return KovaWriteLock.notConnected;
     if (status == KovaLinkStatus.stale) return KovaWriteLock.stale;
-    if (isLoopback || _isAuthenticated()) return KovaWriteLock.none;
+    if (isLoopback || _sessionAuthenticated || _isAuthenticated()) {
+      return KovaWriteLock.none;
+    }
     return KovaWriteLock.needsPairing;
   }
 
@@ -117,7 +131,7 @@ class KovaParamsController extends ChangeNotifier {
     KovaWriteLock.none => '',
     KovaWriteLock.notConnected => '연결하면 바꿀 수 있어요.',
     KovaWriteLock.stale => '다시 연결될 때까지 바꿀 수 없어요.',
-    KovaWriteLock.needsPairing => '지금은 보기만 할 수 있어요. 설정 변경은 아직 개발용 연결에서만 돼요.',
+    KovaWriteLock.needsPairing => '이 연결에는 설정을 바꿀 권한이 없어요.',
   };
 
   /// Per-setting line; the connection card shows [writeLockReason].
@@ -129,31 +143,74 @@ class KovaParamsController extends ChangeNotifier {
   };
 
   /// Why [setting] cannot be changed now, or null when it can.
-  String? lockReasonFor(KovaParamSetting setting) {
+  String? lockReasonFor(
+    KovaParamSetting setting, {
+    bool alreadySending = false,
+  }) {
     final lock = writeLock;
     if (lock != KovaWriteLock.none) return _shortLockReason(lock);
-    if (setting.control == KovaParamControl.readOnly) {
-      return '읽기 전용 항목이에요.';
-    }
     if (setting.status == KovaAvailability.unsupported) {
+      if (setting.key == 'cruise.curve_slowdown') {
+        return 'openpilot 종방향 제어를 지원할 때 사용할 수 있어요.';
+      }
       return '이 차에서는 쓸 수 없는 기능이에요.';
     }
+    if (setting.control == KovaParamControl.readOnly) {
+      if (setting.status == KovaAvailability.pendingConsumer) {
+        return '아직 차량에 적용할 수 없는 기능이에요.';
+      }
+      if (setting.access == KovaParamAccess.readOnly &&
+          setting.risk == KovaRisk.control &&
+          health?.authentication == 'localNetwork') {
+        return '소유자 인증 연결에서 바꿀 수 있는 제어 설정이에요.';
+      }
+      return '읽기 전용 항목이에요.';
+    }
+    if (setting.saveParkedOnly && document?.deviceParked != true) {
+      return 'P에 두고 완전히 정차한 뒤 제어를 해제해 주세요.';
+    }
+    if (!setting.saveAnytime &&
+        setting.applyPolicy == KovaApplyPolicy.parked &&
+        document?.deviceParked != true &&
+        document?.deviceOffroad != true) {
+      return 'P에 두고 완전히 정차한 뒤 바꿀 수 있어요.';
+    }
     final onroad = document?.deviceOffroad == false;
-    if (onroad &&
+    if (!setting.saveAnytime &&
+        !setting.saveParkedOnly &&
+        onroad &&
         (setting.applyPolicy == KovaApplyPolicy.offroad ||
             setting.applyPolicy == KovaApplyPolicy.restart)) {
-      return '주행 중에는 바꿀 수 없어요.';
+      return '시동을 끈 뒤 바꿀 수 있어요.';
     }
-    if (pending.containsKey(setting.key)) return '보내는 중이에요.';
+    if (!alreadySending && pending.containsKey(setting.key)) return '보내는 중이에요.';
     return null;
   }
 
   /// Connects to the settings origin: health check, then the document.
-  Future<String?> connect(String address) async {
+  /// A comma on Wi-Fi goes through [session] (or [sessionFor]): its pinned
+  /// client and token.
+  Future<String?> connect(String address, {GatewaySession? session}) async {
     _closeClient();
     final generation = ++_generation;
     String? policyError;
-    final client = _clientFactory(address, (e) => policyError = e);
+    final candidate = session ?? sessionFor?.call(address.trim());
+    final open =
+        candidate != null &&
+            !candidate.isClosed &&
+            LocalEndpointPolicy.validateSettings(address) == null &&
+            candidate.covers(LocalEndpointPolicy.settingsBase(address))
+        ? candidate
+        : null;
+    final KovaParamsClient? client;
+    if (open != null) {
+      client = KovaParamsClient(
+        LocalEndpointPolicy.settingsBase(address),
+        transport: open.transport,
+      );
+    } else {
+      client = _clientFactory(address, (e) => policyError = e);
+    }
     if (client == null) {
       error = policyError ?? '주소를 다시 확인해 주세요.';
       _status = KovaLinkStatus.disconnected;
@@ -161,6 +218,9 @@ class KovaParamsController extends ChangeNotifier {
       return error;
     }
     _client = client;
+    _session = open;
+    _sessionAuthenticated = false;
+    lastFailure = null;
     endpoint = address.trim();
     _status = KovaLinkStatus.connecting;
     error = null;
@@ -171,6 +231,11 @@ class KovaParamsController extends ChangeNotifier {
     try {
       health = await client.health();
       if (generation != _generation) return null;
+      final authentication = _session?.wifiAuthentication;
+      _sessionAuthenticated =
+          authentication != null &&
+          health?.bindScope == 'wifi' &&
+          health?.authentication == authentication;
       await _read(client);
       if (generation != _generation) return null;
       _status = KovaLinkStatus.connected;
@@ -181,6 +246,7 @@ class KovaParamsController extends ChangeNotifier {
     } on KovaParamsException catch (e) {
       if (generation != _generation) return null;
       error = e.message;
+      lastFailure = e.kind;
       _status = KovaLinkStatus.disconnected;
       _closeClient();
       _notify();
@@ -189,7 +255,9 @@ class KovaParamsController extends ChangeNotifier {
   }
 
   Future<void> _read(KovaParamsClient client) async {
-    document = await client.fetch();
+    final fetched = await client.fetch();
+    if (_client != client) return;
+    document = fetched;
     lastReadAt = _clock();
   }
 
@@ -210,8 +278,12 @@ class KovaParamsController extends ChangeNotifier {
     } on KovaParamsException catch (e) {
       if (generation != _generation) return false;
       error = e.message;
-      if (e.kind == KovaFailureKind.schema) {
-        // Unknown major schema: close instead of showing old values.
+      lastFailure = e.kind;
+      if (e.kind == KovaFailureKind.schema ||
+          e.kind == KovaFailureKind.identity ||
+          e.kind == KovaFailureKind.unauthorized) {
+        // Unknown major schema, another comma or a refused token: close
+        // instead of showing old values.
         document = null;
         _status = KovaLinkStatus.disconnected;
         _closeClient();
@@ -241,7 +313,11 @@ class KovaParamsController extends ChangeNotifier {
 
   /// Sends one change. The screen shows "보내는 중" until the gateway
   /// answers; only a 200 document changes the confirmed value.
-  Future<KovaUpdateOutcome?> setValue(String key, Object? value) async {
+  Future<KovaUpdateOutcome?> setValue(
+    String key,
+    Object? value, {
+    KovaParamSetting? reviewedSetting,
+  }) async {
     final client = _client;
     final current = document;
     final setting = current?.setting(key);
@@ -258,7 +334,55 @@ class KovaParamsController extends ChangeNotifier {
     notices[key] = const KovaSettingNotice(KovaNoticeKind.sending, '보내는 중…');
     _notify();
 
-    final outcome = await client.update(key, value, current.revision);
+    final refreshed = await refresh();
+    if (generation != _generation) return null;
+    if (!refreshed) {
+      pending.remove(key);
+      const message = '콤마의 현재 설정을 확인하지 못해 저장하지 않았어요.';
+      notices[key] = const KovaSettingNotice(KovaNoticeKind.failed, message);
+      _notify();
+      return const KovaUpdateFailed(message);
+    }
+    final latest = document!;
+    final refreshedSetting = latest.setting(key);
+    final reviewed = reviewedSetting ?? setting;
+    if (refreshedSetting == null ||
+        refreshedSetting.value != reviewed.value ||
+        refreshedSetting.type != reviewed.type ||
+        refreshedSetting.risk != reviewed.risk ||
+        refreshedSetting.applyPolicy != reviewed.applyPolicy) {
+      pending.remove(key);
+      notices[key] = KovaSettingNotice(
+        KovaNoticeKind.conflict,
+        refreshedSetting == null
+            ? '콤마의 설정 항목이 바뀌었어요. 다시 확인해 주세요.'
+            : '다른 곳에서 먼저 바뀌었어요. 지금 값: '
+                  '${refreshedSetting.describe(refreshedSetting.value, defaultLocale: latest.defaultLocale)}'
+                  '${refreshedSetting.value == reviewed.value ? '' : ', 이전: ${reviewed.describe(reviewed.value, defaultLocale: current.defaultLocale)}'}',
+      );
+      _notify();
+      return const KovaUpdateConflict();
+    }
+    final lock = lockReasonFor(refreshedSetting, alreadySending: true);
+    final rejection = lock ?? refreshedSetting.check(value);
+    if (rejection != null) {
+      pending.remove(key);
+      notices[key] = KovaSettingNotice(KovaNoticeKind.rejected, rejection);
+      _notify();
+      return KovaUpdateRejected(
+        code: lock == null ? 'invalid_value' : 'update_forbidden',
+        statusCode: lock == null ? 400 : 403,
+        reason: rejection,
+      );
+    }
+    final outcome = await client.update(
+      key,
+      value,
+      latest.revision,
+      expectedValue: key == 'cruise.openpilot_longitudinal'
+          ? refreshedSetting.value
+          : null,
+    );
     if (generation != _generation) return outcome;
     pending.remove(key);
     final locale = current.defaultLocale;
@@ -336,8 +460,11 @@ class KovaParamsController extends ChangeNotifier {
   void _closeClient() {
     _poll?.cancel();
     _poll = null;
+    // A session's transport leaves the shared client open.
     _client?.close();
     _client = null;
+    _session = null;
+    _sessionAuthenticated = false;
   }
 
   void _notify() {
