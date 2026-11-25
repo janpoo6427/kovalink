@@ -57,6 +57,9 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
+    // The road view runs under the bottom inset (home indicator, gesture
+    // or button nav bar); the buttons stay above it.
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -85,7 +88,7 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
             if (selectedIndex == 0)
               Positioned(
                 right: 16,
-                bottom: 18,
+                bottom: 18 + bottomInset,
                 child: Row(
                   children: [
                     if (widget.autoConnect case final auto?) ...[
