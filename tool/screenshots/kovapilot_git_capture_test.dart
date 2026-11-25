@@ -6,7 +6,9 @@
 // Writes one PNG per state and two contact sheets (JPG) to $KOVA_SHOT_DIR:
 // sheet_git_screens.jpg (phone portrait, phone landscape, tablets) and
 // sheet_git_previews.jpg (switch preview, reset preview with modified files,
-// the loopback-only refusal). Data comes from the in-memory gateway in
+// the loopback-only refusal) and sheet_git_branch_first.jpg (the branch
+// list's note, switch and reset previews, a detached HEAD and a commit made
+// only on the comma). Data comes from the in-memory gateway in
 // test/support/fake_kova_git_gateway.dart, which follows the kovapilot
 // gateway contract; the real gateway is covered by
 // test/kovapilot_git_e2e_test.dart.
@@ -401,6 +403,100 @@ void main() {
     final busy = _Shot('git_error_busy', '콤마가 바쁨', '503 git_busy', _phone);
     await _capture(tester, busy, setup: (g) => g.mode = FakeGitMode.busy);
 
+    // Branch first: the list's note, a reset inside the current branch, a
+    // detached HEAD and a commit made only on the comma.
+    final branchNote = _Shot(
+      'git_branch_note',
+      '브랜치 목록 아래 안내',
+      '다른 브랜치 커밋은 먼저 바꾼 뒤',
+      _phone,
+    );
+    await _capture(
+      tester,
+      branchNote,
+      act: (tester, _) async {
+        final last = find.byKey(const ValueKey('git-branch-release/stable'));
+        await tester.scrollUntilVisible(last, 200, scrollable: _page);
+        await tester.pumpAndSettle();
+        final top = tester.getRect(last).top;
+        await tester.drag(_page, Offset(0, -(top - 420)));
+      },
+    );
+
+    final resetHere = _Shot(
+      'git_reset_preview',
+      '커밋으로 되돌리기 미리보기',
+      '지금 브랜치(master) 안에서만',
+      _phone,
+    );
+    await _capture(
+      tester,
+      resetHere,
+      act: (tester, gateway) async {
+        final tile = find.byKey(
+          ValueKey('git-commit-${gateway.headHistory()[4].sha}'),
+        );
+        await tester.scrollUntilVisible(tile, 300, scrollable: _page);
+        await tester.pumpAndSettle();
+        await tester.tap(tile);
+      },
+    );
+
+    final detached = _Shot(
+      'git_detached',
+      '브랜치 없이 커밋에 고정',
+      '되돌리기 전에 브랜치로 바꾸기',
+      _phone,
+    );
+    await _capture(
+      tester,
+      detached,
+      setup: (g) => g
+        ..head = g.headHistory()[3]
+        ..branch = null
+        ..upstream = null,
+      act: (tester, _) async {
+        final card = find.byKey(const ValueKey('git-history-card'));
+        await tester.scrollUntilVisible(card, 300, scrollable: _page);
+        await tester.pumpAndSettle();
+        final top = tester.getRect(card).top;
+        await tester.drag(_page, Offset(0, -(top - 330)));
+      },
+    );
+
+    final outside = _Shot(
+      'git_reset_outside',
+      '콤마에만 있는 커밋',
+      '브랜치 기록 밖이라 되돌릴 수 없음',
+      _phone,
+    );
+    await _capture(
+      tester,
+      outside,
+      setup: (g) => g.commitOnComma('wip: 콤마에서만 만든 커밋'),
+      act: (tester, gateway) async {
+        final tile = find.byKey(ValueKey('git-commit-${gateway.head.sha}'));
+        await tester.scrollUntilVisible(tile, 300, scrollable: _page);
+        await tester.pumpAndSettle();
+        await tester.tap(tile);
+      },
+    );
+
+    final detachedTablet = _Shot(
+      'git_detached_tablet',
+      '태블릿 · 브랜치 없이 고정',
+      _size(_tabletLandscape),
+      _tabletLandscape,
+    );
+    await _capture(
+      tester,
+      detachedTablet,
+      setup: (g) => g
+        ..head = g.headHistory()[3]
+        ..branch = null
+        ..upstream = null,
+    );
+
     await tester.runAsync(() async {
       await _sheet('sheet_git_screens', 'KovaLink · kovapilot 버전', [
         phone,
@@ -419,6 +515,13 @@ void main() {
         search,
         tabletPreview,
         down,
+      ]);
+      await _sheet('sheet_git_branch_first', 'KovaLink · 되돌리기는 지금 브랜치 안에서만', [
+        branchNote,
+        switchPreview,
+        resetHere,
+        detached,
+        outside,
       ]);
     });
   });
