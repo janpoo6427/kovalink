@@ -148,8 +148,7 @@ class GatewayController extends ChangeNotifier {
     }
   }
 
-  /// A Wi-Fi URL only opens through a session for that comma: the token
-  /// and certificate check never get skipped.
+  /// A Wi-Fi URL only opens through a session that checks its certificate.
   Future<WebSocket> _open(String url, GatewaySession? session) {
     final uri = Uri.parse(url);
     if (session != null && !session.isClosed && session.covers(uri)) {
@@ -162,7 +161,7 @@ class GatewayController extends ChangeNotifier {
   }
 
   static bool _authenticated(GatewaySession? session) =>
-      session != null && session.sendsToken;
+      session?.wifiAuthentication != null;
 
   void _attach(
     WebSocket socket,

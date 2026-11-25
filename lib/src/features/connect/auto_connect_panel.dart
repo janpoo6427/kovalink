@@ -252,6 +252,7 @@ class AutoConnectPanel extends StatelessWidget {
                           : null,
                       onRegister:
                           onRegister != null &&
+                              !d.localNetwork &&
                               d != c.device &&
                               (!c.canAttach(d) ||
                                   problem == KovaLinkProblem.tokenRejected ||
@@ -457,7 +458,9 @@ class _DeviceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = !device.secure
+    final subtitle = device.localNetwork
+        ? '같은 네트워크에서 연결 가능'
+        : !device.secure
         ? 'kovapilot이 답했어요'
         : registered
         ? '등록한 콤마예요'

@@ -125,13 +125,19 @@ HttpClient gatewayTlsClient({
 }
 
 class GatewaySession {
-  GatewaySession._(this.endpoints, this.credentials, this.client);
+  GatewaySession._(
+    this.endpoints,
+    this.credentials,
+    this.localNetworkPin,
+    this.client,
+  );
 
-  /// A comma on Wi-Fi ([KovapilotEndpoints.secure]) needs [credentials];
-  /// a loopback development gateway uses plain HTTP and never gets a token.
+  /// Wi-Fi sessions check the pinned certificate with either bearer
+  /// credentials or the certificate observed during local network discovery.
   factory GatewaySession({
     required KovapilotEndpoints endpoints,
     GatewayCredentials? credentials,
+    GatewayPin? localNetworkPin,
     SecurityContext Function()? context,
     Duration connectTimeout = const Duration(seconds: 3),
   }) {
@@ -139,11 +145,11 @@ class GatewaySession {
       final client = HttpClient()
         ..findProxy = ((_) => 'DIRECT')
         ..connectionTimeout = connectTimeout;
-      return GatewaySession._(endpoints, null, client);
+      return GatewaySession._(endpoints, null, null, client);
     }
-    final pin = credentials?.pin;
-    if (credentials == null || pin == null) {
-      throw ArgumentError('a comma on Wi-Fi needs its pin and token');
+    final pin = credentials?.pin ?? localNetworkPin;
+    if (pin == null || (credentials != null && localNetworkPin != null)) {
+      throw ArgumentError('a Wi-Fi session needs exactly one access method');
     }
     late final GatewaySession session;
     final client = gatewayTlsClient(
@@ -154,12 +160,13 @@ class GatewaySession {
       connectTimeout: connectTimeout,
       context: context,
     );
-    session = GatewaySession._(endpoints, credentials, client);
+    session = GatewaySession._(endpoints, credentials, localNetworkPin, client);
     return session;
   }
 
   final KovapilotEndpoints endpoints;
   final GatewayCredentials? credentials;
+  final GatewayPin? localNetworkPin;
 
   /// Tests: a session whose settings and Git requests go to [transport]
   /// (no network). Telemetry and camera are not used through it.
@@ -168,6 +175,7 @@ class GatewaySession {
     KovaParamsTransport this._transport, {
     required this.endpoints,
     this.credentials,
+    this.localNetworkPin,
   }) : client = HttpClient();
 
   /// The one client for every request to this comma.
@@ -181,6 +189,12 @@ class GatewaySession {
 
   /// True when requests carry the token (Wi-Fi with a registered comma).
   bool get sendsToken => endpoints.secure && credentials != null;
+
+  String? get wifiAuthentication => sendsToken
+      ? 'bearer'
+      : endpoints.secure && localNetworkPin != null
+      ? 'localNetwork'
+      : null;
 
   /// Headers for a WebSocket handshake. Never contains an Origin header
   /// (kovapilot refuses Wi-Fi requests that have one).

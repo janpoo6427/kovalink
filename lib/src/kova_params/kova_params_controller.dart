@@ -3,10 +3,8 @@
 // the write lock.
 //
 // Write lock (docs/PROTOCOL.md): writes are sent only on a loopback
-// development connection (`127.0.0.1`, `::1`, `localhost`) or on a Wi-Fi
-// session to a registered comma whose certificate pin matched and whose
-// token the comma accepted (`/v1/health` says bindScope wifi, bearer
-// authentication). Any other LAN address stays read-only.
+// development connection or when a pinned Wi-Fi session and /v1/health
+// agree on the access method. The Gateway reports which settings are writable.
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -208,10 +206,11 @@ class KovaParamsController extends ChangeNotifier {
     try {
       health = await client.health();
       if (generation != _generation) return null;
+      final authentication = _session?.wifiAuthentication;
       _sessionAuthenticated =
-          _session?.sendsToken == true &&
+          authentication != null &&
           health?.bindScope == 'wifi' &&
-          health?.authentication == 'bearer';
+          health?.authentication == authentication;
       await _read(client);
       if (generation != _generation) return null;
       _status = KovaLinkStatus.connected;

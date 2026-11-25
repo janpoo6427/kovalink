@@ -279,15 +279,18 @@ KovaLink write rules:
 - Writes are locked while the connection is stale (last read failed or older
   than 45 s).
 
-### Authenticated Wi-Fi connection
+### Wi-Fi connection
 
-The operator provisions and enables the Gateway on comma first. In
-**연결 → 콤마 등록**, choose the discovered address or enter the current IP.
-Registration needs the operator-provided token and SHA-256 public-key pin
-(or a trusted copy of the device certificate). The app verifies the device
-pin before sending the bearer token over HTTPS or WSS. Rediscovery can use the
-same identity at a new private IP. Settings writes also require a current
-settings document and any per-setting policy checks.
+A supported HTTPS health response with `bindScope: "wifi"` and
+`authentication: "localNetwork"` lets Link connect automatically on the
+same private subnet. It pins the certificate observed during discovery for
+HTTPS and WSS. The Gateway grants display, comfort and behavior writes
+subject to the catalog and its apply policies. Control settings are
+read-only in this mode.
+
+An explicitly provisioned Gateway can instead answer with a Bearer
+challenge. Link uses the saved registration or asks for its token and
+certificate on first connection to that device.
 
 ### End-to-end test
 

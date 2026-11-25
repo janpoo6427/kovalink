@@ -50,10 +50,9 @@ abstract final class KovaLinkText {
 
   static String detail(KovaLinkProblem problem) => switch (problem) {
     KovaLinkProblem.notFound =>
-      '콤마에서 Link 초기 설정을 마쳤는지 확인해 주세요. '
+      '콤마가 부팅을 마쳤는지 확인해 주세요. '
           '같은 네트워크에서 검색되지 않으면 콤마 화면의 IP로 연결해 보세요.',
-    KovaLinkProblem.noAnswer =>
-      '콤마가 켜져 있는지, IP가 맞는지, 콤마에서 Link 초기 설정을 마쳤는지 확인해 주세요.',
+    KovaLinkProblem.noAnswer => '콤마의 부팅이 끝났는지와 입력한 IP가 맞는지 확인해 주세요.',
     KovaLinkProblem.tokenRejected =>
       '콤마가 이 토큰을 거절했어요. 관리자가 콤마의 토큰을 바꿨다면 새 토큰으로 다시 등록해 주세요.',
     KovaLinkProblem.identityMismatch =>

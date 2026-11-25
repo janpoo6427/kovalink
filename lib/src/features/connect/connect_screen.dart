@@ -76,6 +76,7 @@ class ConnectScreen extends StatelessWidget {
         controller.roadStream,
         ?settings,
         ?link,
+        ?autoConnect,
       ]),
       builder: (context, _) => ReadableListView(
         children: [
@@ -91,7 +92,13 @@ class ConnectScreen extends StatelessWidget {
             ),
             const SizedBox(height: 14),
           ],
-          if (link != null) ...[
+          if (link != null &&
+              link.session?.localNetworkPin == null &&
+              (link.registered != null ||
+                  (autoConnect?.found.any(
+                        (device) => device.secure && !device.localNetwork,
+                      ) ??
+                      false))) ...[
             RegisteredCommaCard(
               link: link,
               onRegister: () => _register(context, null),

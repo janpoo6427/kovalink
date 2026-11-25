@@ -6,10 +6,14 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kovalink/src/kova_params/kova_params_client.dart';
+import 'package:kovalink/src/network/comma_registry.dart';
+import 'package:kovalink/src/network/device_discovery.dart';
 import 'package:kovalink/src/network/gateway_pin.dart';
 import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/kovapilot_endpoints.dart';
+import 'package:kovalink/src/services/comma_link.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
+import 'package:kovalink/src/settings/app_settings.dart';
 
 import 'support/fake_wifi_gateway.dart';
 
@@ -41,6 +45,44 @@ Future<FakeWifiGateway> _startGateway({String cert = 'device_a'}) async {
 }
 
 void main() {
+  test('discovered local network gateway opens without registration', () async {
+    final gateway = await FakeWifiGateway.start(
+      address: '127.0.0.1',
+      localNetwork: true,
+    );
+    addTearDown(gateway.close);
+    final settings = SettingsController(store: MemorySettingsStore());
+    addTearDown(settings.dispose);
+    final tokens = MemoryCommaTokenStore();
+    final link = CommaLink(settings: settings, tokens: tokens);
+    addTearDown(link.dispose);
+
+    final found = judgeGatewayChallenge(
+      gateway.address,
+      gateway.port,
+      200,
+      const [],
+      '{"status":"ok","schemaVersion":1,"bindScope":"wifi","authentication":"localNetwork"}',
+      fixturePin(pinDeviceA),
+    );
+    expect(found.outcome, ProbeOutcome.kova);
+    expect(link.canAttach(found.device!), isTrue);
+    expect(await link.open(found.device!), isNull);
+    expect(link.session!.wifiAuthentication, 'localNetwork');
+    expect(link.session!.authorization, isEmpty);
+    final socket = await link.session!.openWebSocket(
+      link.session!.endpoints.telemetry,
+    );
+    addTearDown(socket.close);
+    expect(await socket.first, contains('speedMps'));
+    expect(settings.value.registeredComma, isNull);
+    expect(tokens.tokens, isEmpty);
+    expect(
+      gateway.requests.map((request) => request.authorization),
+      everyElement(isNull),
+    );
+  });
+
   test('matching pin: the request carries the token', () async {
     final gateway = await _startGateway();
     final session = _session(gateway);

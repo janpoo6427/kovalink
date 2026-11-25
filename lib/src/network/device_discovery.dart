@@ -3,10 +3,8 @@
 // probed, and only on Wi-Fi, hotspot, USB or wired interfaces: mobile data
 // (cellular) and VPN interfaces are never scanned.
 //
-// On Wi-Fi a comma answers only over TLS and only with its token, so the
-// Finder ([GatewayDeviceProbe]) asks `/v1/health` without one: kovapilot's
-// 401 Bearer challenge marks a comma, and the pin of the certificate it
-// presented is recorded. The token is never sent by the Finder.
+// The Finder asks for HTTPS health without credentials. A comma answers with
+// local-network access or a Bearer challenge, paired with its certificate pin.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -353,6 +351,7 @@ class KovaDevice {
     this.schemaVersion = supportedKovaParamsSchema,
     this.bindScope,
     this.secure = false,
+    this.localNetwork = false,
     this.pin,
   });
 
@@ -361,9 +360,11 @@ class KovaDevice {
   final int schemaVersion;
   final String? bindScope;
 
-  /// Reached over TLS: a comma on Wi-Fi, which needs its token. A plain
-  /// device is a loopback development gateway.
+  /// A Wi-Fi gateway reached over TLS. Plain is for loopback development.
   final bool secure;
+
+  /// The gateway accepts clients on its local subnet without a stored token.
+  final bool localNetwork;
 
   /// Pin of the certificate the comma presented (TLS only).
   final GatewayPin? pin;
@@ -383,10 +384,11 @@ class KovaDevice {
       other.host == host &&
       other.port == port &&
       other.secure == secure &&
+      other.localNetwork == localNetwork &&
       other.pin == pin;
 
   @override
-  int get hashCode => Object.hash(host, port, secure, pin);
+  int get hashCode => Object.hash(host, port, secure, localNetwork, pin);
 
   @override
   String toString() => 'KovaDevice($label)';
@@ -589,8 +591,8 @@ class HttpDeviceProbe implements DeviceProbe {
 /// Reads a TLS `/v1/health` answer given without a token. kovapilot on
 /// Wi-Fi answers 401 `authentication_required` with a Bearer challenge:
 /// that is a comma (its certificate [pin] is kept). 403
-/// `wifi_client_required` is a comma refusing this phone. Anything else,
-/// including a 200 without a token, is not a comma.
+/// `wifi_client_required` is a comma refusing this phone. A supported health
+/// response with `localNetwork` access advertises automatic connection.
 ProbeResult judgeGatewayChallenge(
   String host,
   int port,
@@ -603,6 +605,23 @@ ProbeResult judgeGatewayChallenge(
   String? code;
   try {
     final json = jsonDecode(body);
+    if (statusCode == 200 &&
+        json is Map &&
+        json['status'] == 'ok' &&
+        json['schemaVersion'] == supportedKovaParamsSchema &&
+        json['bindScope'] == 'wifi' &&
+        json['authentication'] == 'localNetwork') {
+      return ProbeResult.kova(
+        KovaDevice(
+          host: host,
+          port: port,
+          bindScope: 'wifi',
+          secure: true,
+          localNetwork: true,
+          pin: pin,
+        ),
+      );
+    }
     if (json is Map && json['error'] is Map) {
       final value = (json['error'] as Map)['code'];
       if (value is String) code = value;

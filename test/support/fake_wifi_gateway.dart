@@ -65,12 +65,13 @@ class SeenRequest {
 }
 
 class FakeWifiGateway {
-  FakeWifiGateway._(this._server, this.address, this.token);
+  FakeWifiGateway._(this._server, this.address, this.token, this.localNetwork);
 
   static Future<FakeWifiGateway> start({
     String cert = 'device_a',
     String address = '127.0.0.2',
     String token = testToken,
+    bool localNetwork = false,
     int port = 0,
   }) async {
     final server = await HttpServer.bindSecure(
@@ -78,13 +79,14 @@ class FakeWifiGateway {
       port,
       fixtureServerContext(cert),
     );
-    final gateway = FakeWifiGateway._(server, address, token);
+    final gateway = FakeWifiGateway._(server, address, token, localNetwork);
     server.listen(gateway._handle);
     return gateway;
   }
 
   final HttpServer _server;
   final String address;
+  final bool localNetwork;
   String token;
   final settings = FakeKovaGateway();
   final requests = <SeenRequest>[];
@@ -144,7 +146,7 @@ class FakeWifiGateway {
       return _error(request, 403, 'wifi_client_required');
     }
     final auth = request.headers[HttpHeaders.authorizationHeader] ?? const [];
-    if (auth.length != 1 || auth.single != 'Bearer $token') {
+    if (!localNetwork && (auth.length != 1 || auth.single != 'Bearer $token')) {
       return _error(request, 401, 'authentication_required', {
         HttpHeaders.wwwAuthenticateHeader: 'Bearer',
       });
@@ -155,7 +157,7 @@ class FakeWifiGateway {
           'status': 'ok',
           'schemaVersion': schemaVersion,
           'bindScope': 'wifi',
-          'authentication': 'bearer',
+          'authentication': localNetwork ? 'localNetwork' : 'bearer',
         });
       case ('GET', '/v1/kova-params'):
         final r = await settings.get(request.uri, const Duration(seconds: 5));

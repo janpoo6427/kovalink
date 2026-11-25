@@ -502,7 +502,36 @@ void main() {
       await _settle(tester);
       expect(settings.value.registeredComma, isNull);
       expect(tokens.tokens, isEmpty);
-      expect(find.textContaining('아직 등록한 콤마가 없어요'), findsOneWidget);
+      expect(find.byKey(const ValueKey('registered-comma-card')), findsNothing);
+    });
+
+    testWidgets('same-network comma connects without showing registration', (
+      tester,
+    ) async {
+      final device = KovaDevice(
+        host: '192.168.43.20',
+        port: 8082,
+        secure: true,
+        localNetwork: true,
+        pin: fixturePin(pinDeviceA),
+      );
+      probe.answers[device.label] = ProbeResult.kova(device);
+      await pumpConnect(tester);
+      auto.setEnabled(true);
+      try {
+        await _settle(tester);
+        expect(target.attached, [device]);
+        expect(auto.phase, AutoConnectPhase.connected);
+        expect(find.text('같은 네트워크에서 연결 가능'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('registered-comma-card')),
+          findsNothing,
+        );
+        expect(find.text('등록'), findsNothing);
+      } finally {
+        auto.setEnabled(false);
+        await tester.pump();
+      }
     });
 
     testWidgets('camera waits for a comma; no comma.local anywhere', (

@@ -54,10 +54,12 @@ class CommaLink extends ChangeNotifier {
 
   RegisteredComma? get registered => settings.value.registeredComma;
 
-  /// True when [device] may be connected without the user: the registered
-  /// comma (same pin, any address) or a loopback development gateway.
+  /// The network may authorize a new gateway. A saved registration still
+  /// limits automatic connection to that certificate.
   bool canAttach(KovaDevice device) =>
-      !device.secure || (registered?.isPresentedBy(device) ?? false);
+      !device.secure ||
+      (registered?.isPresentedBy(device) ??
+          (device.localNetwork && device.pin != null));
 
   /// The session for the comma at [address] (any path on its origin).
   GatewaySession? sessionFor(String address) {
@@ -80,7 +82,12 @@ class CommaLink extends ChangeNotifier {
     if (current != null &&
         !current.isClosed &&
         current.endpoints == endpoints) {
-      if (!device.secure || current.credentials?.pin == registered?.pin) {
+      final sameIdentity = device.localNetwork
+          ? current.localNetworkPin == device.pin && canAttach(device)
+          : current.credentials?.pin == registered?.pin &&
+                current.credentials != null &&
+                canAttach(device);
+      if (!device.secure || sameIdentity) {
         return _ok(current, health);
       }
     }
@@ -94,6 +101,19 @@ class CommaLink extends ChangeNotifier {
       return null;
     }
     final comma = registered;
+    if (device.localNetwork) {
+      if (!canAttach(device)) return _fail(KovaLinkProblem.identityMismatch);
+      final candidate = GatewaySession(
+        endpoints: endpoints,
+        localNetworkPin: device.pin!,
+      );
+      final result = await check(candidate);
+      if (result.problem case final problem?) {
+        candidate.close();
+        return _fail(problem);
+      }
+      return _ok(candidate, result.health);
+    }
     if (comma == null || !comma.isPresentedBy(device)) {
       return _fail(KovaLinkProblem.needsRegistration);
     }
@@ -129,7 +149,8 @@ class CommaLink extends ChangeNotifier {
     try {
       final health = await client.health();
       if (session.endpoints.secure &&
-          (health.bindScope != 'wifi' || health.authentication != 'bearer')) {
+          (health.bindScope != 'wifi' ||
+              health.authentication != session.wifiAuthentication)) {
         return (problem: KovaLinkProblem.notKova, health: health);
       }
       return (problem: null, health: health);
