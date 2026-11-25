@@ -87,9 +87,10 @@ class _IpConnectSheetState extends State<IpConnectSheet> {
         Navigator.of(context).pop(IpConnectOutcome.register(device));
       case ProbeOutcome.refused || ProbeOutcome.localOnly:
         setState(() => _problem = KovaLinkProblem.notAllowed);
+      case ProbeOutcome.noAnswer:
       case ProbeOutcome.notKova when result.silent:
         setState(() => _problem = KovaLinkProblem.noAnswer);
-      case ProbeOutcome.notKova || ProbeOutcome.noAnswer:
+      case ProbeOutcome.notKova:
         setState(() => _problem = KovaLinkProblem.notKova);
     }
   }

@@ -1,16 +1,12 @@
 // Local service announcements (mDNS / DNS-SD) as one more place the Finder
 // looks for a comma. An announcement only names an address: the comma at
 // that address is still checked like any other (TLS, 401 challenge, pin).
-//
-// kovapilot's Gateway does not announce itself yet; until it does this
-// finds nothing and the Finder relies on the network search and IP entry.
 import 'dart:async';
 
 import 'package:bonsoir/bonsoir.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
 
-/// Service type the comma will announce (placeholder until kovapilot
-/// announces one; iOS Info.plist NSBonjourServices lists the same name).
+/// Service type announced by kovapilot and listed in iOS's NSBonjourServices.
 const kovaLinkServiceType = '_kovalink._tcp';
 
 /// Where announced commas come from. Tests pass a fake.

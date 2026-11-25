@@ -36,7 +36,7 @@ enum KovaLinkProblem {
 abstract final class KovaLinkText {
   static String message(KovaLinkProblem problem) => switch (problem) {
     KovaLinkProblem.notFound => '같은 와이파이나 핫스팟에서 콤마를 찾지 못했어요.',
-    KovaLinkProblem.noAnswer => '콤마를 찾았지만 응답이 없어요.',
+    KovaLinkProblem.noAnswer => '이 주소에서 콤마가 응답하지 않아요.',
     KovaLinkProblem.tokenRejected => '연결 토큰이 맞지 않아요. 콤마에 넣은 토큰을 다시 확인해 주세요.',
     KovaLinkProblem.identityMismatch =>
       '등록한 콤마가 아니에요. 인증서가 등록할 때와 달라서 연결 토큰을 보내지 않았어요.',
@@ -50,11 +50,10 @@ abstract final class KovaLinkText {
 
   static String detail(KovaLinkProblem problem) => switch (problem) {
     KovaLinkProblem.notFound =>
-      '휴대폰과 콤마가 같은 와이파이에 있거나, 콤마가 휴대폰 핫스팟에 연결돼 있어야 해요. '
-          '모바일 데이터로는 찾지 않아요. 찾지 못하면 콤마 화면의 IP로 연결해 보세요.',
+      '콤마에서 Link 초기 설정을 마쳤는지 확인해 주세요. '
+          '같은 네트워크에서 검색되지 않으면 콤마 화면의 IP로 연결해 보세요.',
     KovaLinkProblem.noAnswer =>
-      '콤마가 켜져 있는지, 콤마에서 휴대폰 연결이 켜져 있는지 확인해 주세요. '
-          '앱은 잠시 뒤 다시 확인해요.',
+      '콤마가 켜져 있는지, IP가 맞는지, 콤마에서 Link 초기 설정을 마쳤는지 확인해 주세요.',
     KovaLinkProblem.tokenRejected =>
       '콤마가 이 토큰을 거절했어요. 관리자가 콤마의 토큰을 바꿨다면 새 토큰으로 다시 등록해 주세요.',
     KovaLinkProblem.identityMismatch =>

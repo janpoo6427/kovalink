@@ -206,7 +206,7 @@ void main() {
       await submitIp(tester, '192.168.43.20');
       expect(probe.calls, ['192.168.43.20:8082']);
       expect(
-        find.text(KovaLinkText.message(KovaLinkProblem.notKova)),
+        find.text(KovaLinkText.message(KovaLinkProblem.noAnswer)),
         findsOneWidget,
       );
 
@@ -216,6 +216,13 @@ void main() {
       await submitIp(tester, '192.168.43.21:9000');
       expect(
         find.text(KovaLinkText.message(KovaLinkProblem.noAnswer)),
+        findsOneWidget,
+      );
+
+      probe.answers['192.168.43.23:8082'] = const ProbeResult.notKova(null);
+      await submitIp(tester, '192.168.43.23');
+      expect(
+        find.text(KovaLinkText.message(KovaLinkProblem.notKova)),
         findsOneWidget,
       );
 
