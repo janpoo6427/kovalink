@@ -90,6 +90,10 @@ abstract class GpuViewHost {
   /// How to check that this host's frames really reach the screen.
   GpuPresentationProbe get probe => screenProbe;
 
+  /// Frames the native renderer has been asked to draw since the app
+  /// started (monotonic); -1 = this host cannot tell.
+  int get renderedFrames => -1;
+
   Widget build(BuildContext context, GpuViewCallbacks callbacks);
 }
 
@@ -109,17 +113,30 @@ class ThermionGpuViewHost extends GpuViewHost {
 
   /// Switches later texture allocations to SurfaceTexture (opaque road
   /// scene; Flutter samples it without the ImageReader path).
-  static void useSurfaceTexture() {
+  static void useSurfaceTexture() =>
+      _setTextureSource(AndroidTextureSource.surfaceTexture);
+
+  /// Source chosen at start-up (main.dart), restored after a failed
+  /// SurfaceTexture retry so the transparent vehicle overlay keeps alpha.
+  static AndroidTextureSource? _startSource;
+
+  static void restoreTextureSource() {
+    final start = _startSource;
+    if (start != null && start != textureSource) _setTextureSource(start);
+  }
+
+  static void _setTextureSource(AndroidTextureSource source) {
     final plugin = ThermionFlutterPlugin.instance;
     final o = plugin.options;
     final n = o.nativeOptions;
+    _startSource ??= n.androidTextureSource;
     plugin.setOptions(
       ThermionFlutterOptions(
         webOptions: o.webOptions,
         uberarchivePath: o.uberarchivePath,
         nativeOptions: NativeOptions(
           backend: n.backend,
-          androidTextureSource: AndroidTextureSource.surfaceTexture,
+          androidTextureSource: source,
           renderTargetColorTextureFormat: n.renderTargetColorTextureFormat,
           renderTargetDepthTextureFormat: n.renderTargetDepthTextureFormat,
           createOverlay: n.createOverlay,
@@ -127,6 +144,9 @@ class ThermionGpuViewHost extends GpuViewHost {
       ),
     );
   }
+
+  @override
+  int get renderedFrames => ThermionFlutterPlugin.instance.renderedFrameCount;
 
   @override
   String get label {
@@ -260,10 +280,15 @@ Future<GpuProbeResult> screenProbe(RenderRepaintBoundary? boundary) async {
 /// Why the GPU view gave up.
 @immutable
 class GpuFailure {
-  const GpuFailure(this.stage, this.reason, {this.retryable = true});
+  const GpuFailure(this.stage, this.reason, {this.retryable = true, this.note});
 
   final String stage;
+
+  /// Short technical line (설정 → 진단 ‘바꾼 이유’, logcat).
   final String reason;
+
+  /// The same in plain words for people (해요체); null = [reason] only.
+  final String? note;
 
   /// A different texture path might help (not for plain slowness).
   final bool retryable;
@@ -272,6 +297,15 @@ class GpuFailure {
   String toString() => reason;
 }
 
+/// Plain-language sentence for a watchdog timeout at [stage].
+String gpuTimeoutNote(String stage, String secs) => switch (stage) {
+  '3D 엔진 시작' => '$secs초 동안 3D 엔진이 켜지지 않았어요.',
+  '텍스처 등록' => '3D 엔진은 켜졌지만 $secs초 동안 화면에 연결되지 않았어요.',
+  '첫 장면 그리기' => '화면은 연결됐지만 $secs초 동안 첫 장면을 다 그리지 못했어요.',
+  '화면 확인' => '$secs초 안에 3D 화면을 확인하지 못했어요.',
+  _ => '3D 엔진은 켜졌지만 $secs초 동안 화면 연결도, 첫 장면도 끝나지 않았어요.',
+};
+
 /// Live Filament view (thermion texture) driven by [GpuRoadRenderer].
 /// Frames are coalesced: while one update is in flight only the newest
 /// request is kept, so a slow phone drops frames instead of lagging.
@@ -279,17 +313,22 @@ class GpuFailure {
 /// A watchdog requires a confirmed on-screen frame (viewer created, texture
 /// registered, first scene drawn, snapshot not blank) within
 /// [startTimeout]; otherwise [onFallback] fires so the screen can switch
-/// to the software renderer instead of staying black.
+/// to the software renderer instead of staying black. After the app comes
+/// back to the foreground a confirmed view is checked again (the surface
+/// may have been recreated), with [onUnverified] in between.
 class GpuRoadSurface extends StatefulWidget {
   const GpuRoadSurface({
     required this.request,
     this.onFallback,
     this.onVerified,
+    this.onUnverified,
     this.host = const ThermionGpuViewHost(),
     this.startTimeout = defaultStartTimeout,
     this.probe,
     this.probeDelay = const Duration(milliseconds: 400),
     this.probeTimeout = const Duration(seconds: 2),
+    this.resumeProbeDelay = const Duration(milliseconds: 800),
+    this.resumeProbes = 3,
     super.key,
   });
 
@@ -299,8 +338,13 @@ class GpuRoadSurface extends StatefulWidget {
   /// slow (average update above [slowFrameMs] over [slowWindow] frames).
   final void Function(GpuFailure failure)? onFallback;
 
-  /// Called once when a GPU frame was confirmed on screen.
+  /// Called when a GPU frame was confirmed on screen (again after a
+  /// foreground re-check).
   final VoidCallback? onVerified;
+
+  /// Called when a confirmed view needs to be checked again (app back in
+  /// the foreground); the caller shows its software road meanwhile.
+  final VoidCallback? onUnverified;
 
   final GpuViewHost host;
 
@@ -313,6 +357,12 @@ class GpuRoadSurface extends StatefulWidget {
   /// Wait after the first frame before snapshotting it.
   final Duration probeDelay;
   final Duration probeTimeout;
+
+  /// Foreground re-check: wait before each snapshot, and how many blank
+  /// snapshots in a row count as failure (Android may need a moment to
+  /// hand back the surface).
+  final Duration resumeProbeDelay;
+  final int resumeProbes;
 
   static const defaultStartTimeout = Duration(milliseconds: 3000);
   static const slowFrameMs = 70;
@@ -327,7 +377,8 @@ class GpuRoadSurface extends StatefulWidget {
   State<GpuRoadSurface> createState() => _GpuRoadSurfaceState();
 }
 
-class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
+class _GpuRoadSurfaceState extends State<GpuRoadSurface>
+    with WidgetsBindingObserver {
   final _diag = RendererDiagnostics.instance;
   final _boundary = GlobalKey();
   late final GpuViewCallbacks _callbacks = GpuViewCallbacks(
@@ -352,12 +403,41 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
   bool _failed = false;
   final _sinceMount = Stopwatch();
 
+  /// [GpuViewHost.renderedFrames] when this check window started.
+  int _framesAtStart = -1;
+  final _sinceCheck = Stopwatch();
+
+  /// Foreground re-check in progress: blank snapshots seen so far.
+  int? _resumeBlank;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _sinceMount.start();
+    _startFrameWindow();
     _watchdog = Timer(widget.startTimeout, _onTimeout);
-    _diag.event('GPU 화면 시작 (${widget.host.label})');
+    _diag.setFrames(null);
+    _diag.event('3D 화면 켜기 시작 (${widget.host.label})');
+  }
+
+  static String _secs(int ms) => '${(ms / 1000).toStringAsFixed(2)}초';
+
+  void _startFrameWindow() {
+    _framesAtStart = widget.host.renderedFrames;
+    _sinceCheck
+      ..reset()
+      ..start();
+  }
+
+  /// Frames drawn in the current check window (null = host cannot tell).
+  RendererFrames? _frameWindow() {
+    final now = widget.host.renderedFrames;
+    if (_framesAtStart < 0 || now < 0) return null;
+    return RendererFrames(
+      now - _framesAtStart,
+      _sinceCheck.elapsedMilliseconds,
+    );
   }
 
   String get _stage {
@@ -374,25 +454,39 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
       return;
     }
     _sink = sink;
-    _diag.event('3D 엔진 준비 ${_sinceMount.elapsedMilliseconds} ms');
+    _diag.event('3D 엔진 켜짐 (${_secs(_sinceMount.elapsedMilliseconds)})');
     _schedule(widget.request);
   }
 
   void _onTextureReady() {
     if (_textureReady || _failed || !mounted) return;
     _textureReady = true;
-    _diag.event('텍스처 등록 ${_sinceMount.elapsedMilliseconds} ms');
+    _diag.event('화면 연결됨 (${_secs(_sinceMount.elapsedMilliseconds)})');
     _maybeProbe();
   }
 
   void _onError(String stage, Object error) {
-    _fail(GpuFailure(stage, '$stage 오류: ${_short(error)}'));
+    final what = stage == '텍스처' ? '3D 화면을 연결하다가' : '3D 엔진을 켜다가';
+    _fail(
+      GpuFailure(
+        stage,
+        '$stage 중 오류가 났어요: ${_short(error)}',
+        note: '$what 오류가 났어요.',
+      ),
+    );
   }
 
   void _onTimeout() {
     if (_verified || _failed || _probing || !mounted) return;
     final secs = (widget.startTimeout.inMilliseconds / 1000).toStringAsFixed(1);
-    _fail(GpuFailure(_stage, '$secs초 안에 3D 화면이 안 나옴 (멈춘 단계: $_stage)'));
+    final stage = _stage;
+    _fail(
+      GpuFailure(
+        stage,
+        '$secs초 안에 3D 화면이 안 나왔어요 (멈춘 단계: $stage)',
+        note: gpuTimeoutNote(stage, secs),
+      ),
+    );
   }
 
   void _maybeProbe() {
@@ -400,11 +494,13 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
     if (_probing || _verified || _failed) return;
     _probing = true;
     _watchdog?.cancel();
-    _probeTimer = Timer(widget.probeDelay, () {
-      if (!mounted || _failed) return;
-      SchedulerBinding.instance.addPostFrameCallback((_) => _runProbe());
-      SchedulerBinding.instance.scheduleFrame();
-    });
+    _probeTimer = Timer(widget.probeDelay, _probeAfterFrame);
+  }
+
+  void _probeAfterFrame() {
+    if (!mounted || _failed) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) => _runProbe());
+    SchedulerBinding.instance.scheduleFrame();
   }
 
   Future<void> _runProbe() async {
@@ -420,18 +516,81 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
     }
     if (!mounted || _failed) return;
     _diag.setProbe(result.describe);
+    final resumeBlank = _resumeBlank;
+    if (resumeBlank != null) {
+      _onResumeProbe(result, resumeBlank);
+      return;
+    }
     switch (result.verdict) {
       case GpuProbeVerdict.visible:
         _verified = true;
-        _diag.event('GPU 화면 확인 ${_sinceMount.elapsedMilliseconds} ms');
+        _diag.setFrames(_frameWindow());
+        _diag.event('3D 화면 확인됨 (${_secs(_sinceMount.elapsedMilliseconds)})');
         widget.onVerified?.call();
       case GpuProbeVerdict.transparent:
-        _fail(GpuFailure('화면 확인', '3D 화면이 비어 있음 (${result.shares})'));
+        _fail(
+          GpuFailure(
+            '화면 확인',
+            '3D 화면이 비어 있음 (${result.shares})',
+            note: '3D 화면이 비어 있었어요. 3D 그림이 화면까지 오지 못했어요.',
+          ),
+        );
       case GpuProbeVerdict.black:
-        _fail(GpuFailure('화면 확인', '3D 화면이 검게 나옴 (${result.shares})'));
+        _fail(
+          GpuFailure(
+            '화면 확인',
+            '3D 화면이 검게 나왔어요 (${result.shares})',
+            note: '3D 화면이 까맣게만 나왔어요.',
+          ),
+        );
       case GpuProbeVerdict.unknown:
         // Cannot tell: keep the GPU view, the software road stays under it.
-        _diag.event('화면 확인 못 함 — 소프트웨어 도로를 밑에 둠');
+        _diag.setFrames(_frameWindow());
+        _diag.event('3D 화면을 확인할 수 없어서 2D 도로를 밑에 깔아 둬요');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!_verified || _failed || !mounted) return;
+    // Android may hand the texture a new surface after the app was in the
+    // background; confirm frames reach the screen again.
+    _verified = false;
+    _resumeBlank = 0;
+    _startFrameWindow();
+    _diag.event('앱으로 돌아와서 3D 화면을 다시 확인해요');
+    widget.onUnverified?.call();
+    _probeTimer?.cancel();
+    _probeTimer = Timer(widget.resumeProbeDelay, _probeAfterFrame);
+  }
+
+  void _onResumeProbe(GpuProbeResult result, int blank) {
+    switch (result.verdict) {
+      case GpuProbeVerdict.visible:
+        _resumeBlank = null;
+        _verified = true;
+        _diag.setFrames(_frameWindow());
+        _diag.event('돌아온 뒤 3D 화면 확인됨');
+        widget.onVerified?.call();
+      case GpuProbeVerdict.unknown:
+        // Same as at start: keep GPU with the software road underneath.
+        _resumeBlank = null;
+        _diag.event('3D 화면을 확인할 수 없어서 2D 도로를 밑에 깔아 둬요');
+      case GpuProbeVerdict.transparent || GpuProbeVerdict.black:
+        if (blank + 1 < widget.resumeProbes) {
+          _resumeBlank = blank + 1;
+          _probeTimer = Timer(widget.resumeProbeDelay, _probeAfterFrame);
+          return;
+        }
+        _resumeBlank = null;
+        _fail(
+          GpuFailure(
+            '다시 확인',
+            '앱으로 돌아온 뒤 3D 화면이 ${result.describe}',
+            note: '앱으로 돌아온 뒤 3D 화면이 다시 나오지 않았어요.',
+          ),
+        );
     }
   }
 
@@ -439,8 +598,27 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
     if (_failed) return;
     _failed = true;
     _watchdog?.cancel();
-    _diag.event('GPU 포기: ${failure.reason}');
-    widget.onFallback?.call(failure);
+    _probeTimer?.cancel();
+    // Frame counts explain start/re-check failures, not later slowness.
+    final frames = _verified ? null : _frameWindow();
+    if (frames != null) _diag.setFrames(frames);
+    _diag.event('3D 포기: ${failure.reason}');
+    widget.onFallback?.call(_withFrames(failure, frames));
+  }
+
+  /// Adds what the frame counter says to the plain-language note: "never
+  /// drew" and "drew but nothing showed" point at different causes.
+  static GpuFailure _withFrames(GpuFailure failure, RendererFrames? frames) {
+    if (frames == null || failure.note == null) return failure;
+    final extra = frames.count == 0
+        ? '그동안 3D 엔진이 그림을 한 장도 그리지 않았어요.'
+        : '그동안 3D 엔진은 ${frames.count}장을 그렸어요.';
+    return GpuFailure(
+      failure.stage,
+      failure.reason,
+      retryable: failure.retryable,
+      note: '${failure.note} $extra',
+    );
   }
 
   static String _short(Object error) {
@@ -492,8 +670,8 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
         if (!_firstUpdate) {
           _firstUpdate = true;
           _diag.event(
-            '첫 장면 ${sw.elapsedMilliseconds} ms '
-            '(시작 후 ${_sinceMount.elapsedMilliseconds} ms)',
+            '첫 장면 그림 (${_secs(sw.elapsedMilliseconds)} 걸림, '
+            '시작 후 ${_secs(_sinceMount.elapsedMilliseconds)})',
           );
           _maybeProbe();
         }
@@ -505,8 +683,12 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
             _fail(
               GpuFailure(
                 '장면',
-                '느림: 평균 ${avg.round()} ms (기준 ${GpuRoadSurface.slowFrameMs} ms)',
+                '느려요: 한 장에 평균 ${avg.round()} ms '
+                    '(기준 ${GpuRoadSurface.slowFrameMs} ms)',
                 retryable: false,
+                note:
+                    '3D가 너무 느렸어요(한 장에 평균 ${avg.round()} ms). '
+                    '부드럽게 보이도록 2D로 바꿨어요.',
               ),
             );
           }
@@ -515,7 +697,13 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
         }
       }
     } catch (error) {
-      _fail(GpuFailure('장면', '장면 오류: ${_short(error)}'));
+      _fail(
+        GpuFailure(
+          '장면',
+          '장면 오류가 났어요: ${_short(error)}',
+          note: '도로 장면을 그리다가 오류가 났어요.',
+        ),
+      );
     } finally {
       _busy = false;
     }
@@ -538,6 +726,7 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _watchdog?.cancel();
     _probeTimer?.cancel();
     unawaited(_sink?.dispose());

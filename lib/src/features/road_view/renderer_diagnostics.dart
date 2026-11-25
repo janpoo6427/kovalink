@@ -35,7 +35,22 @@ class RendererEvent {
   final String text;
 
   @override
-  String toString() => '${(atMs / 1000).toStringAsFixed(2)}s $text';
+  String toString() => '${(atMs / 1000).toStringAsFixed(2)}초 $text';
+}
+
+/// How many frames the 3D engine was asked to draw while the GPU view was
+/// being checked. Tells "the engine never drew" apart from "it drew, but
+/// nothing reached the screen".
+@immutable
+class RendererFrames {
+  const RendererFrames(this.count, this.windowMs);
+  final int count;
+  final int windowMs;
+
+  String get describe {
+    final secs = (windowMs / 1000).toStringAsFixed(1);
+    return '$count장 ($secs초 동안)';
+  }
 }
 
 @immutable
@@ -50,6 +65,8 @@ class RendererReport {
     this.events = const [],
     this.device = const {},
     this.nativeLog = const [],
+    this.note,
+    this.frames,
   });
 
   final RendererState state;
@@ -76,6 +93,13 @@ class RendererReport {
   /// Recent rendering-related lines from this app's own logcat.
   final List<String> nativeLog;
 
+  /// Plain-language explanation of [reason] (해요체), shown first in
+  /// 설정 → 진단.
+  final String? note;
+
+  /// Frames the 3D engine drew during the last check (null = unknown).
+  final RendererFrames? frames;
+
   RendererReport copyWith({
     RendererState? state,
     String? quality,
@@ -86,6 +110,8 @@ class RendererReport {
     List<RendererEvent>? events,
     Map<String, String>? device,
     List<String>? nativeLog,
+    String? Function()? note,
+    RendererFrames? Function()? frames,
   }) => RendererReport(
     state: state ?? this.state,
     quality: quality ?? this.quality,
@@ -96,7 +122,37 @@ class RendererReport {
     events: events ?? this.events,
     device: device ?? this.device,
     nativeLog: nativeLog ?? this.nativeLog,
+    note: note != null ? note() : this.note,
+    frames: frames != null ? frames() : this.frames,
   );
+
+  bool get _saver => quality == '절약';
+
+  /// One sentence for people: what the road view shows right now.
+  String get headline => switch (state) {
+    RendererState.checking =>
+      reason == null ? '3D 화면을 켜고 있어요' : '3D 화면이 아직 안 나와요',
+    RendererState.gpu => '3D 화면이 잘 나오고 있어요',
+    RendererState.fallback => '3D 화면이 안 나와서 2D 도로로 바꿨어요',
+    RendererState.software =>
+      _saver ? '절약 화질이라 2D 도로로 그리고 있어요' : '이 기기에서는 2D 도로로 그리고 있어요',
+  };
+
+  /// Why, and what happens next, in plain words.
+  String get explanation {
+    final next = switch (state) {
+      RendererState.checking =>
+        reason == null
+            ? '확인될 때까지 2D 도로를 밑에 함께 보여 드려요.'
+            : '화질이 고품질이라 3D를 계속 켜 두고, 2D 도로를 밑에 함께 보여 드려요.',
+      RendererState.gpu => '',
+      RendererState.fallback =>
+        '화질을 다시 고르면 3D를 다시 시도해요. 계속 안 되면 ‘진단 복사’를 눌러 '
+            '내용을 보내 주세요.',
+      RendererState.software => _saver ? '화질을 자동이나 고품질로 바꾸면 3D로 그려요.' : '',
+    };
+    return [?note, if (next.isNotEmpty) next].join(' ');
+  }
 
   String get deviceLine {
     String d(String k) => device[k] ?? '?';
@@ -116,11 +172,15 @@ class RendererReport {
   String toText() {
     final b = StringBuffer()
       ..writeln('KovaLink 진단 (${RendererDiagnostics.build})')
+      ..writeln('요약: $headline');
+    if (explanation.isNotEmpty) b.writeln('설명: $explanation');
+    b
       ..writeln('렌더러: ${rendererStateLabel(state)}')
       ..writeln('화질 설정: $quality')
       ..writeln('전환 이유: ${reason ?? '없음'}')
       ..writeln('텍스처: $textureSource (시도 ${attempt + 1})')
       ..writeln('화면 확인: $probe')
+      ..writeln('3D 그림: ${frames?.describe ?? '-'}')
       ..writeln('기기: $deviceLine')
       ..writeln('GPU: $gpuLine');
     for (final key in device.keys.toList()..sort()) {
@@ -200,13 +260,25 @@ class RendererDiagnostics extends ChangeNotifier
     log(text);
   }
 
-  void setState(RendererState state, {String? reason}) {
-    if (value.state == state && value.reason == reason) return;
-    value = value.copyWith(state: state, reason: () => reason);
+  /// [note] is the plain-language version of [reason] (null = none).
+  void setState(RendererState state, {String? reason, String? note}) {
+    if (value.state == state && value.reason == reason && value.note == note) {
+      return;
+    }
+    value = value.copyWith(
+      state: state,
+      reason: () => reason,
+      note: () => note,
+    );
     log(
       '렌더러=${rendererStateLabel(state)}'
       '${reason == null ? '' : ' 이유=$reason'}',
     );
+  }
+
+  void setFrames(RendererFrames? frames) {
+    value = value.copyWith(frames: () => frames);
+    if (frames != null) log('3D 그림: ${frames.describe}');
   }
 
   void setQuality(String quality) {

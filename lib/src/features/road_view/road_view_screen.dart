@@ -106,7 +106,13 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
   void didUpdateWidget(covariant RoadViewScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.renderQuality != widget.renderQuality) {
-      // Choosing a quality again is the user's retry.
+      // Choosing a quality again is the user's retry: after a failure the
+      // whole chain (first texture path, then the retry) runs again.
+      if (_gpuFailed || _gpuFailure != null) {
+        _gpuAttempt++;
+        _gpuRetries = 0;
+        if (widget.gpuRetry == null) ThermionGpuViewHost.restoreTextureSource();
+      }
       _gpuFailed = false;
       _gpuFailure = null;
       _gpuVerified = false;
@@ -129,17 +135,25 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
     return true;
   }
 
+  /// Retries used in the current chain (the retry policy's `attempt`).
+  int _gpuRetries = 0;
+
   void _onGpuFailure(GpuFailure failure) {
     if (!mounted) return;
-    final retry = (widget.gpuRetry ?? _defaultRetry)(failure, _gpuAttempt);
+    final retry = (widget.gpuRetry ?? _defaultRetry)(failure, _gpuRetries);
     if (retry) {
-      _diag.event('다른 방식으로 GPU 다시 시도 (시도 ${_gpuAttempt + 2})');
+      final label = (widget.gpuViewHost ?? const ThermionGpuViewHost()).label;
+      _diag.event('다른 연결 방식($label)으로 3D를 다시 시도해요 (${_gpuRetries + 2}번째)');
       setState(() {
         _gpuAttempt++;
+        _gpuRetries++;
         _gpuVerified = false;
       });
       return;
     }
+    // Last attempt failed: the next GPU view (vehicle overlay, a later
+    // retry) starts from the original texture path again.
+    if (widget.gpuRetry == null) ThermionGpuViewHost.restoreTextureSource();
     setState(() {
       _gpuFailure = failure;
       if (widget.renderQuality == RenderQuality.auto) _gpuFailed = true;
@@ -151,26 +165,35 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
     setState(() => _gpuVerified = true);
   }
 
+  /// The app came back to the foreground; show the software road until the
+  /// GPU view is confirmed again.
+  void _onGpuUnverified() {
+    if (!mounted) return;
+    setState(() => _gpuVerified = false);
+  }
+
   /// Mirrors the current renderer into 설정 → 진단 (after this frame).
   void _report({required bool gpu, required bool injected}) {
     final quality = RenderQualityPolicy.label(widget.renderQuality);
     final RendererState state;
     String? reason = _gpuFailure?.reason;
+    String? note = _gpuFailure?.note;
     if (!gpu) {
       state = _gpuFailed ? RendererState.fallback : RendererState.software;
-      if (!_gpuFailed) reason = null;
+      if (!_gpuFailed) reason = note = null;
     } else if (injected || _gpuVerified) {
       state = RendererState.gpu;
+      reason = note = null;
     } else {
       state = RendererState.checking;
-      if (reason != null) reason = '$reason — 고품질 설정이라 GPU 유지';
+      if (reason != null) reason = '$reason — 화질이 고품질이라 3D를 계속 켜 둬요';
     }
     final source = gpu && !injected
         ? (widget.gpuViewHost ?? const ThermionGpuViewHost()).label
         : null;
     _diag.setQuality(quality);
-    if (source != null) _diag.setTexture(source, _gpuAttempt);
-    _diag.setState(state, reason: reason);
+    if (source != null) _diag.setTexture(source, _gpuRetries);
+    _diag.setState(state, reason: reason, note: note);
   }
 
   static bool get _supportsNativeVehicle =>
@@ -300,6 +323,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                   host: widget.gpuViewHost ?? const ThermionGpuViewHost(),
                   onFallback: _onGpuFailure,
                   onVerified: _onGpuVerified,
+                  onUnverified: _onGpuUnverified,
                 ),
             if (widget.layers.objects && !underlay)
               IgnorePointer(

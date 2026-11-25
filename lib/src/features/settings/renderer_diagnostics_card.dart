@@ -49,6 +49,7 @@ class _RendererDiagnosticsCardState extends State<RendererDiagnosticsCard> {
         final recent = r.events.length > 6
             ? r.events.sublist(r.events.length - 6)
             : r.events;
+        final explanation = r.explanation;
         return Column(
           key: const ValueKey('renderer-diagnostics'),
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,18 +66,67 @@ class _RendererDiagnosticsCardState extends State<RendererDiagnosticsCard> {
             ),
             Card(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Row('렌더러', rendererStateLabel(r.state)),
-                    _Row('전환 이유', r.reason ?? '없음'),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2, right: 10),
+                          child: Icon(
+                            _icon(r.state),
+                            size: 20,
+                            color: _tone(r.state),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            r.headline,
+                            key: const ValueKey('diagnostics-headline'),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (explanation.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 30, top: 6),
+                        child: Text(
+                          explanation,
+                          key: const ValueKey('diagnostics-explanation'),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            height: 1.45,
+                            color: Color(0xFFD3DCE4),
+                          ),
+                        ),
+                      ),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 12, bottom: 4),
+                      child: Text(
+                        '자세한 내용',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF8E9DA9),
+                        ),
+                      ),
+                    ),
+                    _Row('지금 화면', rendererStateLabel(r.state)),
+                    _Row('바꾼 이유', r.reason ?? '없음'),
                     _Row('화질 설정', r.quality),
-                    _Row('텍스처', '${r.textureSource} (시도 ${r.attempt + 1})'),
-                    _Row('화면 확인', r.probe),
-                    _Row('기기', r.deviceLine),
+                    _Row('연결 방식', '${r.textureSource} (${r.attempt + 1}번째 시도)'),
+                    _Row('화면 점검', r.probe),
+                    _Row('3D 그림', r.frames?.describe ?? '-'),
+                    _Row('휴대폰', r.deviceLine),
                     _Row('GPU', r.gpuLine),
-                    _Row('빌드', RendererDiagnostics.build),
+                    _Row('앱 빌드', RendererDiagnostics.build),
                     if (recent.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       for (final e in recent)
@@ -106,6 +156,20 @@ class _RendererDiagnosticsCardState extends State<RendererDiagnosticsCard> {
       },
     );
   }
+
+  static IconData _icon(RendererState state) => switch (state) {
+    RendererState.gpu => Icons.check_circle_rounded,
+    RendererState.checking => Icons.hourglass_top_rounded,
+    RendererState.fallback => Icons.info_rounded,
+    RendererState.software => Icons.layers_rounded,
+  };
+
+  static Color _tone(RendererState state) => switch (state) {
+    RendererState.gpu => const Color(0xFF58F2C2),
+    RendererState.checking => const Color(0xFF8EC5FF),
+    RendererState.fallback => const Color(0xFFFFC266),
+    RendererState.software => const Color(0xFFB5C0CB),
+  };
 }
 
 class _Row extends StatelessWidget {
