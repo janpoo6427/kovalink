@@ -23,3 +23,12 @@ scaffold colour). `onTextureReady` fires after a texture is registered, bound
 and its first frame submitted; `onError` receives viewer-creation and texture
 errors. KovaLink's `GpuRoadSurface` watchdog uses both to switch to its
 software renderer.
+
+## Rendered frame count (2026-11-25)
+
+`ThermionFlutterPlugin.renderedFrameCount` exposes the native frame
+scheduler's monotonic `dispatchedFrameCount` (-1 on platforms without it).
+KovaLink's GPU watchdog records how many frames were dispatched while it
+waited for a visible frame, so 설정 → 진단 can tell "the engine never
+rendered" (scheduler/EGL problem) apart from "it rendered but nothing was
+composited" (texture/compositor problem).
