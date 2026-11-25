@@ -9,6 +9,7 @@
 //   /settings/session          설정, 연결 상태 탭             replaces the tab shown
 //   /settings/kovapilot        설정, kovapilot 탭             replaces the tab shown
 //   /settings/app/diagnostics  진단 (from the 앱 tab)         pushed
+//   /settings/kovapilot/version  kovapilot 버전 (from the kovapilot tab)  pushed
 //
 // Settings tabs replace each other, so back from any tab goes straight to
 // the drive screen. Dialogs and bottom sheets stay what they are (their own
@@ -23,6 +24,7 @@ abstract final class KovaRoutes {
   static const settingsSession = '/settings/session';
   static const settingsKovapilot = '/settings/kovapilot';
   static const diagnostics = '/settings/app/diagnostics';
+  static const kovapilotVersion = '/settings/kovapilot/version';
 
   /// Back button tooltip on pages opened from the drive screen.
   static const backToDrive = '주행 화면으로 돌아가기';

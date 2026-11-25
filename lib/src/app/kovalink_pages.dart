@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/app/kova_routes.dart';
 import 'package:kovalink/src/features/connect/connect_screen.dart';
+import 'package:kovalink/src/features/kovapilot_git/kovapilot_version_screen.dart';
 import 'package:kovalink/src/features/settings/renderer_diagnostics_card.dart';
 import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
@@ -68,6 +69,9 @@ class KovaLinkPages {
       },
       KovaRoutes.connect => connectPage(),
       KovaRoutes.diagnostics => RendererDiagnosticsPage.route(),
+      KovaRoutes.kovapilotVersion => KovapilotVersionScreen.route(
+        endpoint: kovaParams?.endpoint ?? settings?.value.settingsEndpoint,
+      ),
       _ => null,
     };
   }

@@ -164,6 +164,7 @@ String kovaRejectionReason(String code, String message) {
     'invalid_value' => '차에서 받을 수 없는 값이에요.',
     'invalid_request' || 'invalid_json' => '차가 요청을 읽지 못했어요. 앱을 업데이트해 주세요.',
     'kova_params_unavailable' => '차에서 설정을 불러올 수 없어요. 잠시 뒤 다시 해 주세요.',
+    'local_client_required' => '콤마를 찾았지만 아직 휴대폰 연결을 허용하지 않아요.',
     _ => '차에서 변경을 막았어요.',
   };
 }

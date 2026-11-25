@@ -241,6 +241,8 @@ class AutoConnectPanel extends StatelessWidget {
       AutoConnectPhase.paused => '앱이 화면에 없을 때는 찾지 않아요.',
       AutoConnectPhase.searching =>
         '${c.attempt}번째 찾는 중 · ${subnets.isEmpty ? '네트워크 확인 중' : subnets} · ${c.planned}곳 중 ${c.probed}곳 확인',
+      AutoConnectPhase.waiting when c.localOnly.isNotEmpty =>
+        '${c.localOnly.join(', ')}: $kovaLocalOnlyMessage. 지금 kovapilot은 콤마 안에서 여는 연결만 받아요. ${c.nextRetry?.inSeconds ?? 0}초 뒤 다시 확인해요.',
       AutoConnectPhase.waiting =>
         '${c.attempt}번 찾았지만 없었어요. ${c.nextRetry?.inSeconds ?? 0}초 뒤 다시 찾아요.',
       AutoConnectPhase.choosing =>
