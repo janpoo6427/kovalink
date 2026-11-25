@@ -279,6 +279,30 @@ void main() {
     expect(gateway.posts.single['value'], 8);
   });
 
+  testWidgets('saved Park setting distinguishes pending from applied', (
+    tester,
+  ) async {
+    gateway.offroad = false;
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((setting) => setting['key'] == 'e2e.level');
+    setting
+      ..['applyPolicy'] = 'parked'
+      ..['savePolicy'] = 'anytime'
+      ..['applyState'] = 'pendingParked'
+      ..['appliedValue'] = 4;
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    final slider = find.byKey(const ValueKey('kova-slider-e2e.level'));
+    expect(tester.widget<Slider>(slider).onChanged, isNotNull);
+    expect(find.text('저장됨 · P 정차 시 적용'), findsOneWidget);
+    setting['applyState'] = 'applied';
+    gateway.parked = true;
+    await kova.refresh();
+    await tester.pump();
+    expect(find.text('적용됨'), findsOneWidget);
+  });
+
   testWidgets('conflict and rejection notices are drawn', (tester) async {
     await kova.connect('http://127.0.0.1:18082');
     await _pumpPanel(tester, kova);

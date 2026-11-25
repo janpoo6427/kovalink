@@ -579,6 +579,9 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
         ? s.applyState
         : null;
     final policy = switch ((s.applyPolicy, currentState)) {
+      (KovaApplyPolicy.parked, 'pendingParked') => ('저장됨 · P 정차 시 적용', _warn),
+      (KovaApplyPolicy.parked, 'awaitingStart') => ('플래너 시작 대기', _muted),
+      (KovaApplyPolicy.parked, 'applied') => ('적용됨', _accent),
       (KovaApplyPolicy.restart, 'pendingRestart') => (
         '저장됨 · 다음 시작 때 적용',
         _warn,
@@ -586,7 +589,10 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
       (KovaApplyPolicy.restart, 'awaitingStart') => ('다음 시작 때 확인', _muted),
       (KovaApplyPolicy.restart, 'applied') => ('적용됨', _accent),
       (KovaApplyPolicy.offroad, _) when !s.saveAnytime => ('시동을 끈 뒤 변경', _warn),
-      (KovaApplyPolicy.parked, _) => ('P 정차 중 변경', _warn),
+      (KovaApplyPolicy.parked, _) => (
+        s.saveAnytime ? 'P 정차 중 적용' : 'P 정차 중 변경',
+        _warn,
+      ),
       (KovaApplyPolicy.restart, _) => ('재시작 후 적용', const Color(0xFF72A7FF)),
       _ => null,
     };
@@ -700,11 +706,13 @@ class _Details extends StatelessWidget {
       '적용: ${switch (s.applyPolicy) {
         KovaApplyPolicy.immediate => '바로 적용돼요.',
         KovaApplyPolicy.offroad => s.saveAnytime ? '언제든 값을 저장할 수 있어요.' : '시동을 끈 뒤 바꿀 수 있어요.',
-        KovaApplyPolicy.parked => 'P에 두고 완전히 정차했을 때 바꿀 수 있어요.',
+        KovaApplyPolicy.parked => s.saveAnytime ? '값은 언제든 저장할 수 있고, P에 두고 완전히 정차하면 반영돼요.' : 'P에 두고 완전히 정차했을 때 바꿀 수 있어요.',
         KovaApplyPolicy.restart => s.saveAnytime ? '언제든 저장하고, 담당 프로세스가 다음에 시작할 때 반영해요.' : 'kovapilot을 다시 시작하면 적용돼요. 주행 중에는 바꿀 수 없어요.',
         KovaApplyPolicy.unknown => '언제 적용되는지 알 수 없어 앱에서는 바꿀 수 없어요.',
       }}',
-      if (s.applyState == 'pendingRestart' && s.appliedValue != null)
+      if ((s.applyState == 'pendingRestart' ||
+              s.applyState == 'pendingParked') &&
+          s.appliedValue != null)
         '현재 적용값: ${s.describe(s.appliedValue, defaultLocale: locale)}',
       if (s.status == KovaAvailability.pendingConsumer)
         '상태: 준비 중이에요. 값은 저장되지만 차 동작은 아직 바뀌지 않아요.',
