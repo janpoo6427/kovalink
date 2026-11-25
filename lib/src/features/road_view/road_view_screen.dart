@@ -307,9 +307,9 @@ class _ModeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: switch (mode) {
-        RoadViewMode.scene => '3D 로드뷰 · 탭하여 카메라로 전환',
-        RoadViewMode.camera => '카메라 · 탭하여 오버레이로 전환',
-        RoadViewMode.overlay => '카메라 오버레이 · 탭하여 3D로 전환',
+        RoadViewMode.scene => '카메라 화면으로 바꾸기',
+        RoadViewMode.camera => '카메라에 도로 겹쳐 보기',
+        RoadViewMode.overlay => '3D 화면으로 바꾸기',
       },
       child: LiquidGlass(
         radius: 22,
@@ -342,7 +342,7 @@ class _CalibrationWarning extends StatelessWidget {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              '카메라 calibration을 받기 전에는 AR overlay를 표시하지 않습니다.',
+              '카메라 보정이 끝나면 도로 표시가 겹쳐 나와요.',
               style: TextStyle(fontSize: 11),
             ),
           ),
@@ -376,13 +376,13 @@ class _CameraPlaceholder extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 status == RoadStreamStatus.connecting
-                    ? 'WebRTC 카메라 연결 중'
-                    : 'WebRTC 카메라 gateway가 필요합니다',
+                    ? '카메라 연결 중'
+                    : '카메라가 연결되지 않았어요',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
               Text(
-                errorMessage ?? '연결 화면에서 카메라 스트림을 시작하세요',
+                errorMessage ?? '연결 화면에서 카메라를 켜 주세요.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Color(0xFFB5C0CB), fontSize: 12),
               ),

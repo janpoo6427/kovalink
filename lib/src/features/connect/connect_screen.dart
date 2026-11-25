@@ -46,10 +46,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
       builder: (context, _) => ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         children: [
-          const PageHeader(
-            title: '장치 연결',
-            subtitle: '로컬 네트워크에서만 comma gateway와 통신합니다.',
-          ),
+          const PageHeader(title: '장치 연결'),
           const SizedBox(height: 22),
           Card(
             child: Padding(
@@ -60,7 +57,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                   Row(
                     children: [
                       const Text(
-                        '현재 상태',
+                        '주행 정보',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       const Spacer(),
@@ -73,7 +70,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                     keyboardType: TextInputType.url,
                     autocorrect: false,
                     decoration: const InputDecoration(
-                      labelText: 'Gateway WebSocket',
+                      labelText: '주소',
                       hintText: 'wss://comma.local/v1/telemetry',
                     ),
                   ),
@@ -106,13 +103,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
                                   );
                                 },
                           icon: const Icon(Icons.link),
-                          label: const Text('로컬 연결'),
+                          label: const Text('연결'),
                         ),
                       ),
                       const SizedBox(width: 10),
                       OutlinedButton(
                         onPressed: widget.controller.startDemo,
-                        child: const Text('데모'),
+                        child: const Text('데모 보기'),
                       ),
                     ],
                   ),
@@ -126,20 +123,12 @@ class _ConnectScreenState extends State<ConnectScreen> {
             endpointController: cameraEndpointController,
           ),
           const SizedBox(height: 14),
-          const _PrivacyCard(
-            icon: Icons.lan_outlined,
-            title: 'Local only',
-            body: '공인 IP와 공개 도메인은 연결 정책에서 거부합니다.',
-          ),
-          const _PrivacyCard(
-            icon: Icons.cloud_off_outlined,
-            title: 'No comma cloud',
-            body: 'Athena 또는 comma route upload를 사용하지 않습니다.',
-          ),
-          const _PrivacyCard(
-            icon: Icons.visibility_outlined,
-            title: 'Read-only first',
-            body: 'pairing 전에는 telemetry 조회만 허용하도록 설계합니다.',
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              '차와 같은 네트워크에서만 연결하고, comma 클라우드는 쓰지 않아요.',
+              style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
+            ),
           ),
         ],
       ),
@@ -160,10 +149,10 @@ class _CameraConnectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final stream = controller.roadStream;
     final statusLabel = switch (stream.status) {
-      RoadStreamStatus.idle => '대기',
+      RoadStreamStatus.idle => '꺼짐',
       RoadStreamStatus.connecting => '연결 중',
-      RoadStreamStatus.streaming => '영상 수신 중',
-      RoadStreamStatus.error => '연결 오류',
+      RoadStreamStatus.streaming => '보는 중',
+      RoadStreamStatus.error => '연결 안 됨',
     };
     return Card(
       child: Padding(
@@ -176,7 +165,7 @@ class _CameraConnectionCard extends StatelessWidget {
                 const Icon(Icons.videocam_outlined, color: Color(0xFF58F2C2)),
                 const SizedBox(width: 10),
                 const Text(
-                  'Road camera',
+                  '카메라',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
@@ -195,7 +184,7 @@ class _CameraConnectionCard extends StatelessWidget {
               keyboardType: TextInputType.url,
               autocorrect: false,
               decoration: const InputDecoration(
-                labelText: 'WebRTC signaling',
+                labelText: '주소',
                 hintText: 'https://comma.local:8082/v1/stream',
               ),
             ),
@@ -220,40 +209,18 @@ class _CameraConnectionCard extends StatelessWidget {
                             signalingEndpoint: endpointController.text,
                           ),
                     icon: const Icon(Icons.play_arrow),
-                    label: const Text('스트림 시작'),
+                    label: const Text('카메라 켜기'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 OutlinedButton(
                   onPressed: stream.disconnect,
-                  child: const Text('중지'),
+                  child: const Text('끄기'),
                 ),
               ],
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PrivacyCard extends StatelessWidget {
-  const _PrivacyCard({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
-  final IconData icon;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(body),
       ),
     );
   }

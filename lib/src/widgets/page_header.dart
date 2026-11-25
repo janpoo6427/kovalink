@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 class PageHeader extends StatelessWidget {
-  const PageHeader({required this.title, required this.subtitle, super.key});
+  const PageHeader({required this.title, this.subtitle, super.key});
 
   final String title;
-  final String subtitle;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = this.subtitle;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -29,11 +30,13 @@ class PageHeader extends StatelessWidget {
             height: 1,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          subtitle,
-          style: const TextStyle(color: Color(0xFF8E9DA9), height: 1.45),
-        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Color(0xFF8E9DA9), height: 1.45),
+          ),
+        ],
       ],
     );
   }

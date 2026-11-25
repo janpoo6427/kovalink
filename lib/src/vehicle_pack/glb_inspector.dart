@@ -73,22 +73,22 @@ class GlbInspector {
     GlbLimits limits = const GlbLimits(),
   }) {
     if (bytes.length < 20) {
-      throw const ModelPackRejection('glb-invalid', 'GLB 파일이 너무 짧습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 파일이 너무 짧아요.');
     }
     final data = ByteData.sublistView(bytes);
     if (data.getUint32(0, Endian.little) != _magic) {
-      throw const ModelPackRejection('glb-invalid', 'glTF 바이너리(GLB) 파일이 아닙니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 파일이 아니에요.');
     }
     if (data.getUint32(4, Endian.little) != 2) {
-      throw const ModelPackRejection('glb-version', 'glTF 2.0 GLB만 지원합니다.');
+      throw const ModelPackRejection('glb-version', 'glTF 2.0 GLB만 쓸 수 있어요.');
     }
     if (data.getUint32(8, Endian.little) != bytes.length) {
-      throw const ModelPackRejection('glb-invalid', 'GLB 길이 정보가 파일과 다릅니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 파일 길이가 맞지 않아요.');
     }
     final jsonLength = data.getUint32(12, Endian.little);
     if (data.getUint32(16, Endian.little) != _jsonChunk ||
         20 + jsonLength > bytes.length) {
-      throw const ModelPackRejection('glb-invalid', 'GLB JSON 영역이 올바르지 않습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 안의 JSON이 잘못됐어요.');
     }
     final Map<String, dynamic> gltf;
     try {
@@ -98,7 +98,7 @@ class GlbInspector {
       if (decoded is! Map<String, dynamic>) throw const FormatException();
       gltf = decoded;
     } on FormatException {
-      throw const ModelPackRejection('glb-invalid', 'GLB JSON을 읽을 수 없습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 안의 JSON을 읽을 수 없어요.');
     }
 
     Uint8List? bin;
@@ -119,7 +119,7 @@ class GlbInspector {
     if (assetVersion is! String || !assetVersion.startsWith('2.')) {
       throw const ModelPackRejection(
         'glb-version',
-        'glTF asset.version 2.x가 필요합니다.',
+        'glTF asset.version이 2.x여야 해요.',
       );
     }
 
@@ -130,7 +130,7 @@ class GlbInspector {
     if (required.isNotEmpty) {
       throw ModelPackRejection(
         'glb-extension',
-        '지원하지 않는 필수 glTF 확장: ${required.join(', ')}',
+        '쓸 수 없는 glTF 확장이 필요한 파일이에요: ${required.join(', ')}',
       );
     }
 
@@ -144,7 +144,7 @@ class GlbInspector {
       if (buffer.containsKey('uri')) {
         throw ModelPackRejection(
           'external-uri',
-          '외부 버퍼 참조는 허용하지 않습니다: ${_describeUri(buffer['uri'])}',
+          'GLB 밖의 버퍼 파일은 쓸 수 없어요: ${_describeUri(buffer['uri'])}',
         );
       }
     }
@@ -153,7 +153,7 @@ class GlbInspector {
       if (image.containsKey('uri')) {
         throw ModelPackRejection(
           'external-uri',
-          '외부 텍스처 참조는 허용하지 않습니다: ${_describeUri(image['uri'])}',
+          'GLB 밖의 텍스처 파일은 쓸 수 없어요: ${_describeUri(image['uri'])}',
         );
       }
     }
@@ -162,7 +162,7 @@ class GlbInspector {
     if (images.length > limits.maxImages) {
       throw ModelPackRejection(
         'too-many-textures',
-        '텍스처가 너무 많습니다(${images.length}개, 최대 ${limits.maxImages}개).',
+        '텍스처가 너무 많아요(${images.length}개). ${limits.maxImages}개 이하로 줄여 주세요.',
       );
     }
 
@@ -193,7 +193,7 @@ class GlbInspector {
     if (triangles > limits.maxTriangles) {
       throw ModelPackRejection(
         'too-many-triangles',
-        '폴리곤이 너무 많습니다($triangles 삼각형, 최대 ${limits.maxTriangles}).',
+        '삼각형이 너무 많아요($triangles개). ${limits.maxTriangles}개 이하로 줄여 주세요.',
       );
     }
 
@@ -203,7 +203,7 @@ class GlbInspector {
       if (mime != 'image/png' && mime != 'image/jpeg') {
         throw ModelPackRejection(
           'texture-format',
-          'PNG/JPEG 텍스처만 지원합니다: $mime',
+          '텍스처는 PNG나 JPEG만 쓸 수 있어요: $mime',
         );
       }
       final viewIndex = image['bufferView'] as int?;
@@ -211,28 +211,25 @@ class GlbInspector {
           viewIndex == null ||
           viewIndex < 0 ||
           viewIndex >= bufferViews.length) {
-        throw const ModelPackRejection('glb-invalid', '텍스처 데이터 위치가 올바르지 않습니다.');
+        throw const ModelPackRejection('glb-invalid', '텍스처 데이터 위치가 잘못됐어요.');
       }
       final view = bufferViews[viewIndex];
       final offset = view['byteOffset'] as int? ?? 0;
       final length = view['byteLength'] as int? ?? 0;
       if (offset < 0 || length <= 0 || offset + length > bin.length) {
-        throw const ModelPackRejection('glb-invalid', '텍스처 데이터 위치가 올바르지 않습니다.');
+        throw const ModelPackRejection('glb-invalid', '텍스처 데이터 위치가 잘못됐어요.');
       }
       final size = imageSize(
         Uint8List.sublistView(bin, offset, offset + length),
       );
       if (size == null) {
-        throw const ModelPackRejection(
-          'texture-format',
-          '텍스처 이미지 크기를 읽을 수 없습니다.',
-        );
+        throw const ModelPackRejection('texture-format', '텍스처 크기를 읽을 수 없어요.');
       }
       final largest = size.$1 > size.$2 ? size.$1 : size.$2;
       if (largest > limits.maxTextureSize) {
         throw ModelPackRejection(
           'texture-too-large',
-          '텍스처가 너무 큽니다(${size.$1}×${size.$2}, 최대 ${limits.maxTextureSize}px).',
+          '텍스처가 너무 커요(${size.$1}×${size.$2}). 한 변이 ${limits.maxTextureSize}px 이하여야 해요.',
         );
       }
       if (largest > maxTexture) maxTexture = largest;
@@ -241,13 +238,13 @@ class GlbInspector {
     final warnings = <String>[];
     if (triangles > limits.recommendedTriangles) {
       warnings.add(
-        '폴리곤 $triangles개: 권장 ${limits.recommendedTriangles}개를 넘어 휴대폰에서 느릴 수 있습니다. '
-        '도로 화면에서는 차량당 ${limits.renderTriangleBudget}개 이하로 단순화해 그립니다.',
+        '삼각형이 $triangles개로 권장 ${limits.recommendedTriangles}개보다 많아 휴대폰에서 느릴 수 있어요. '
+        '도로 화면에서는 ${limits.renderTriangleBudget}개 이하로 줄여서 그려요.',
       );
     } else if (triangles > limits.renderTriangleBudget) {
       warnings.add(
-        '폴리곤 $triangles개: 도로 화면에서는 차량당 ${limits.renderTriangleBudget}개 이하로 '
-        '단순화해 그립니다(멀리 있는 차는 더 단순한 단계).',
+        '삼각형이 $triangles개라 도로 화면에서는 ${limits.renderTriangleBudget}개 이하로 '
+        '줄여서 그려요.',
       );
     }
     return GlbReport(

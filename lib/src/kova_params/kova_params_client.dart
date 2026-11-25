@@ -153,18 +153,18 @@ String kovaRejectionReason(String code, String message) {
   final lower = message.toLowerCase();
   return switch (code) {
     'update_forbidden' when lower.contains('offroad') =>
-      '주행 중에는 바꿀 수 없어요. 차를 세우고(오프로드) 다시 해 주세요.',
+      '주행 중에는 바꿀 수 없어요. 차를 세운 뒤 다시 해 주세요.',
     'update_forbidden' when lower.contains('read-only') =>
-      '이 항목은 장치에서 읽기 전용이에요.',
-    'update_forbidden' => '장치가 이 변경을 허용하지 않았어요.',
+      '읽기 전용 항목이라 바꿀 수 없어요.',
+    'update_forbidden' => '차에서 이 변경을 막았어요.',
     'invalid_value' when lower.contains('unknown setting') =>
-      '장치가 모르는 항목이에요. 목록을 다시 읽어 주세요.',
+      '차가 모르는 항목이에요. 새로고침해 주세요.',
     'invalid_value' when lower.contains('out of range') =>
-      '장치가 허용하는 범위를 벗어난 값이에요.',
-    'invalid_value' => '장치가 받을 수 없는 값이에요.',
-    'invalid_request' || 'invalid_json' => '요청 형식이 맞지 않아 장치가 거절했어요.',
-    'kova_params_unavailable' => '장치의 설정 저장 상태를 확인할 수 없어요.',
-    _ => '장치가 변경을 거절했어요.',
+      '차에서 쓸 수 있는 범위를 벗어났어요.',
+    'invalid_value' => '차에서 받을 수 없는 값이에요.',
+    'invalid_request' || 'invalid_json' => '차가 요청을 읽지 못했어요. 앱을 업데이트해 주세요.',
+    'kova_params_unavailable' => '차에서 설정을 불러올 수 없어요. 잠시 뒤 다시 해 주세요.',
+    _ => '차에서 변경을 막았어요.',
   };
 }
 
@@ -208,17 +208,17 @@ class KovaParamsClient {
     } on TimeoutException {
       throw const KovaParamsException(
         KovaFailureKind.timeout,
-        '장치가 제때 답하지 않았어요.',
+        '차에서 응답이 없어요. 잠시 뒤 다시 해 주세요.',
       );
     } on FormatException {
       throw const KovaParamsException(
         KovaFailureKind.format,
-        '장치 응답을 읽을 수 없어요.',
+        '차에서 받은 내용을 읽을 수 없어요.',
       );
     } on IOException {
       throw const KovaParamsException(
         KovaFailureKind.transport,
-        '장치에 연결할 수 없어요.',
+        '차에 연결할 수 없어요. 같은 네트워크에 있는지 확인해 주세요.',
       );
     }
   }
@@ -229,7 +229,7 @@ class KovaParamsClient {
     } on FormatException {
       throw const KovaParamsException(
         KovaFailureKind.format,
-        '장치 응답이 JSON이 아니에요.',
+        '차에서 받은 내용을 읽을 수 없어요.',
       );
     }
   }
@@ -251,7 +251,7 @@ class KovaParamsClient {
     if (response.statusCode != 200) {
       throw KovaParamsException(
         KovaFailureKind.http,
-        '장치 상태 확인이 실패했어요 (HTTP ${response.statusCode}).',
+        '차에 연결하지 못했어요. 잠시 뒤 다시 해 주세요.',
         statusCode: response.statusCode,
       );
     }
@@ -259,14 +259,14 @@ class KovaParamsClient {
     if (json is! Map || json['status'] is! String) {
       throw const KovaParamsException(
         KovaFailureKind.format,
-        '장치 상태 응답 형식이 달라요.',
+        '차에서 받은 내용을 읽을 수 없어요.',
       );
     }
     final major = kovaSchemaMajor(json['schemaVersion']);
     if (major != supportedKovaParamsSchema) {
       throw const KovaParamsException(
         KovaFailureKind.schema,
-        '장치의 API 버전을 이 앱이 지원하지 않아요. 앱을 업데이트해 주세요.',
+        '차의 kovapilot 버전과 맞지 않아요. 앱을 업데이트해 주세요.',
       );
     }
     return KovaGatewayHealth(
@@ -286,8 +286,12 @@ class KovaParamsClient {
       return KovaParamsDocument.fromJson(json);
     } on KovaParamsSchemaUnsupported catch (error) {
       throw KovaParamsException(KovaFailureKind.schema, error.message);
-    } on KovaParamsFormatException catch (error) {
-      throw KovaParamsException(KovaFailureKind.format, error.message);
+    } on KovaParamsFormatException {
+      // The parser's reason is for developers; the screen gets one line.
+      throw const KovaParamsException(
+        KovaFailureKind.format,
+        '차에서 받은 설정을 읽을 수 없어요.',
+      );
     }
   }
 
@@ -301,7 +305,7 @@ class KovaParamsClient {
       throw KovaParamsException(
         KovaFailureKind.http,
         error == null
-            ? '설정을 읽지 못했어요 (HTTP ${response.statusCode}).'
+            ? '설정을 불러오지 못했어요. 잠시 뒤 다시 해 주세요.'
             : kovaRejectionReason(error.$1, error.$2),
         statusCode: response.statusCode,
       );
@@ -344,7 +348,7 @@ class KovaParamsClient {
     }
     final error = _error(json);
     if (error == null) {
-      return KovaUpdateFailed('장치 응답 형식이 달라요 (HTTP ${response.statusCode}).');
+      return const KovaUpdateFailed('차에서 받은 내용을 읽을 수 없어요.');
     }
     if (response.statusCode == 409 && error.$1 == 'revision_conflict') {
       return const KovaUpdateConflict();

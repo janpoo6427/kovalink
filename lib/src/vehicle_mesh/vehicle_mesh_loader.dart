@@ -58,8 +58,8 @@ class VehicleMeshLoader {
           : (await (bundle ?? rootBundle).load(
               glbAssetPath,
             )).buffer.asUint8List();
-    } on Object catch (error) {
-      return VehicleMeshLoad(null, ['GLB를 읽을 수 없어 기본 차량 모양으로 그립니다: $error']);
+    } on Object {
+      return VehicleMeshLoad(null, ['GLB를 읽을 수 없어 기본 차량 모양으로 그려요.']);
     }
     return fromBytes(bytes, manifest);
   }
@@ -86,15 +86,15 @@ class VehicleMeshLoader {
       final set = background ? await compute(_levels, args) : _levels(args);
       if (mesh.triangleCount > VehicleMeshSet.renderTriangleBudget) {
         warnings.add(
-          '삼각형 ${mesh.triangleCount}개를 화면용으로 ${set.lod0.triangleCount}개까지 '
-          '단순화했습니다(차량당 상한 ${VehicleMeshSet.renderTriangleBudget}).',
+          '삼각형 ${mesh.triangleCount}개를 화면에 맞게 '
+          '${set.lod0.triangleCount}개로 단순화했어요.',
         );
       }
       return VehicleMeshLoad(set, List.unmodifiable(warnings));
     } on ModelPackRejection catch (rejection) {
-      return VehicleMeshLoad(null, ['${rejection.message} 기본 차량 모양으로 그립니다.']);
-    } on Object catch (error) {
-      return VehicleMeshLoad(null, ['메시를 그릴 수 없어 기본 차량 모양으로 그립니다: $error']);
+      return VehicleMeshLoad(null, ['${rejection.message} 기본 차량 모양으로 그려요.']);
+    } on Object {
+      return VehicleMeshLoad(null, ['메시를 그릴 수 없어 기본 차량 모양으로 그려요.']);
     }
   }
 
@@ -131,7 +131,7 @@ class VehicleMeshLoader {
         codec.dispose();
       } on Object {
         decoded.add(null);
-        warnings.add('텍스처 하나를 읽지 못해 재질 색만 씁니다.');
+        warnings.add('텍스처 하나를 읽지 못해 색만 칠했어요.');
       }
     }
     final mesh = data.mesh;

@@ -115,18 +115,17 @@ class KovaParamsController extends ChangeNotifier {
 
   static String writeLockReason(KovaWriteLock lock) => switch (lock) {
     KovaWriteLock.none => '',
-    KovaWriteLock.notConnected => '장치에 연결하면 바꿀 수 있어요.',
-    KovaWriteLock.stale => '장치와 연결이 불안정해 다시 읽을 때까지 잠갔어요.',
-    KovaWriteLock.needsPairing =>
-      '장치 pairing 전에는 읽기만 할 수 있어요. 지금은 같은 기기(loopback) 개발 연결에서만 바꿀 수 있어요.',
+    KovaWriteLock.notConnected => '연결하면 바꿀 수 있어요.',
+    KovaWriteLock.stale => '다시 연결될 때까지 바꿀 수 없어요.',
+    KovaWriteLock.needsPairing => '지금은 보기만 할 수 있어요. 설정 변경은 아직 개발용 연결에서만 돼요.',
   };
 
   /// Per-setting line; the connection card shows [writeLockReason].
   static String _shortLockReason(KovaWriteLock lock) => switch (lock) {
     KovaWriteLock.none => '',
     KovaWriteLock.notConnected => '연결하면 바꿀 수 있어요.',
-    KovaWriteLock.stale => '다시 읽을 때까지 잠겼어요.',
-    KovaWriteLock.needsPairing => 'pairing 전이라 읽기 전용이에요.',
+    KovaWriteLock.stale => '다시 연결될 때까지 바꿀 수 없어요.',
+    KovaWriteLock.needsPairing => '보기만 할 수 있어요.',
   };
 
   /// Why [setting] cannot be changed now, or null when it can.
@@ -134,16 +133,16 @@ class KovaParamsController extends ChangeNotifier {
     final lock = writeLock;
     if (lock != KovaWriteLock.none) return _shortLockReason(lock);
     if (setting.control == KovaParamControl.readOnly) {
-      return '장치에서 읽기 전용으로 정한 항목이에요.';
+      return '읽기 전용 항목이에요.';
     }
     if (setting.status == KovaAvailability.unsupported) {
-      return '이 차량에서는 지원하지 않는 항목이에요.';
+      return '이 차에서는 쓸 수 없는 기능이에요.';
     }
     final onroad = document?.deviceOffroad == false;
     if (onroad &&
         (setting.applyPolicy == KovaApplyPolicy.offroad ||
             setting.applyPolicy == KovaApplyPolicy.restart)) {
-      return '주행 중에는 바꿀 수 없어요. 차를 세운 뒤 바꿔 주세요.';
+      return '주행 중에는 바꿀 수 없어요.';
     }
     if (pending.containsKey(setting.key)) return '보내는 중이에요.';
     return null;
@@ -156,7 +155,7 @@ class KovaParamsController extends ChangeNotifier {
     String? policyError;
     final client = _clientFactory(address, (e) => policyError = e);
     if (client == null) {
-      error = policyError ?? '올바른 설정 주소가 아니에요.';
+      error = policyError ?? '주소를 다시 확인해 주세요.';
       _status = KovaLinkStatus.disconnected;
       _notify();
       return error;
@@ -272,8 +271,8 @@ class KovaParamsController extends ChangeNotifier {
         notices[key] = KovaSettingNotice(
           KovaNoticeKind.applied,
           confirmed == null
-              ? '장치가 저장했어요.'
-              : '장치가 저장했어요: ${confirmed.describe(confirmed.value, defaultLocale: locale)}',
+              ? '저장했어요.'
+              : '저장했어요: ${confirmed.describe(confirmed.value, defaultLocale: locale)}',
         );
       case KovaUpdateConflict():
         final ok = await refresh();
@@ -281,11 +280,10 @@ class KovaParamsController extends ChangeNotifier {
         notices[key] = KovaSettingNotice(
           KovaNoticeKind.conflict,
           ok && latest != null
-              ? '다른 곳에서 먼저 바뀌어 최신 값으로 다시 읽었어요 (지금 값: '
+              ? '다른 곳에서 먼저 바뀌었어요. 지금 값: '
                     '${latest.describe(latest.value, defaultLocale: locale)}'
                     '${latest.value == setting.value ? '' : ', 이전: ${setting.describe(setting.value, defaultLocale: locale)}'}'
-                    '). 필요하면 다시 골라 주세요.'
-              : '다른 곳에서 먼저 바뀌었어요. 다시 읽기를 눌러 최신 값을 확인해 주세요.',
+              : '다른 곳에서 먼저 바뀌었어요. 새로고침해서 확인해 주세요.',
         );
       case KovaUpdateRejected(:final reason, :final code):
         notices[key] = KovaSettingNotice(KovaNoticeKind.rejected, reason);
@@ -297,16 +295,16 @@ class KovaParamsController extends ChangeNotifier {
         notices[key] = KovaSettingNotice(
           KovaNoticeKind.timedOut,
           ok
-              ? '응답이 늦어 저장됐는지 몰라 장치 값을 다시 읽었어요. 지금 보이는 값이 장치 값이에요.'
-              : '응답이 없어 저장됐는지 알 수 없어요. 연결되면 장치 값을 다시 읽어요.',
+              ? '응답이 늦어 차에 저장된 값을 다시 불러왔어요.'
+              : '응답이 없어 저장됐는지 알 수 없어요. 다시 연결되면 차의 값을 불러와요.',
         );
       case KovaUpdateFailed():
         final ok = await refresh();
         notices[key] = KovaSettingNotice(
           KovaNoticeKind.failed,
           ok
-              ? '보내는 중 통신이 끊겨 장치 값을 다시 읽었어요. 지금 보이는 값이 장치 값이에요.'
-              : '보내지 못했어요. 연결되면 장치 값을 다시 읽어요.',
+              ? '연결이 잠깐 끊겨 차에 저장된 값을 다시 불러왔어요.'
+              : '보내지 못했어요. 다시 연결되면 차의 값을 불러와요.',
         );
     }
     _notify();

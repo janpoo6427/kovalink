@@ -101,11 +101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context, _) => ListView(
         padding: const EdgeInsets.fromLTRB(20, 64, 20, 32),
         children: [
-          const PageHeader(
-            title: '설정',
-            subtitle:
-                '앱 설정은 이 휴대폰에, kovapilot 설정은 차에 저장돼요. 차량 제어 명령·안전 설정은 앱에서 바꿀 수 없습니다.',
-          ),
+          const PageHeader(title: '설정'),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -121,7 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ButtonSegment(
                   value: SettingsTab.session,
                   icon: Icon(Icons.cable, size: 18),
-                  label: Text('연결 세션'),
+                  label: Text('연결 상태'),
                 ),
                 ButtonSegment(
                   value: SettingsTab.kovapilot,
@@ -131,20 +127,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
               selected: {_tab},
               onSelectionChanged: (s) => setState(() => _tab = s.first),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-            child: Text(
-              switch (_tab) {
-                SettingsTab.app => '이 휴대폰에만 저장돼요. 장치가 없어도 바꿀 수 있어요.',
-                SettingsTab.session =>
-                  '지금 연결에만 쓰여요. 연결이 끊기면 사라지고 차에는 저장되지 않아요.',
-                SettingsTab.kovapilot =>
-                  '차(kovapilot)에 저장돼요. 장치가 확인해 준 값만 보여요.',
-              },
-              key: const ValueKey('settings-tab-caption'),
-              style: const TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
             ),
           ),
           const SizedBox(height: 6),
@@ -192,14 +174,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               result:
                   vehicleModel?.value ?? VehicleModelLoadResult.bundledDefault,
             ),
-          if (_tab == SettingsTab.app)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
-              child: Text(
-                'Safety parameter, cloud privacy policy, 차량 actuation은 앱에서 변경할 수 없습니다.',
-                style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
-              ),
-            ),
         ],
       ),
     );
@@ -221,62 +195,61 @@ class _SessionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final telemetry = switch (controller.mode) {
-      GatewayMode.demo => '데모 주행 중 (네트워크 안 씀)',
+      GatewayMode.demo => '데모 주행 중',
       GatewayMode.connecting => '연결 중',
-      GatewayMode.live => '받는 중',
+      GatewayMode.live => '연결됨',
       GatewayMode.disconnected => '연결 안 됨',
-      GatewayMode.error => '끊김',
+      GatewayMode.error => '연결 끊김',
     };
     final kovaStatus = switch (kova.status) {
       KovaLinkStatus.disconnected => '연결 안 됨',
       KovaLinkStatus.connecting => '연결 중',
       KovaLinkStatus.connected => '연결됨',
-      KovaLinkStatus.stale => '오래됨 · 다시 연결 중',
+      KovaLinkStatus.stale => '다시 연결하는 중',
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('지금 연결'),
+        const SizedBox(height: 12),
         Card(
           key: const ValueKey('session-card'),
           child: Column(
             children: [
-              ListTile(
-                leading: const Icon(Icons.speed_outlined),
-                title: const Text('주행 정보(telemetry)'),
-                subtitle: Text(
-                  '$telemetry · ${controller.connectedEndpoint ?? settings?.value.telemetryEndpoint ?? AppSettings.defaultTelemetryEndpoint}',
-                ),
+              _StatusTile(
+                icon: Icons.speed_outlined,
+                title: '주행 정보',
+                status: telemetry,
+                address:
+                    controller.connectedEndpoint ??
+                    settings?.value.telemetryEndpoint ??
+                    AppSettings.defaultTelemetryEndpoint,
               ),
               const Divider(height: 1, indent: 56),
-              ListTile(
-                leading: const Icon(Icons.videocam_outlined),
-                title: const Text('카메라 보기'),
-                subtitle: Text(
-                  '보는 동안만 연결 · ${settings?.value.signalingEndpoint ?? AppSettings.defaultSignalingEndpoint}',
-                ),
+              _StatusTile(
+                icon: Icons.videocam_outlined,
+                title: '카메라',
+                status: '볼 때만 연결돼요',
+                address:
+                    settings?.value.signalingEndpoint ??
+                    AppSettings.defaultSignalingEndpoint,
               ),
               const Divider(height: 1, indent: 56),
-              ListTile(
-                leading: const Icon(Icons.tune_outlined),
-                title: const Text('kovapilot 설정 연결'),
-                subtitle: Text(
-                  '$kovaStatus · ${kova.endpoint ?? settings?.value.settingsEndpoint ?? AppSettings.defaultSettingsEndpoint}',
-                ),
+              _StatusTile(
+                icon: Icons.tune_outlined,
+                title: 'kovapilot 설정',
+                status: kovaStatus,
+                address:
+                    kova.endpoint ??
+                    settings?.value.settingsEndpoint ??
+                    AppSettings.defaultSettingsEndpoint,
               ),
               const Divider(height: 1, indent: 56),
-              ListTile(
-                leading: Icon(
-                  controller.gatewayAuthenticated
-                      ? Icons.verified_user_outlined
-                      : Icons.no_encryption_gmailerrorred_outlined,
-                ),
-                title: const Text('장치 인증'),
-                subtitle: Text(
-                  controller.gatewayAuthenticated
-                      ? '인증됨'
-                      : 'pairing 전 · LAN 주소에서는 kovapilot 설정을 읽기만 해요',
-                ),
+              _StatusTile(
+                icon: controller.gatewayAuthenticated
+                    ? Icons.verified_user_outlined
+                    : Icons.no_encryption_gmailerrorred_outlined,
+                title: '기기 등록',
+                status: controller.gatewayAuthenticated ? '등록됨' : '아직 등록 전이에요',
               ),
             ],
           ),
@@ -284,11 +257,48 @@ class _SessionSection extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
           child: Text(
-            '연결 주소는 「앱」 탭의 「연결 장치 주소」에서 바꿉니다. 이 탭의 내용은 차에 저장되지 않아요.',
+            '주소는 앱 탭에서 바꿀 수 있어요.',
             style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One connection line: status, with the address small underneath.
+class _StatusTile extends StatelessWidget {
+  const _StatusTile({
+    required this.icon,
+    required this.title,
+    required this.status,
+    this.address,
+  });
+
+  final IconData icon;
+  final String title;
+  final String status;
+  final String? address;
+
+  @override
+  Widget build(BuildContext context) {
+    final address = this.address;
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(status),
+          if (address != null)
+            Text(
+              address,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF8E9DA9), fontSize: 11.5),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -324,7 +334,6 @@ class _SettingsAddressDialogState extends State<_SettingsAddressDialog> {
       autocorrect: false,
       decoration: InputDecoration(
         hintText: AppSettings.defaultSettingsEndpoint,
-        helperText: '같은 기기 개발용: http://127.0.0.1:8082',
         errorText: error,
         errorMaxLines: 3,
       ),
@@ -534,13 +543,11 @@ class _LayerSection extends StatelessWidget {
     Widget toggle(
       String key,
       String title,
-      String subtitle,
       bool current,
       AppSettings Function(AppSettings, bool) apply,
     ) => SwitchListTile(
       key: ValueKey('setting-$key'),
       title: Text(title),
-      subtitle: Text(subtitle),
       value: current,
       onChanged: (on) => settings.update((s) => apply(s, on)),
     );
@@ -554,35 +561,30 @@ class _LayerSection extends StatelessWidget {
               toggle(
                 'lanes',
                 '차선',
-                '흰 차선·노란 중앙선·가장자리',
                 value.showLanes,
                 (s, on) => s.copyWith(showLanes: on),
               ),
               toggle(
                 'objects',
                 '주변 차량',
-                '선행차·주변 차·라바콘',
                 value.showObjects,
                 (s, on) => s.copyWith(showObjects: on),
               ),
               toggle(
                 'path',
-                '경로',
-                '자차 앞 경로 띠',
+                '주행 경로',
                 value.showPath,
                 (s, on) => s.copyWith(showPath: on),
               ),
               toggle(
                 'scenery',
-                '배경',
-                '나무·건물',
+                '나무와 건물',
                 value.showScenery,
                 (s, on) => s.copyWith(showScenery: on),
               ),
               toggle(
                 'hud',
-                'HUD 수치',
-                '속도·설정 속도·제한속도·안내 카드',
+                '속도와 길 안내',
                 value.showHud,
                 (s, on) => s.copyWith(showHud: on),
               ),
@@ -616,11 +618,9 @@ class _DemoSection extends StatelessWidget {
               SwitchListTile(
                 key: const ValueKey('setting-demo'),
                 title: const Text('데모 모드'),
-                subtitle: Text(
-                  live
-                      ? '장치에 연결되어 있는 동안에는 데모를 켜지 않습니다.'
-                      : '네트워크 없이 앱 안의 가짜 주행을 보여 줍니다.',
-                ),
+                subtitle: live
+                    ? const Text('차에 연결된 동안에는 데모가 나오지 않아요.')
+                    : const Text('차 없이 예시 주행을 보여 줘요.'),
                 value: value.demoMode,
                 onChanged: (on) =>
                     settings.update((s) => s.copyWith(demoMode: on)),
@@ -686,7 +686,7 @@ class _EndpointSectionState extends State<_EndpointSection> {
           telemetryError == null &&
               signalingError == null &&
               settingsError == null
-          ? '저장했습니다.'
+          ? '저장했어요.'
           : null;
     });
   }
@@ -696,7 +696,7 @@ class _EndpointSectionState extends State<_EndpointSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('연결 장치 주소'),
+        const _SectionTitle('연결 주소'),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -709,7 +709,7 @@ class _EndpointSectionState extends State<_EndpointSection> {
                   keyboardType: TextInputType.url,
                   autocorrect: false,
                   decoration: InputDecoration(
-                    labelText: 'Telemetry WebSocket',
+                    labelText: '주행 정보',
                     hintText: AppSettings.defaultTelemetryEndpoint,
                     errorText: telemetryError,
                     errorMaxLines: 2,
@@ -722,7 +722,7 @@ class _EndpointSectionState extends State<_EndpointSection> {
                   keyboardType: TextInputType.url,
                   autocorrect: false,
                   decoration: InputDecoration(
-                    labelText: 'Camera signaling',
+                    labelText: '카메라',
                     hintText: AppSettings.defaultSignalingEndpoint,
                     errorText: signalingError,
                     errorMaxLines: 2,
@@ -735,7 +735,7 @@ class _EndpointSectionState extends State<_EndpointSection> {
                   keyboardType: TextInputType.url,
                   autocorrect: false,
                   decoration: InputDecoration(
-                    labelText: 'kovapilot 설정 (HTTP)',
+                    labelText: 'kovapilot 설정',
                     hintText: AppSettings.defaultSettingsEndpoint,
                     errorText: settingsError,
                     errorMaxLines: 2,
@@ -746,8 +746,7 @@ class _EndpointSectionState extends State<_EndpointSection> {
                   children: [
                     Expanded(
                       child: Text(
-                        saved ??
-                            '로컬 주소만 저장합니다(localhost, .local, 사설 IP). 공개 도메인은 거부합니다.',
+                        saved ?? '',
                         style: const TextStyle(
                           fontSize: 12,
                           color: Color(0xFF8E9DA9),
@@ -823,8 +822,8 @@ class _VehicleModelSectionState extends State<_VehicleModelSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('차량 모델 삭제'),
-        content: Text('${entry.manifest.displayName}을(를) 앱에서 지웁니다.'),
+        title: const Text('이 모델을 지울까요?'),
+        content: Text(entry.manifest.displayName),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -871,7 +870,7 @@ class _VehicleModelSectionState extends State<_VehicleModelSection> {
                       ),
                       title: Text(entry.manifest.displayName),
                       subtitle: Text(
-                        '${entry.builtIn ? '내장' : '가져옴'} · ${entry.manifest.license ?? '라이선스 미기재'}',
+                        '${entry.builtIn ? '기본 모델' : '가져온 모델'} · ${entry.manifest.license ?? '라이선스 없음'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -901,18 +900,14 @@ class _VehicleModelSectionState extends State<_VehicleModelSection> {
                   ListTile(
                     key: const ValueKey('model-import'),
                     leading: const Icon(Icons.file_download_outlined),
-                    title: const Text('파일 가져오기'),
-                    subtitle: const Text(
-                      '.kovamodel (ZIP: vehicle.json + GLB + LICENSE)',
-                    ),
+                    title: const Text('모델 파일 가져오기'),
+                    subtitle: const Text('.kovamodel 파일'),
                     onTap: _import,
                   ),
                   SwitchListTile(
                     key: const ValueKey('setting-native-overlay'),
-                    title: const Text('GLB 3D 모델 겹치기 (실험)'),
-                    subtitle: const Text(
-                      'Android/iOS에서 모델 팩의 GLB를 뒤 시점 위에 겹칩니다.',
-                    ),
+                    title: const Text('3D 차량 모델 쓰기'),
+                    subtitle: const Text('시험 중인 기능이에요. 휴대폰 앱의 뒤 시점에서만 보여요.'),
                     value: widget.settings.value.nativeVehicleOverlay,
                     onChanged: (on) => widget.settings.update(
                       (s) => s.copyWith(nativeVehicleOverlay: on),
@@ -989,7 +984,7 @@ class VehicleModelCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '내 차 모델 · ${manifest.displayName}',
+                    manifest.displayName,
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -997,16 +992,9 @@ class VehicleModelCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '길이 ${meters(dimensions.length)} m · 폭 ${meters(dimensions.width)} m'
-              ' · 높이 ${meters(dimensions.height)} m'
-              ' · 축간 ${meters(dimensions.wheelbase)} m',
-              style: const TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              result.usesBuiltInModel
-                  ? '표시 방식: 기본 내장 모델(2D)'
-                  : '표시 방식: 모델 팩 GLB + 기본 내장 모델',
+              '길이 ${meters(dimensions.length)} m   폭 ${meters(dimensions.width)} m'
+              '   높이 ${meters(dimensions.height)} m'
+              '   축간거리 ${meters(dimensions.wheelbase)} m',
               style: const TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
             ),
             for (final warning in result.warnings) ...[

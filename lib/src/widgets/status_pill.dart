@@ -9,9 +9,9 @@ class StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (mode) {
-      GatewayMode.demo => ('DEMO', const Color(0xFF72A7FF)),
+      GatewayMode.demo => ('데모', const Color(0xFF72A7FF)),
       GatewayMode.connecting => ('연결 중', const Color(0xFFFFC857)),
-      GatewayMode.live => ('LOCAL LIVE', const Color(0xFF58F2C2)),
+      GatewayMode.live => ('연결됨', const Color(0xFF58F2C2)),
       GatewayMode.disconnected => ('연결 안 됨', const Color(0xFF8E9DA9)),
       GatewayMode.error => ('연결 오류', const Color(0xFFFF6B72)),
     };

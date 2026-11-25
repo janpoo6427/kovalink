@@ -92,18 +92,18 @@ class GltfMeshReader {
   /// Splits a GLB into its JSON document and BIN chunk.
   static (Map<String, dynamic>, Uint8List?) parseContainer(Uint8List bytes) {
     if (bytes.length < 20) {
-      throw const ModelPackRejection('glb-invalid', 'GLB 파일이 너무 짧습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 파일이 너무 짧아요.');
     }
     final data = ByteData.sublistView(bytes);
     if (data.getUint32(0, Endian.little) != _magic ||
         data.getUint32(4, Endian.little) != 2 ||
         data.getUint32(8, Endian.little) != bytes.length) {
-      throw const ModelPackRejection('glb-invalid', 'glTF 2.0 GLB 파일이 아닙니다.');
+      throw const ModelPackRejection('glb-invalid', 'glTF 2.0 GLB 파일이 아니에요.');
     }
     final jsonLength = data.getUint32(12, Endian.little);
     if (data.getUint32(16, Endian.little) != _jsonChunk ||
         20 + jsonLength > bytes.length) {
-      throw const ModelPackRejection('glb-invalid', 'GLB JSON 영역이 올바르지 않습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 안의 JSON이 잘못됐어요.');
     }
     final Object? decoded;
     try {
@@ -111,10 +111,10 @@ class GltfMeshReader {
         utf8.decode(Uint8List.sublistView(bytes, 20, 20 + jsonLength)),
       );
     } on FormatException {
-      throw const ModelPackRejection('glb-invalid', 'GLB JSON을 읽을 수 없습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 안의 JSON을 읽을 수 없어요.');
     }
     if (decoded is! Map<String, dynamic>) {
-      throw const ModelPackRejection('glb-invalid', 'GLB JSON을 읽을 수 없습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 안의 JSON을 읽을 수 없어요.');
     }
     Uint8List? bin;
     final binHeader = 20 + ((jsonLength + 3) & ~3);
@@ -143,8 +143,8 @@ class GltfMeshReader {
     if (compressed.isNotEmpty) {
       throw ModelPackRejection(
         'glb-compressed',
-        '압축된 메시(${compressed.join(', ')})는 지원하지 않습니다. '
-            '내보낼 때 Draco·meshopt 압축을 끄고 다시 만드세요.',
+        '압축된 메시(${compressed.join(', ')})는 쓸 수 없어요. '
+            '내보낼 때 Draco, meshopt 압축을 끄고 다시 만들어 주세요.',
       );
     }
     for (final key in const ['buffers', 'images']) {
@@ -154,7 +154,7 @@ class GltfMeshReader {
         if (item.containsKey('uri')) {
           throw const ModelPackRejection(
             'external-uri',
-            'GLB 밖의 파일(URI)을 참조하는 모델은 쓸 수 없습니다.',
+            'GLB 밖의 파일을 가리키는 모델은 쓸 수 없어요.',
           );
         }
       }
@@ -199,7 +199,7 @@ class _Reader {
       _visit(root, _Mat4.identity, null, 0);
     }
     if (indices.isEmpty) {
-      throw const ModelPackRejection('glb-empty', 'GLB에 그릴 수 있는 삼각형 메시가 없습니다.');
+      throw const ModelPackRejection('glb-empty', 'GLB에 그릴 수 있는 메시가 없어요.');
     }
     return GltfMeshData(
       mesh: VehicleMesh(
@@ -235,7 +235,7 @@ class _Reader {
 
   void _visit(int index, _Mat4 parent, MeshRole? inherited, int depth) {
     if (index < 0 || index >= nodes.length || depth > 64) {
-      throw const ModelPackRejection('glb-invalid', 'GLB 노드 구조가 올바르지 않습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 노드 구조가 잘못됐어요.');
     }
     final node = nodes[index];
     final name = node['name'] as String?;
@@ -245,7 +245,7 @@ class _Reader {
     final mesh = node['mesh'];
     if (mesh is int) {
       if (mesh < 0 || mesh >= meshes.length) {
-        throw const ModelPackRejection('glb-invalid', 'GLB 메시 번호가 올바르지 않습니다.');
+        throw const ModelPackRejection('glb-invalid', 'GLB 메시 번호가 잘못됐어요.');
       }
       for (final primitive
           in (meshes[mesh]['primitives'] as List? ?? const [])
@@ -266,12 +266,12 @@ class _Reader {
         false) {
       throw const ModelPackRejection(
         'glb-compressed',
-        '압축된 메시(Draco)는 지원하지 않습니다. 압축 없이 다시 내보내세요.',
+        '압축된 메시(Draco)는 쓸 수 없어요. 압축 없이 다시 내보내 주세요.',
       );
     }
     final mode = primitive['mode'] as int? ?? 4;
     if (mode != 4 && mode != 5 && mode != 6) {
-      warnings.add('점·선 프리미티브는 그리지 않습니다.');
+      warnings.add('점과 선으로 된 부분은 그리지 않았어요.');
       return;
     }
     final attributes = primitive['attributes'] as Map? ?? const {};
@@ -287,7 +287,7 @@ class _Reader {
     if (localNormals != null && localNormals.length != local.length) {
       throw const ModelPackRejection(
         'glb-invalid',
-        'NORMAL 개수가 POSITION과 다릅니다.',
+        'NORMAL 개수가 POSITION과 달라요.',
       );
     }
 
@@ -355,7 +355,7 @@ class _Reader {
         }
     }
     if (triMaterials.length + tris.length ~/ 3 > GltfMeshReader.maxTriangles) {
-      throw const ModelPackRejection('too-many-triangles', '삼각형이 너무 많습니다.');
+      throw const ModelPackRejection('too-many-triangles', '삼각형이 너무 많아요.');
     }
 
     final flip = world.determinant3 < 0;
@@ -406,7 +406,7 @@ class _Reader {
     for (var i = 0; i + 2 < tris.length; i += 3) {
       final a = tris[i], b = tris[i + 1], c = tris[i + 2];
       if (a >= count || b >= count || c >= count) {
-        throw const ModelPackRejection('glb-invalid', '인덱스가 정점 범위를 벗어납니다.');
+        throw const ModelPackRejection('glb-invalid', '인덱스가 정점 범위를 벗어났어요.');
       }
       indices
         ..add(base + a)
@@ -591,21 +591,18 @@ class _Reader {
 
   (int, int, int) _view(int index) {
     if (index < 0 || index >= views.length || bin == null) {
-      throw const ModelPackRejection(
-        'glb-invalid',
-        'GLB bufferView가 올바르지 않습니다.',
-      );
+      throw const ModelPackRejection('glb-invalid', 'GLB bufferView가 잘못됐어요.');
     }
     final view = views[index];
     if ((view['buffer'] as int? ?? 0) != 0) {
-      throw const ModelPackRejection('glb-invalid', 'GLB 안의 버퍼만 쓸 수 있습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 안의 버퍼만 쓸 수 있어요.');
     }
     final offset = view['byteOffset'] as int? ?? 0;
     final length = view['byteLength'] as int? ?? 0;
     if (offset < 0 || length < 0 || offset + length > bin!.length) {
       throw const ModelPackRejection(
         'glb-invalid',
-        'GLB bufferView 범위가 파일을 벗어납니다.',
+        'GLB bufferView 범위가 파일을 벗어났어요.',
       );
     }
     return (offset, length, view['byteStride'] as int? ?? 0);
@@ -617,30 +614,27 @@ class _Reader {
     5125 || 5126 => 4,
     _ => throw const ModelPackRejection(
       'glb-invalid',
-      '알 수 없는 accessor 형식입니다.',
+      '알 수 없는 accessor 형식이에요.',
     ),
   };
 
   ({ByteData data, int start, int stride, int count, int type, bool normalized})
   _accessor(int index, int components) {
     if (index < 0 || index >= accessors.length) {
-      throw const ModelPackRejection(
-        'glb-invalid',
-        'GLB accessor 번호가 올바르지 않습니다.',
-      );
+      throw const ModelPackRejection('glb-invalid', 'GLB accessor 번호가 잘못됐어요.');
     }
     final a = accessors[index];
     const typeNames = {1: 'SCALAR', 2: 'VEC2', 3: 'VEC3'};
     if (a['type'] != typeNames[components]) {
       throw ModelPackRejection(
         'glb-invalid',
-        'accessor 형식이 ${typeNames[components]}가 아닙니다.',
+        'accessor 형식이 ${typeNames[components]}가 아니에요.',
       );
     }
     if (a.containsKey('sparse')) {
       throw const ModelPackRejection(
         'glb-unsupported',
-        'sparse accessor(모프·부분 갱신용 압축 데이터)는 지원하지 않습니다.',
+        'sparse accessor는 쓸 수 없어요.',
       );
     }
     final type = a['componentType'] as int? ?? 0;
@@ -649,7 +643,7 @@ class _Reader {
     if (viewIndex is! int) {
       throw const ModelPackRejection(
         'glb-invalid',
-        'accessor에 bufferView가 없습니다.',
+        'accessor에 bufferView가 없어요.',
       );
     }
     final (offset, length, viewStride) = _view(viewIndex);
@@ -662,7 +656,7 @@ class _Reader {
             start + stride * (count - 1) + element > offset + length)) {
       throw const ModelPackRejection(
         'glb-invalid',
-        'accessor 범위가 bufferView를 벗어납니다.',
+        'accessor 범위가 bufferView를 벗어났어요.',
       );
     }
     return (
@@ -703,10 +697,7 @@ class _Reader {
           _ => a.data.getUint32(o, Endian.little).toDouble(),
         };
         if (!v.isFinite) {
-          throw const ModelPackRejection(
-            'glb-invalid',
-            'GLB에 숫자가 아닌 좌표가 있습니다.',
-          );
+          throw const ModelPackRejection('glb-invalid', 'GLB에 숫자가 아닌 좌표가 있어요.');
         }
         out[i * components + c] = v;
       }
@@ -717,7 +708,7 @@ class _Reader {
   List<int> _readIndices(int index, int vertexCount) {
     final a = _accessor(index, 1);
     if (a.type != 5121 && a.type != 5123 && a.type != 5125) {
-      throw const ModelPackRejection('glb-invalid', '인덱스는 uint8/16/32여야 합니다.');
+      throw const ModelPackRejection('glb-invalid', '인덱스는 uint8/16/32여야 해요.');
     }
     final out = List<int>.filled(a.count, 0);
     for (var i = 0; i < a.count; i++) {
@@ -796,7 +787,7 @@ class _Mat4 {
     final r = vec(node['rotation'], const [0, 0, 0, 1]);
     final s = vec(node['scale'], const [1, 1, 1]);
     if (t.length != 3 || r.length != 4 || s.length != 3) {
-      throw const ModelPackRejection('glb-invalid', 'GLB 노드 변환 값이 올바르지 않습니다.');
+      throw const ModelPackRejection('glb-invalid', 'GLB 노드 변환 값이 잘못됐어요.');
     }
     final (x, y, z, w) = (r[0], r[1], r[2], r[3]);
     final r00 = 1 - 2 * (y * y + z * z), r01 = 2 * (x * y - z * w);

@@ -86,14 +86,14 @@ class VehicleModelRepository {
       text = await (bundle ?? rootBundle).loadString(
         '${directory}vehicle.json',
       );
-    } on Object catch (error) {
-      return _builtIn('vehicle.json을 읽을 수 없어 기본 내장 차량을 씁니다: $error');
+    } on Object {
+      return _builtIn('vehicle.json을 읽을 수 없어 기본 차량을 써요.');
     }
     final Object? decoded;
     try {
       decoded = jsonDecode(text);
-    } on FormatException catch (error) {
-      return _builtIn('vehicle.json 형식 오류로 기본 내장 차량을 씁니다: ${error.message}');
+    } on FormatException {
+      return _builtIn('vehicle.json 형식이 잘못돼 기본 차량을 써요.');
     }
     return resolve(decoded, directory: directory);
   }
@@ -104,29 +104,27 @@ class VehicleModelRepository {
     required String directory,
   }) {
     if (decoded is! Map<String, dynamic>) {
-      return _builtIn('vehicle.json은 JSON object여야 합니다.');
+      return _builtIn('vehicle.json은 JSON 객체여야 해요.');
     }
     VehicleModelManifest manifest;
     try {
       manifest = VehicleModelManifest.fromJson(decoded);
-    } on Object catch (error) {
-      return _builtIn('vehicle.json을 해석할 수 없어 기본 내장 차량을 씁니다: $error');
+    } on Object {
+      return _builtIn('vehicle.json을 읽을 수 없어 기본 차량을 써요.');
     }
 
     final warnings = <String>[];
     final dimensionError = manifest.dimensions.validationError;
     if (dimensionError != null) {
-      warnings.add('$dimensionError 기본 치수를 씁니다.');
+      warnings.add('$dimensionError 기본 치수를 써요.');
       manifest = manifest.copyWith(dimensions: VehicleDimensions.reference);
     }
 
     String? glbPath;
     if (manifest.coordinateSystem != supportedCoordinateSystem) {
-      warnings.add(
-        '지원하지 않는 좌표계 ${manifest.coordinateSystem}: GLB 대신 기본 내장 모델을 그립니다.',
-      );
+      warnings.add('쓸 수 없는 좌표계라 기본 모델로 그려요: ${manifest.coordinateSystem}');
     } else if (!VehicleModelManifest.isSafeAssetFileName(manifest.asset)) {
-      warnings.add('GLB 파일 이름이 올바르지 않아 기본 내장 모델을 그립니다.');
+      warnings.add('GLB 파일 이름이 잘못돼 기본 모델로 그려요.');
     } else {
       glbPath = '$directory${manifest.asset}';
     }

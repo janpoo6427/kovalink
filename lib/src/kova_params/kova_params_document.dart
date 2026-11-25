@@ -26,7 +26,7 @@ class KovaParamsFormatException implements Exception {
 /// The gateway speaks a newer major schema than this app.
 class KovaParamsSchemaUnsupported extends KovaParamsFormatException {
   const KovaParamsSchemaUnsupported(this.schemaVersion)
-    : super('지원하지 않는 kova_params 형식입니다. 앱을 업데이트해 주세요.');
+    : super('차의 설정 형식이 이 앱과 맞지 않아요. 앱을 업데이트해 주세요.');
   final Object? schemaVersion;
 }
 

@@ -46,7 +46,7 @@ class WebRtcRoadStream extends ChangeNotifier {
       return validationError;
     }
     if (camera != 'road' && camera != 'wideRoad') {
-      const message = '지원하지 않는 카메라입니다.';
+      const message = '지원하지 않는 카메라예요.';
       _setError(message);
       return message;
     }
@@ -80,7 +80,7 @@ class WebRtcRoadStream extends ChangeNotifier {
         if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
             state ==
                 RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
-          _setError('WebRTC 연결이 종료되었습니다.');
+          _setError('카메라 연결이 끊겼어요.');
         }
       };
       peerConnection.onTrack = (event) {
@@ -119,8 +119,8 @@ class WebRtcRoadStream extends ChangeNotifier {
         RTCSessionDescription(answer.sdp, answer.type),
       );
       return null;
-    } on Object catch (error) {
-      final message = '카메라 스트림 연결 실패: $error';
+    } on Object {
+      const message = '카메라에 연결할 수 없어요. 주소와 네트워크를 확인해 주세요.';
       await _closePeer();
       _setError(message);
       return message;

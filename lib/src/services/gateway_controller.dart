@@ -90,14 +90,15 @@ class GatewayController extends ChangeNotifier {
       mode = GatewayMode.live;
       _socketSubscription = socket.listen(
         _handleMessage,
-        onDone: () => _handleDisconnect('gateway 연결이 종료되었습니다.'),
-        onError: (Object error) => _handleDisconnect('gateway 통신 오류: $error'),
+        onDone: () => _handleDisconnect('차와 연결이 끊겼어요.'),
+        onError: (Object error) =>
+            _handleDisconnect('차와 연결이 끊겼어요. 다시 연결해 주세요.'),
         cancelOnError: true,
       );
       notifyListeners();
       return null;
-    } on Object catch (error) {
-      _handleDisconnect('gateway에 연결할 수 없습니다: $error');
+    } on Object {
+      _handleDisconnect('차에 연결할 수 없어요. 주소와 네트워크를 확인해 주세요.');
       return errorMessage;
     }
   }
@@ -124,8 +125,8 @@ class GatewayController extends ChangeNotifier {
       }
       scene = RoadScene.fromJson(decoded);
       notifyListeners();
-    } on Object catch (error) {
-      errorMessage = '잘못된 telemetry frame: $error';
+    } on Object {
+      errorMessage = '차에서 받은 주행 정보를 읽을 수 없어요.';
       notifyListeners();
     }
   }

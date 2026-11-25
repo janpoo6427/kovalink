@@ -131,7 +131,7 @@ class VehicleModelLibrary {
       return const VehicleModelImportOutcome._(
         rejection: ModelPackRejection(
           'reserved-id',
-          '내장 모델과 같은 id는 쓸 수 없습니다. vehicle.json의 id를 바꾸세요.',
+          '기본 모델과 같은 id는 쓸 수 없어요. vehicle.json의 id를 바꿔 주세요.',
         ),
       );
     }
@@ -213,10 +213,7 @@ class VehicleModelLibrary {
     return VehicleModelLoadResult(
       manifest: fallback.manifest,
       glbAssetPath: fallback.glbAssetPath,
-      warnings: [
-        '선택한 차량 모델($selected)을 불러올 수 없어 기본 모델로 돌아갑니다.',
-        ...fallback.warnings,
-      ],
+      warnings: ['고른 차량 모델을 불러올 수 없어 기본 모델로 바꿨어요.', ...fallback.warnings],
     );
   }
 
@@ -233,7 +230,7 @@ class VehicleModelLibrary {
         return VehicleModelLoadResult(
           manifest: result.manifest,
           glbAssetPath: null,
-          warnings: [...result.warnings, 'GLB 파일이 없어 기본 내장 모델을 그립니다.'],
+          warnings: [...result.warnings, 'GLB 파일이 없어 기본 모델로 그려요.'],
         );
       }
       // Native loader (thermion) reads app files through file:// paths.
@@ -242,11 +239,11 @@ class VehicleModelLibrary {
         glbAssetPath: 'file://$glbPath',
         warnings: result.warnings,
       );
-    } on Object catch (error) {
+    } on Object {
       return VehicleModelLoadResult(
         manifest: VehicleModelManifest.builtIn,
         glbAssetPath: null,
-        warnings: ['가져온 모델을 읽을 수 없습니다: $error'],
+        warnings: ['가져온 모델을 읽을 수 없어요.'],
       );
     }
   }

@@ -56,7 +56,7 @@ class VehicleModelManifest {
   static const builtIn = VehicleModelManifest(
     schemaVersion: 1,
     id: 'kovalink-builtin',
-    displayName: '기본 내장 차량',
+    displayName: '기본 차량',
     asset: '',
     coordinateSystem: 'RH_Y_UP_Z_FORWARD',
     dimensions: VehicleDimensions.reference,
@@ -202,13 +202,13 @@ class VehicleDimensions {
   String? get validationError {
     final values = [length, width, height, wheelbase];
     if (values.any((value) => !value.isFinite || value <= 0)) {
-      return '차량 치수는 0보다 큰 숫자(m)여야 합니다.';
+      return '차량 치수는 0보다 큰 숫자(m)여야 해요.';
     }
-    if (length < 2.5 || length > 7.5) return '차량 길이는 2.5–7.5 m 범위여야 합니다.';
-    if (width < 1.2 || width > 2.8) return '차량 폭은 1.2–2.8 m 범위여야 합니다.';
-    if (height < 0.9 || height > 3.5) return '차량 높이는 0.9–3.5 m 범위여야 합니다.';
+    if (length < 2.5 || length > 7.5) return '차량 길이는 2.5–7.5 m 사이여야 해요.';
+    if (width < 1.2 || width > 2.8) return '차량 폭은 1.2–2.8 m 사이여야 해요.';
+    if (height < 0.9 || height > 3.5) return '차량 높이는 0.9–3.5 m 사이여야 해요.';
     if (wheelbase < 1.5 || wheelbase > length - 0.3) {
-      return '축간거리는 1.5 m 이상, 차량 길이보다 0.3 m 이상 짧아야 합니다.';
+      return '축간거리는 1.5 m 이상이고 차 길이보다 0.3 m 이상 짧아야 해요.';
     }
     return null;
   }

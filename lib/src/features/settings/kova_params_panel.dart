@@ -48,10 +48,7 @@ class KovaParamsPanel extends StatelessWidget {
                 key: ValueKey('kova-empty'),
                 child: ListTile(
                   leading: Icon(Icons.tune_outlined),
-                  title: Text('아직 읽어 온 설정이 없어요'),
-                  subtitle: Text(
-                    '연결하면 장치(kovapilot)가 보내 준 설정 목록과 설명이 그대로 보여요.',
-                  ),
+                  title: Text('연결하면 kovapilot 설정이 여기에 나와요.'),
                 ),
               )
             else ...[
@@ -65,17 +62,10 @@ class KovaParamsPanel extends StatelessWidget {
                 const Card(
                   child: ListTile(
                     leading: Icon(Icons.inbox_outlined),
-                    title: Text('장치가 보여 줄 설정이 없어요'),
+                    title: Text('바꿀 수 있는 설정이 없어요.'),
                   ),
                 ),
             ],
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
-              child: Text(
-                '바꾼 값은 장치가 확인해 준 뒤에만 확정돼요. 차량 제어 명령·진단·인증 정보는 앱에서 다루지 않아요.',
-                style: TextStyle(color: _muted, fontSize: 12),
-              ),
-            ),
           ],
         );
       },
@@ -84,11 +74,11 @@ class KovaParamsPanel extends StatelessWidget {
 }
 
 String _ago(DateTime? at, DateTime now) {
-  if (at == null) return '아직 못 읽음';
+  if (at == null) return '아직 못 불러옴';
   final seconds = now.difference(at).inSeconds;
-  if (seconds < 5) return '방금 읽음';
-  if (seconds < 60) return '$seconds초 전에 읽음';
-  return '${seconds ~/ 60}분 전에 읽음';
+  if (seconds < 5) return '방금 불러옴';
+  if (seconds < 60) return '$seconds초 전에 불러옴';
+  return '${seconds ~/ 60}분 전에 불러옴';
 }
 
 class KovaConnectionCard extends StatelessWidget {
@@ -112,7 +102,7 @@ class KovaConnectionCard extends StatelessWidget {
       KovaLinkStatus.disconnected => ('연결 안 됨', _muted, Icons.link_off),
       KovaLinkStatus.connecting => ('연결 중', _warn, Icons.sync),
       KovaLinkStatus.connected => ('연결됨', _accent, Icons.link),
-      KovaLinkStatus.stale => ('오래됨 · 다시 연결 중', _warn, Icons.sync_problem),
+      KovaLinkStatus.stale => ('다시 연결하는 중', _warn, Icons.sync_problem),
     };
     final document = controller.document;
     final lock = controller.writeLock;
@@ -132,7 +122,7 @@ class KovaConnectionCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
-                    'kovapilot 장치',
+                    'kovapilot',
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                   ),
                 ),
@@ -171,7 +161,7 @@ class KovaConnectionCard extends StatelessWidget {
                     status == KovaLinkStatus.disconnected)
                   IconButton(
                     key: const ValueKey('kova-edit-address'),
-                    tooltip: '설정 주소 바꾸기',
+                    tooltip: '주소 바꾸기',
                     icon: const Icon(Icons.edit_outlined, size: 18),
                     onPressed: onEditAddress,
                   ),
@@ -179,11 +169,7 @@ class KovaConnectionCard extends StatelessWidget {
             ),
             if (document != null || health != null)
               Text(
-                [
-                  _ago(controller.lastReadAt, clock()),
-                  if (document != null) '설정판 ${document.revision}',
-                  if (health?.bindScope == 'loopback') '같은 기기 전용 서버',
-                ].join(' · '),
+                _ago(controller.lastReadAt, clock()),
                 style: const TextStyle(color: _muted, fontSize: 12),
               ),
             if (document != null) ...[
@@ -196,8 +182,8 @@ class KovaConnectionCard extends StatelessWidget {
                     : Icons.lock_outline,
                 text: lock == KovaWriteLock.none
                     ? (controller.isLoopback
-                          ? '바꿀 수 있어요 · 같은 기기(loopback) 개발 연결'
-                          : '바꿀 수 있어요 · 인증된 연결')
+                          ? '개발용 연결이에요. 설정을 바꿀 수 있어요.'
+                          : '설정을 바꿀 수 있어요.')
                     : KovaParamsController.writeLockReason(lock),
               ),
               if (document.deviceOffroad == false) ...[
@@ -206,7 +192,7 @@ class KovaConnectionCard extends StatelessWidget {
                   key: ValueKey('kova-onroad-banner'),
                   color: _warn,
                   icon: Icons.directions_car_filled_outlined,
-                  text: '주행 중이에요. 정차 중에만 바꿀 수 있는 항목은 잠겼어요.',
+                  text: '주행 중이에요. 일부 설정은 차를 세운 뒤 바꿀 수 있어요.',
                 ),
               ],
             ],
@@ -236,12 +222,12 @@ class KovaConnectionCard extends StatelessWidget {
                     key: const ValueKey('kova-refresh'),
                     onPressed: controller.refresh,
                     icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('다시 읽기'),
+                    label: const Text('새로고침'),
                   ),
                   TextButton(
                     key: const ValueKey('kova-disconnect'),
                     onPressed: controller.disconnect,
-                    child: const Text('끊기'),
+                    child: const Text('연결 끊기'),
                   ),
                 ],
               ],
@@ -304,7 +290,7 @@ class _GroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final locale = document.defaultLocale;
     final title = group.title?.resolve(defaultLocale: locale) ?? '기타';
-    final description = group.description?.resolve(defaultLocale: locale);
+    // The group title is enough; catalog group descriptions mostly repeat it.
     return Column(
       key: ValueKey('kova-group-${group.id}'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,14 +302,6 @@ class _GroupCard extends StatelessWidget {
             style: const TextStyle(color: _muted, fontWeight: FontWeight.w700),
           ),
         ),
-        if (description != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8, right: 4),
-            child: Text(
-              description,
-              style: const TextStyle(color: _muted, fontSize: 12),
-            ),
-          ),
         Card(
           child: Column(
             children: [
@@ -543,10 +521,13 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
                 key: ValueKey('kova-choice-${s.key}'),
                 onPressed: editable ? () => _openChoices(shown) : null,
                 icon: const Icon(Icons.tune, size: 18),
-                label: const Text('고르기'),
+                label: const Text('선택'),
               ),
             ),
-          if (lock != null && !hasPending)
+          // Connection-wide locks are explained once on the connection card.
+          if (lock != null &&
+              !hasPending &&
+              controller.writeLock == KovaWriteLock.none)
             _Line(
               key: ValueKey('kova-lock-${s.key}'),
               icon: Icons.lock_outline,
@@ -557,7 +538,7 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
             _Line(
               key: ValueKey('kova-pending-${s.key}'),
               color: _warn,
-              text: '보내는 중… 장치가 확인하면 확정돼요.',
+              text: '보내는 중…',
               spinner: true,
             )
           else if (notice != null && notice.kind != KovaNoticeKind.sending)
@@ -581,25 +562,21 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
     );
   }
 
+  /// Only what changes how the user can act: when a change takes effect and
+  /// whether the feature is still being prepared. Read-only, unsupported
+  /// and control-risk items already say so in the lock line / confirm
+  /// dialog.
   List<Widget> _badges() {
-    final (policy, policyColor) = switch (s.applyPolicy) {
-      KovaApplyPolicy.immediate => ('바로 적용', _accent),
+    final policy = switch (s.applyPolicy) {
       KovaApplyPolicy.offroad => ('정차 중에만 변경', _warn),
       KovaApplyPolicy.restart => ('재시작 후 적용', const Color(0xFF72A7FF)),
-      KovaApplyPolicy.unknown => ('적용 시점 모름', _muted),
+      KovaApplyPolicy.immediate || KovaApplyPolicy.unknown => null,
     };
     return [
-      _Badge(policy, policyColor, key: ValueKey('kova-badge-policy-${s.key}')),
+      if (policy case (final text, final color))
+        _Badge(text, color, key: ValueKey('kova-badge-policy-${s.key}')),
       if (s.status == KovaAvailability.pendingConsumer)
-        _Badge(
-          '준비 중 · 값만 저장돼요',
-          _muted,
-          key: ValueKey('kova-badge-pending-${s.key}'),
-        ),
-      if (s.status == KovaAvailability.unsupported)
-        const _Badge('이 차량 미지원', _muted),
-      if (s.risk == KovaRisk.control) const _Badge('주행 제어 관련', _danger),
-      if (s.control == KovaParamControl.readOnly) const _Badge('읽기 전용', _muted),
+        _Badge('준비 중', _muted, key: ValueKey('kova-badge-pending-${s.key}')),
     ];
   }
 
@@ -681,7 +658,7 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
       errorMaxLines: 2,
       suffixIcon: IconButton(
         key: ValueKey('kova-apply-${s.key}'),
-        tooltip: '이 값으로 바꾸기',
+        tooltip: '적용',
         icon: const Icon(Icons.check, size: 18),
         onPressed: editable ? _submitInput : null,
       ),
@@ -703,13 +680,13 @@ class _Details extends StatelessWidget {
       if (s.hasRange)
         '범위: ${s.describe(s.minimum, defaultLocale: locale)} – ${s.describe(s.maximum, defaultLocale: locale)}',
       '적용: ${switch (s.applyPolicy) {
-        KovaApplyPolicy.immediate => '바꾸면 바로 쓰여요.',
-        KovaApplyPolicy.offroad => '차가 멈춰 있을 때(오프로드)만 바꿀 수 있어요.',
-        KovaApplyPolicy.restart => 'openpilot을 다시 시작한 뒤에 쓰여요. 주행 중에는 바꾸지 않아요.',
-        KovaApplyPolicy.unknown => '장치가 알려 준 적용 시점을 이 앱이 몰라 바꾸지 않아요.',
+        KovaApplyPolicy.immediate => '바로 적용돼요.',
+        KovaApplyPolicy.offroad => '차를 세웠을 때만 바꿀 수 있어요.',
+        KovaApplyPolicy.restart => 'kovapilot을 다시 시작하면 적용돼요. 주행 중에는 바꿀 수 없어요.',
+        KovaApplyPolicy.unknown => '언제 적용되는지 알 수 없어 앱에서는 바꿀 수 없어요.',
       }}',
       if (s.status == KovaAvailability.pendingConsumer)
-        '상태: 값은 저장되지만 이 값을 쓰는 기능이 아직 장치에 없어요.',
+        '상태: 준비 중이에요. 값은 저장되지만 차 동작은 아직 바뀌지 않아요.',
       if (s.requiredCapabilities.isNotEmpty)
         '필요 기능: ${s.requiredCapabilities.join(', ')}',
       '항목 키: ${s.key}',
@@ -811,13 +788,11 @@ class _ConfirmDialog extends StatelessWidget {
     final title = setting.title.resolve(defaultLocale: locale);
     return AlertDialog(
       icon: const Icon(Icons.warning_amber_rounded, color: _warn),
-      title: const Text('주행 제어와 관련된 설정이에요'),
+      title: const Text('주행에 영향을 주는 설정'),
       content: Text(
-        '「$title」을(를) ${setting.describe(value, defaultLocale: locale)}(으)로 바꿉니다.\n\n'
-        '이 설정은 조향·가감속 같은 주행 동작에 영향을 줄 수 있어요. '
-        '${setting.applyPolicy == KovaApplyPolicy.offroad ? '차가 멈춰 있을 때만 바뀌고, ' : ''}'
-        '장치가 확인한 뒤에 확정돼요.'
-        '${setting.status == KovaAvailability.pendingConsumer ? '\n\n지금은 값만 저장되고, 실제 동작은 아직 바뀌지 않아요.' : ''}',
+        '$title: ${setting.describe(value, defaultLocale: locale)}\n\n'
+        '조향이나 속도 조절이 달라질 수 있어요.'
+        '${setting.status == KovaAvailability.pendingConsumer ? '\n\n준비 중인 기능이라 값만 저장되고 실제 동작은 아직 바뀌지 않아요.' : ''}',
       ),
       actions: [
         TextButton(

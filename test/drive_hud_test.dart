@@ -93,7 +93,7 @@ void main() {
       await _pumpHud(tester, scene);
       expect(find.text('조향 보조 작동 중'), findsOneWidget);
       expect(find.text('설정'), findsOneWidget);
-      expect(find.text('과속 (고정식)'), findsOneWidget);
+      expect(find.text('과속 카메라'), findsOneWidget);
       expect(find.text(' · 100 km/h'), findsOneWidget);
       expect(find.text('톨게이트'), findsOneWidget);
       expect(find.text('경부고속도로'), findsOneWidget);

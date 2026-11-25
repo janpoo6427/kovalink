@@ -40,7 +40,7 @@ void main() {
 
   test('a public address is refused without network', () async {
     final error = await kova.connect('http://example.com:8082');
-    expect(error, contains('로컬·사설'));
+    expect(error, contains('같은 네트워크'));
     expect(kova.status, KovaLinkStatus.disconnected);
     expect(gateway.gets, 0);
   });
@@ -58,7 +58,7 @@ void main() {
         expect(kova.writeLock, KovaWriteLock.needsPairing, reason: address);
         expect(
           kova.lockReasonFor(kova.document!.setting('e2e.level')!),
-          contains('pairing'),
+          contains('보기만'),
         );
         expect(await kova.setValue('e2e.level', 4), isNull);
       }

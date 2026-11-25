@@ -54,7 +54,7 @@ class SafeZipReader {
     if (bytes.length > limits.maxArchiveBytes) {
       throw ModelPackRejection(
         'archive-too-large',
-        '파일이 너무 큽니다(${_mb(bytes.length)} MB, 최대 ${_mb(limits.maxArchiveBytes)} MB).',
+        '파일이 너무 커요(${_mb(bytes.length)} MB). ${_mb(limits.maxArchiveBytes)} MB 이하만 가져올 수 있어요.',
       );
     }
     final data = ByteData.sublistView(bytes);
@@ -65,21 +65,21 @@ class SafeZipReader {
     final centralSize = data.getUint32(eocd + 12, Endian.little);
     final centralOffset = data.getUint32(eocd + 16, Endian.little);
     if (diskNumber != 0 || centralDisk != 0) {
-      throw const ModelPackRejection('multi-disk', '분할 압축 파일은 지원하지 않습니다.');
+      throw const ModelPackRejection('multi-disk', '분할 압축 파일은 가져올 수 없어요.');
     }
     if (entryCount == 0xFFFF ||
         centralOffset == 0xFFFFFFFF ||
         centralSize == 0xFFFFFFFF) {
-      throw const ModelPackRejection('zip64', 'ZIP64 형식은 지원하지 않습니다.');
+      throw const ModelPackRejection('zip64', 'ZIP64 형식은 가져올 수 없어요.');
     }
     if (entryCount > limits.maxEntries) {
       throw ModelPackRejection(
         'too-many-entries',
-        '파일 개수가 너무 많습니다($entryCount개, 최대 ${limits.maxEntries}개).',
+        '파일이 너무 많아요($entryCount개). ${limits.maxEntries}개 이하로 줄여 주세요.',
       );
     }
     if (centralOffset + centralSize > eocd) {
-      throw const ModelPackRejection('corrupt', 'ZIP 목차가 손상되었습니다.');
+      throw const ModelPackRejection('corrupt', 'ZIP 파일이 손상됐어요.');
     }
 
     final entries = <_Entry>[];
@@ -88,7 +88,7 @@ class SafeZipReader {
     for (var index = 0; index < entryCount; index++) {
       if (cursor + 46 > eocd ||
           data.getUint32(cursor, Endian.little) != _centralSignature) {
-        throw const ModelPackRejection('corrupt', 'ZIP 목차가 손상되었습니다.');
+        throw const ModelPackRejection('corrupt', 'ZIP 파일이 손상됐어요.');
       }
       final flags = data.getUint16(cursor + 8, Endian.little);
       final method = data.getUint16(cursor + 10, Endian.little);
@@ -102,61 +102,61 @@ class SafeZipReader {
       final localOffset = data.getUint32(cursor + 42, Endian.little);
       final nameEnd = cursor + 46 + nameLength;
       if (nameEnd > eocd) {
-        throw const ModelPackRejection('corrupt', 'ZIP 목차가 손상되었습니다.');
+        throw const ModelPackRejection('corrupt', 'ZIP 파일이 손상됐어요.');
       }
       final String name;
       try {
         name = utf8.decode(bytes.sublist(cursor + 46, nameEnd));
       } on FormatException {
-        throw const ModelPackRejection('bad-name', '파일 이름 인코딩이 올바르지 않습니다.');
+        throw const ModelPackRejection('bad-name', '파일 이름을 읽을 수 없어요.');
       }
       cursor = nameEnd + extraLength + commentLength;
 
       if (flags & 0x1 != 0) {
-        throw const ModelPackRejection('encrypted', '암호화된 압축 파일은 지원하지 않습니다.');
+        throw const ModelPackRejection('encrypted', '암호가 걸린 압축 파일은 가져올 수 없어요.');
       }
       // Unix symlink entries (S_IFLNK in the high 16 bits).
       if ((externalAttributes >> 16) & 0xF000 == 0xA000) {
-        throw ModelPackRejection('symlink', '심볼릭 링크는 허용하지 않습니다: $name');
+        throw ModelPackRejection('symlink', '심볼릭 링크는 넣을 수 없어요: $name');
       }
       if (name.endsWith('/')) {
         if (size != 0) {
-          throw ModelPackRejection('bad-name', '폴더 항목이 올바르지 않습니다: $name');
+          throw ModelPackRejection('bad-name', '폴더 항목이 잘못됐어요: $name');
         }
         throw ModelPackRejection(
           'nested-path',
-          '모델 팩은 폴더 없이 파일만 담아야 합니다: $name',
+          '모델 팩에는 폴더 없이 파일만 넣어 주세요: $name',
         );
       }
       checkEntryName(name);
       if (method != 0 && method != 8) {
         throw ModelPackRejection(
           'unsupported-compression',
-          '지원하지 않는 압축 방식입니다($method): $name',
+          '쓸 수 없는 압축 방식이에요($method): $name',
         );
       }
       if (size > limits.maxEntryBytes) {
         throw ModelPackRejection(
           'entry-too-large',
-          '$name 파일이 너무 큽니다(${_mb(size)} MB, 최대 ${_mb(limits.maxEntryBytes)} MB).',
+          '$name 파일이 너무 커요(${_mb(size)} MB). ${_mb(limits.maxEntryBytes)} MB 이하여야 해요.',
         );
       }
       declaredTotal += size;
       if (declaredTotal > limits.maxTotalBytes) {
         throw ModelPackRejection(
           'total-too-large',
-          '압축을 푼 전체 크기가 너무 큽니다(최대 ${_mb(limits.maxTotalBytes)} MB).',
+          '압축을 풀면 너무 커요. 모두 합쳐 ${_mb(limits.maxTotalBytes)} MB 이하여야 해요.',
         );
       }
       if (method == 0 && compressedSize != size) {
-        throw ModelPackRejection('corrupt', '$name 크기 정보가 맞지 않습니다.');
+        throw ModelPackRejection('corrupt', '$name 파일의 크기 정보가 맞지 않아요.');
       }
       if (method == 8 &&
           size > 4096 &&
           size > compressedSize * limits.maxCompressionRatio) {
         throw ModelPackRejection(
           'compression-bomb',
-          '$name 압축률이 비정상적으로 높습니다(압축 폭탄 의심).',
+          '$name 파일의 압축률이 비정상적으로 높아 열지 않았어요.',
         );
       }
       if (entries.any(
@@ -164,7 +164,7 @@ class SafeZipReader {
       )) {
         throw ModelPackRejection(
           'duplicate-entry',
-          '같은 이름의 파일이 두 번 있습니다: $name',
+          '같은 이름의 파일이 두 개 있어요: $name',
         );
       }
       entries.add(_Entry(name, method, crc, compressedSize, size, localOffset));
@@ -180,7 +180,7 @@ class SafeZipReader {
   /// Rejects anything other than a plain file name at the archive root.
   static void checkEntryName(String name) {
     if (name.isEmpty || name.length > 64) {
-      throw ModelPackRejection('bad-name', '파일 이름이 올바르지 않습니다: $name');
+      throw ModelPackRejection('bad-name', '파일 이름이 잘못됐어요: $name');
     }
     if (name.startsWith('/') ||
         name.contains('\\') ||
@@ -188,21 +188,24 @@ class SafeZipReader {
         name.split('/').contains('..')) {
       throw ModelPackRejection(
         'path-traversal',
-        '경로 탈출 시도가 있는 파일 이름입니다: $name',
+        '폴더 밖을 가리키는 파일 이름이라 가져올 수 없어요: $name',
       );
     }
     if (name.contains('/')) {
-      throw ModelPackRejection('nested-path', '모델 팩은 폴더 없이 파일만 담아야 합니다: $name');
+      throw ModelPackRejection('nested-path', '모델 팩에는 폴더 없이 파일만 넣어 주세요: $name');
     }
     if (name.startsWith('.') ||
         name.codeUnits.any((unit) => unit < 0x20 || unit == 0x7F)) {
-      throw ModelPackRejection('bad-name', '숨김·제어 문자 파일 이름은 허용하지 않습니다: $name');
+      throw ModelPackRejection(
+        'bad-name',
+        '숨김 파일이나 특수 문자가 든 파일 이름은 쓸 수 없어요: $name',
+      );
     }
   }
 
   static int _findEndOfCentralDirectory(Uint8List bytes, ByteData data) {
     if (bytes.length < 22) {
-      throw const ModelPackRejection('not-zip', 'ZIP(.kovamodel) 파일이 아닙니다.');
+      throw const ModelPackRejection('not-zip', '.kovamodel 파일이 아니에요.');
     }
     final earliest = bytes.length - 22 - 0xFFFF;
     for (
@@ -214,7 +217,7 @@ class SafeZipReader {
         return offset;
       }
     }
-    throw const ModelPackRejection('not-zip', 'ZIP(.kovamodel) 파일이 아닙니다.');
+    throw const ModelPackRejection('not-zip', '.kovamodel 파일이 아니에요.');
   }
 
   static Uint8List _extract(
@@ -226,14 +229,14 @@ class SafeZipReader {
     final local = entry.localOffset;
     if (local + 30 > limit ||
         data.getUint32(local, Endian.little) != _localSignature) {
-      throw ModelPackRejection('corrupt', '${entry.name} 위치 정보가 손상되었습니다.');
+      throw ModelPackRejection('corrupt', '${entry.name} 파일이 손상됐어요.');
     }
     final nameLength = data.getUint16(local + 26, Endian.little);
     final extraLength = data.getUint16(local + 28, Endian.little);
     final start = local + 30 + nameLength + extraLength;
     final end = start + entry.compressedSize;
     if (end > limit) {
-      throw ModelPackRejection('corrupt', '${entry.name} 데이터가 잘렸습니다.');
+      throw ModelPackRejection('corrupt', '${entry.name} 파일이 중간에 잘렸어요.');
     }
     final compressed = Uint8List.sublistView(bytes, start, end);
     final Uint8List output;
@@ -243,10 +246,13 @@ class SafeZipReader {
       output = _inflateCapped(compressed, entry.size, entry.name);
     }
     if (output.length != entry.size) {
-      throw ModelPackRejection('corrupt', '${entry.name} 크기 정보가 맞지 않습니다.');
+      throw ModelPackRejection('corrupt', '${entry.name} 파일의 크기 정보가 맞지 않아요.');
     }
     if (Crc32.of(output) != entry.crc) {
-      throw ModelPackRejection('crc', '${entry.name} 무결성(CRC) 검사에 실패했습니다.');
+      throw ModelPackRejection(
+        'crc',
+        '${entry.name} 파일이 손상됐어요. CRC 검사를 통과하지 못했어요.',
+      );
     }
     return output;
   }
@@ -266,7 +272,7 @@ class SafeZipReader {
     } on ModelPackRejection {
       rethrow;
     } on Object {
-      throw ModelPackRejection('corrupt', '$name 압축을 풀 수 없습니다.');
+      throw ModelPackRejection('corrupt', '$name 파일의 압축을 풀 수 없어요.');
     }
     return sink.takeBytes();
   }
@@ -304,7 +310,7 @@ class _CappedSink implements Sink<List<int>> {
     if (_builder.length + data.length > cap) {
       throw ModelPackRejection(
         'compression-bomb',
-        '$name 압축을 풀면 적힌 크기보다 커집니다(압축 폭탄 의심).',
+        '$name 파일이 적힌 크기보다 커서 열지 않았어요.',
       );
     }
     _builder.add(data);

@@ -25,7 +25,7 @@ class EgoVehicleProfile {
   }
 
   static const builtIn = EgoVehicleProfile(
-    displayName: '기본 내장 차량',
+    displayName: '기본 차량',
     dimensions: VehicleDimensions.reference,
     appearance: VehicleAppearance(),
   );

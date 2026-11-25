@@ -309,8 +309,8 @@ class SettingsController extends ChangeNotifier {
       final json = await store.read();
       if (json != null) _value = AppSettings.fromJson(json);
       storageError = null;
-    } on Object catch (error) {
-      storageError = '설정을 불러오지 못해 기본값을 씁니다: $error';
+    } on Object {
+      storageError = '저장된 설정을 불러오지 못해 기본값으로 시작했어요.';
     }
     loaded = true;
     notifyListeners();
@@ -326,8 +326,8 @@ class SettingsController extends ChangeNotifier {
       try {
         await store.write(snapshot);
         storageError = null;
-      } on Object catch (error) {
-        storageError = '설정을 저장하지 못했습니다: $error';
+      } on Object {
+        storageError = '설정을 저장하지 못했어요. 다시 바꿔 주세요.';
         notifyListeners();
       }
     });

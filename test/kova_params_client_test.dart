@@ -198,7 +198,7 @@ void main() {
         );
       }
       expect(errors, hasLength(6));
-      expect(errors.first, contains('로컬·사설'));
+      expect(errors.first, contains('같은 네트워크'));
       final ok = KovaParamsClient.tryCreate('http://comma.local:8082/')!;
       expect(ok.baseUri.toString(), 'http://comma.local:8082');
       ok.close();

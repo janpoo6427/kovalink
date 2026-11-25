@@ -13,15 +13,13 @@ typedef ModelFilePicker = Future<Uint8List?> Function();
 /// Default picker: the platform's document picker (file_picker, MIT).
 /// The file is size-checked before it is read into memory.
 Future<Uint8List?> pickModelFileWithSystemPicker() async {
-  final file = await FilePicker.pickFile(
-    dialogTitle: '차량 모델 파일(.kovamodel) 선택',
-  );
+  final file = await FilePicker.pickFile(dialogTitle: '차량 모델 파일 선택');
   if (file == null) return null;
   final length = await file.length();
   if (length != null && length > const ZipLimits().maxArchiveBytes) {
     throw const ModelPackRejection(
       'archive-too-large',
-      '파일이 너무 큽니다(최대 32 MB).',
+      '파일이 너무 커요. 32 MB 이하만 가져올 수 있어요.',
     );
   }
   return file.readAsBytes();
@@ -44,14 +42,14 @@ class VehicleModelImportFlow {
       bytes = await picker();
     } on ModelPackRejection catch (rejection) {
       pickError = rejection.message;
-    } on Object catch (error) {
-      pickError = '파일을 열 수 없습니다: $error';
+    } on Object {
+      pickError = '파일을 열 수 없어요. 다른 파일로 다시 해 주세요.';
     }
     if (!context.mounted) return null;
     if (pickError != null) {
       await _show(
         context,
-        title: '가져오기 실패',
+        title: '가져오지 못했어요',
         lines: [pickError],
         success: false,
       );
@@ -64,8 +62,8 @@ class VehicleModelImportFlow {
     if (entry == null) {
       await _show(
         context,
-        title: '가져오기 거부',
-        lines: [outcome.rejection!.message, '(${outcome.rejection!.code})'],
+        title: '이 파일은 가져올 수 없어요',
+        lines: [outcome.rejection!.message],
         success: false,
       );
       return outcome;
@@ -74,9 +72,10 @@ class VehicleModelImportFlow {
     if (!context.mounted) return outcome;
     await _show(
       context,
-      title: outcome.replaced ? '차량 모델을 교체했습니다' : '차량 모델을 가져왔습니다',
+      title: outcome.replaced ? '차량 모델을 바꿨어요' : '차량 모델을 가져왔어요',
       lines: [
-        '${entry.manifest.displayName} · ${entry.manifest.author} · ${entry.manifest.license}',
+        entry.manifest.displayName,
+        '만든 사람 ${entry.manifest.author}, 라이선스 ${entry.manifest.license}',
         ...outcome.warnings,
       ],
       success: true,

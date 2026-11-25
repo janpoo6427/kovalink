@@ -189,7 +189,7 @@ void main() {
       final error = controller.setTelemetryEndpoint(
         'ws://example.com/v1/telemetry',
       );
-      expect(error, contains('로컬'));
+      expect(error, contains('같은 네트워크'));
       expect(
         controller.value.telemetryEndpoint,
         AppSettings.defaultTelemetryEndpoint,
@@ -282,10 +282,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('setting-endpoint-save')));
       await tester.pump();
-      expect(
-        find.text('KovaLink는 로컬·사설 네트워크 gateway에만 연결합니다.'),
-        findsOneWidget,
-      );
+      expect(find.text('같은 네트워크 안의 주소만 쓸 수 있어요.'), findsOneWidget);
       expect(
         settings.value.telemetryEndpoint,
         AppSettings.defaultTelemetryEndpoint,
@@ -297,7 +294,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('setting-endpoint-save')));
       await tester.pump();
-      expect(find.text('저장했습니다.'), findsOneWidget);
+      expect(find.text('저장했어요.'), findsOneWidget);
       expect(
         settings.value.telemetryEndpoint,
         'ws://comma.local:9000/v1/telemetry',
@@ -322,7 +319,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 500));
       });
       await _settle(tester);
-      expect(find.text('차량 모델을 가져왔습니다'), findsOneWidget);
+      expect(find.text('차량 모델을 가져왔어요'), findsOneWidget);
       expect(settings.value.vehicleModelId, 'my-import-car');
       await tester.tap(find.text('확인'));
       await _settle(tester);
@@ -359,8 +356,8 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 300));
       });
       await _settle(tester);
-      expect(find.text('가져오기 거부'), findsOneWidget);
-      expect(find.textContaining('경로 탈출'), findsOneWidget);
+      expect(find.text('이 파일은 가져올 수 없어요'), findsOneWidget);
+      expect(find.textContaining('폴더 밖을 가리키는'), findsOneWidget);
       expect(settings.value.vehicleModelId, isNull);
       final models = Directory('${root.path}/vehicle_models');
       expect(models.existsSync() ? models.listSync() : const [], isEmpty);

@@ -120,7 +120,14 @@ class SpeedCluster extends StatelessWidget {
     final speed = unit.roundedFromMps(scene.speedMps);
     final setSpeed = unit.roundedFromMps(scene.setSpeedMps);
     return Semantics(
-      label: '현재 속도 $speed ${unit.label}, 기어 ${scene.gear.name}',
+      label:
+          '현재 속도 $speed ${unit.label}, 기어 ${switch (scene.gear) {
+            VehicleGear.park => 'P',
+            VehicleGear.reverse => 'R',
+            VehicleGear.neutral => 'N',
+            VehicleGear.drive => 'D',
+            VehicleGear.unknown => '모름',
+          }}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -456,7 +463,7 @@ class RouteInfoCard extends StatelessWidget {
             RoadAlertKind.unknown => Icons.info_outline_rounded,
           },
           label: switch (alert.kind) {
-            RoadAlertKind.speedCamera => '과속 (고정식)',
+            RoadAlertKind.speedCamera => '과속 카메라',
             RoadAlertKind.sectionCamera => '구간 단속',
             RoadAlertKind.tollgate => '톨게이트',
             RoadAlertKind.schoolZone => '어린이 보호구역',

@@ -111,7 +111,7 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
                 left: 16,
                 top: 14,
                 child: _GlassNavButton(
-                  tooltip: '로드뷰로 돌아가기',
+                  tooltip: '주행 화면으로 돌아가기',
                   icon: Icons.arrow_back_rounded,
                   onPressed: () => setState(() => selectedIndex = 0),
                 ),

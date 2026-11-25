@@ -60,12 +60,12 @@ class ModelPackValidator {
   ) {
     final manifestBytes = files[manifestName];
     if (manifestBytes == null) {
-      throw const ModelPackRejection('missing-manifest', 'vehicle.json이 없습니다.');
+      throw const ModelPackRejection('missing-manifest', 'vehicle.json이 없어요.');
     }
     if (manifestBytes.length > maxManifestBytes) {
       throw const ModelPackRejection(
         'manifest-too-large',
-        'vehicle.json이 너무 큽니다(최대 64 KB).',
+        'vehicle.json이 너무 커요. 64 KB 이하여야 해요.',
       );
     }
     final Object? decoded;
@@ -74,13 +74,13 @@ class ModelPackValidator {
     } on FormatException {
       throw const ModelPackRejection(
         'manifest-json',
-        'vehicle.json이 올바른 JSON이 아닙니다.',
+        'vehicle.json을 JSON으로 읽을 수 없어요.',
       );
     }
     if (decoded is! Map<String, dynamic>) {
       throw const ModelPackRejection(
         'manifest-json',
-        'vehicle.json은 JSON object여야 합니다.',
+        'vehicle.json은 JSON 객체여야 해요.',
       );
     }
     _requireFields(decoded);
@@ -91,52 +91,52 @@ class ModelPackValidator {
     } on FormatException catch (error) {
       throw ModelPackRejection(
         'manifest-field',
-        'vehicle.json 값 오류: ${error.message}',
+        'vehicle.json 값이 잘못됐어요. ${error.message}',
       );
     } on Object {
       throw const ModelPackRejection(
         'manifest-field',
-        'vehicle.json 값의 형식이 올바르지 않습니다.',
+        'vehicle.json 값의 형식이 잘못됐어요.',
       );
     }
 
     if (!packId.hasMatch(manifest.id)) {
       throw const ModelPackRejection(
         'manifest-id',
-        'id는 소문자·숫자·하이픈 2–48자여야 합니다(예: my-ioniq9).',
+        'id는 영어 소문자, 숫자, 하이픈으로 2–48자여야 해요. 예: my-ioniq9',
       );
     }
     if (manifest.displayName.trim().isEmpty ||
         manifest.displayName.length > 48) {
       throw const ModelPackRejection(
         'manifest-name',
-        'displayName은 1–48자여야 합니다.',
+        'displayName은 1–48자여야 해요.',
       );
     }
     if ((manifest.author ?? '').trim().isEmpty ||
         manifest.author!.length > 80) {
       throw const ModelPackRejection(
         'manifest-author',
-        'author(작성자)가 필요합니다(최대 80자).',
+        'author에 만든 사람을 80자 이내로 적어 주세요.',
       );
     }
     if ((manifest.license ?? '').trim().isEmpty ||
         manifest.license!.length > 64) {
       throw const ModelPackRejection(
         'manifest-license',
-        'license(SPDX 식별자, 예: CC0-1.0)가 필요합니다.',
+        'license에 라이선스를 적어 주세요. 예: CC0-1.0',
       );
     }
     if (manifest.coordinateSystem != 'RH_Y_UP_Z_FORWARD') {
       throw const ModelPackRejection(
         'manifest-axes',
-        'coordinateSystem은 RH_Y_UP_Z_FORWARD(glTF 기본: +X 왼쪽, +Y 위, +Z 앞)여야 합니다.',
+        'coordinateSystem은 RH_Y_UP_Z_FORWARD여야 해요. +X가 왼쪽, +Y가 위, +Z가 앞이에요.',
       );
     }
     if (manifest.origin != VehicleModelManifest.defaultOrigin) {
       throw const ModelPackRejection(
         'manifest-origin',
-        'origin은 rearAxleGround(뒷차축 가운데 바닥)여야 합니다.',
+        'origin은 rearAxleGround여야 해요. 뒷바퀴 축 가운데의 바닥이 기준점이에요.',
       );
     }
     if (!manifest.scale.isFinite ||
@@ -144,7 +144,7 @@ class ModelPackValidator {
         manifest.scale > 1000) {
       throw const ModelPackRejection(
         'manifest-scale',
-        'scale은 0.001–1000 범위여야 합니다.',
+        'scale은 0.001–1000 사이여야 해요.',
       );
     }
     final dimensionError = manifest.dimensions.validationError;
@@ -154,7 +154,7 @@ class ModelPackValidator {
     if (!VehicleModelManifest.isSafeAssetFileName(manifest.asset)) {
       throw const ModelPackRejection(
         'manifest-asset',
-        'asset은 폴더 없는 .glb 파일 이름이어야 합니다(예: vehicle.glb).',
+        'asset에는 폴더 없이 .glb 파일 이름만 적어 주세요. 예: vehicle.glb',
       );
     }
     final appearance = decoded['appearance'];
@@ -172,7 +172,7 @@ class ModelPackValidator {
       )) {
         throw const ModelPackRejection(
           'manifest-color',
-          'appearance 색은 #RRGGBB 형식이어야 합니다.',
+          'appearance 색은 #RRGGBB 형식이어야 해요.',
         );
       }
     }
@@ -180,7 +180,7 @@ class ModelPackValidator {
     if (!files.keys.any(licenseNames.contains)) {
       throw const ModelPackRejection(
         'missing-license',
-        'LICENSE(.md/.txt) 파일이 필요합니다.',
+        'LICENSE 파일(.md 또는 .txt)을 넣어 주세요.',
       );
     }
     for (final name in files.keys) {
@@ -192,7 +192,7 @@ class ModelPackValidator {
       if (!allowed) {
         throw ModelPackRejection(
           'unexpected-file',
-          '모델 팩에 넣을 수 없는 파일입니다: $name (스크립트·실행 파일·추가 GLB 금지)',
+          '모델 팩에 넣을 수 없는 파일이에요: $name. 스크립트, 실행 파일, 두 번째 GLB는 넣을 수 없어요.',
         );
       }
     }
@@ -200,12 +200,15 @@ class ModelPackValidator {
       final text = files[name];
       if (text == null) continue;
       if (text.length > maxTextBytes) {
-        throw ModelPackRejection('text-too-large', '$name이 너무 큽니다(최대 256 KB).');
+        throw ModelPackRejection(
+          'text-too-large',
+          '$name 파일이 너무 커요. 256 KB 이하여야 해요.',
+        );
       }
       try {
         utf8.decode(text);
       } on FormatException {
-        throw ModelPackRejection('text-encoding', '$name은 UTF-8 텍스트여야 합니다.');
+        throw ModelPackRejection('text-encoding', '$name 파일은 UTF-8 텍스트여야 해요.');
       }
     }
     final preview = files['preview.png'];
@@ -218,14 +221,14 @@ class ModelPackValidator {
           size.$2 > maxPreviewSize) {
         throw const ModelPackRejection(
           'preview-invalid',
-          'preview.png는 1 MB·1024px 이하 PNG여야 합니다.',
+          'preview.png는 1 MB, 1024px 이하 PNG여야 해요.',
         );
       }
     }
 
     final glbBytes = files[manifest.asset];
     if (glbBytes == null) {
-      throw ModelPackRejection('missing-glb', '${manifest.asset} 파일이 없습니다.');
+      throw ModelPackRejection('missing-glb', '${manifest.asset} 파일이 없어요.');
     }
     final glb = GlbInspector.inspect(glbBytes, limits: glbLimits);
 
@@ -234,13 +237,13 @@ class ModelPackValidator {
         .where((name) => !glb.nodeNames.contains(name))
         .toList();
     if (missingNodes.isNotEmpty) {
-      warnings.add('GLB에 없는 노드 이름(효과 생략): ${missingNodes.join(', ')}');
+      warnings.add('GLB에 없는 노드라 효과를 뺐어요: ${missingNodes.join(', ')}');
     }
     final missingMaterials = manifest.materials.all
         .where((name) => !glb.materialNames.contains(name))
         .toList();
     if (missingMaterials.isNotEmpty) {
-      warnings.add('GLB에 없는 머티리얼 이름(효과 생략): ${missingMaterials.join(', ')}');
+      warnings.add('GLB에 없는 머티리얼이라 효과를 뺐어요: ${missingMaterials.join(', ')}');
     }
     return ModelPackValidation._(
       manifest: manifest,
@@ -265,13 +268,13 @@ class ModelPackValidator {
     if (missing.isNotEmpty) {
       throw ModelPackRejection(
         'manifest-missing-field',
-        'vehicle.json 필수 항목이 없습니다: ${missing.join(', ')}',
+        'vehicle.json에 꼭 있어야 할 항목이 없어요: ${missing.join(', ')}',
       );
     }
     if (json['schemaVersion'] != 1) {
       throw const ModelPackRejection(
         'manifest-schema',
-        '지원하는 schemaVersion은 1입니다.',
+        'schemaVersion은 1이어야 해요.',
       );
     }
   }

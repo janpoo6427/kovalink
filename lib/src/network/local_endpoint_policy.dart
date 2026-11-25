@@ -5,14 +5,14 @@ class LocalEndpointPolicy {
     return _validate(value, const {
       'ws',
       'wss',
-    }, 'WebSocket 주소(ws:// 또는 wss://)만 지원합니다.');
+    }, '주소는 ws:// 또는 wss://로 시작해야 해요.');
   }
 
   static String? validateSignaling(String value) {
     return _validate(value, const {
       'http',
       'https',
-    }, 'HTTP signaling 주소(http:// 또는 https://)만 지원합니다.');
+    }, '주소는 http:// 또는 https://로 시작해야 해요.');
   }
 
   /// kovapilot settings API origin, e.g. `http://comma.local:8082`. Only the
@@ -22,14 +22,14 @@ class LocalEndpointPolicy {
     final error = _validate(value, const {
       'http',
       'https',
-    }, '설정 주소는 http:// 또는 https://만 지원합니다.');
+    }, '주소는 http:// 또는 https://로 시작해야 해요.');
     if (error != null) return error;
     final uri = Uri.parse(value.trim());
     if ((uri.path.isNotEmpty && uri.path != '/') ||
         uri.hasQuery ||
         uri.hasFragment ||
         uri.userInfo.isNotEmpty) {
-      return '설정 주소는 경로 없이 장치 주소와 포트만 적어 주세요 (예: http://comma.local:8082).';
+      return '주소와 포트까지만 적어 주세요. 예: http://comma.local:8082';
     }
     return null;
   }
@@ -65,13 +65,13 @@ class LocalEndpointPolicy {
   ) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      return '올바른 gateway 주소를 입력하세요.';
+      return '주소를 다시 확인해 주세요.';
     }
     if (!schemes.contains(uri.scheme)) {
       return schemeError;
     }
     if (!_isLocalHost(uri.host)) {
-      return 'KovaLink는 로컬·사설 네트워크 gateway에만 연결합니다.';
+      return '같은 네트워크 안의 주소만 쓸 수 있어요.';
     }
     return null;
   }

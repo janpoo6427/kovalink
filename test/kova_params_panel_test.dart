@@ -79,8 +79,8 @@ void main() {
     );
     expect(find.text('정차 중에만 변경'), findsOneWidget);
     expect(find.text('재시작 후 적용'), findsOneWidget);
-    expect(find.text('준비 중 · 값만 저장돼요'), findsOneWidget);
-    expect(find.textContaining('같은 기기(loopback)'), findsOneWidget);
+    expect(find.text('준비 중'), findsOneWidget);
+    expect(find.textContaining('개발용 연결'), findsOneWidget);
 
     // A renamed catalog title shows up without any app change.
     final steering = (gateway.catalog['settings'] as List)
@@ -118,7 +118,7 @@ void main() {
       find.byKey(const ValueKey('kova-toggle-steering.always_on')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('주행 제어와 관련된 설정이에요'), findsOneWidget);
+    expect(find.text('주행에 영향을 주는 설정'), findsOneWidget);
     expect(find.textContaining('실제 동작은 아직 바뀌지 않아요'), findsOneWidget);
     await tester.tap(find.text('취소'));
     await tester.pumpAndSettle();
@@ -156,7 +156,7 @@ void main() {
       find.byKey(const ValueKey('kova-pending-steering.always_on')),
       findsNothing,
     );
-    expect(find.textContaining('장치가 저장했어요'), findsOneWidget);
+    expect(find.textContaining('저장했어요'), findsOneWidget);
     expect(kova.document!.setting('steering.always_on')!.value, isTrue);
   });
 
@@ -199,7 +199,7 @@ void main() {
   ) async {
     await kova.connect('http://192.168.0.10:8082');
     await _pumpPanel(tester, kova);
-    expect(find.textContaining('pairing 전에는 읽기만'), findsWidgets);
+    expect(find.textContaining('보기만 할 수 있어요'), findsWidgets);
     final toggle = tester.widget<Switch>(
       find.byKey(const ValueKey('kova-toggle-steering.always_on')),
     );
@@ -237,13 +237,13 @@ void main() {
     gateway.externalWrite('e2e.mode', 'calm');
     await kova.setValue('e2e.mode', 'lively');
     await tester.pump();
-    expect(find.textContaining('다른 곳에서 먼저 바뀌어'), findsOneWidget);
+    expect(find.textContaining('다른 곳에서 먼저 바뀌었어요'), findsOneWidget);
     gateway.offroad = false;
     gateway.reportOffroad = false;
     await kova.refresh();
     await kova.setValue('steering.always_on', true);
     await tester.pump();
-    expect(find.textContaining('주행 중에는 바꿀 수 없어요. 차를 세우고'), findsOneWidget);
+    expect(find.textContaining('주행 중에는 바꿀 수 없어요. 차를 세운 뒤'), findsOneWidget);
   });
 
   group('settings screen', () {
@@ -277,7 +277,7 @@ void main() {
       expect(find.text('시점'), findsOneWidget);
       expect(find.byKey(const ValueKey('kova-connection-card')), findsNothing);
 
-      await tester.tap(find.text('연결 세션'));
+      await tester.tap(find.text('연결 상태'));
       await tester.pump();
       expect(find.byKey(const ValueKey('session-card')), findsOneWidget);
       expect(find.text('시점'), findsNothing);
@@ -303,10 +303,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('setting-endpoint-save')));
       await tester.pump();
-      expect(
-        find.text('KovaLink는 로컬·사설 네트워크 gateway에만 연결합니다.'),
-        findsOneWidget,
-      );
+      expect(find.text('같은 네트워크 안의 주소만 쓸 수 있어요.'), findsOneWidget);
       expect(
         settings.value.settingsEndpoint,
         AppSettings.defaultSettingsEndpoint,
