@@ -36,6 +36,7 @@ class SettingsScreen extends StatefulWidget {
     this.modelPicker = pickModelFileWithSystemPicker,
     this.kovaParams,
     this.initialTab = SettingsTab.app,
+    this.onTabSelected,
     this.now,
     super.key,
   });
@@ -53,6 +54,11 @@ class SettingsScreen extends StatefulWidget {
   /// until the user taps 연결).
   final KovaParamsController? kovaParams;
   final SettingsTab initialTab;
+
+  /// Another tab was picked. The app replaces this page with that tab's
+  /// route, so back from any tab goes to the drive screen. Null switches
+  /// the tab in place (the screen used on its own, e.g. in tests).
+  final ValueChanged<SettingsTab>? onTabSelected;
 
   /// Clock for "n초 전" labels (captures).
   final DateTime Function()? now;
@@ -72,6 +78,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _ownedKova?.dispose();
     super.dispose();
+  }
+
+  void _select(SettingsTab tab) {
+    if (tab == _tab) return;
+    final open = widget.onTabSelected;
+    if (open != null) {
+      open(tab);
+    } else {
+      setState(() => _tab = tab);
+    }
   }
 
   String get _settingsAddress =>
@@ -127,7 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
               selected: {_tab},
-              onSelectionChanged: (s) => setState(() => _tab = s.first),
+              onSelectionChanged: (s) => _select(s.first),
             ),
           ),
           const SizedBox(height: 6),
@@ -160,7 +176,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     VehicleModelLoadResult.bundledDefault,
                 picker: modelPicker,
               ),
-            const RendererDiagnosticsCard(),
+            const DiagnosticsEntry(),
             if (settings.storageError case final error?)
               Padding(
                 padding: const EdgeInsets.only(top: 10),

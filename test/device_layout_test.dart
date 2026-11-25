@@ -31,8 +31,10 @@ import 'support/layout_probe.dart';
 
 Duration _s(double seconds) => Duration(milliseconds: (seconds * 1000).round());
 
+// Screen changes are routes now (the platform page transition takes
+// 450 ms, plus a frame to take the old page away), so wait one more frame.
 Future<void> _settle(WidgetTester tester) async {
-  for (var i = 0; i < 4; i++) {
+  for (var i = 0; i < 5; i++) {
     await tester.pump(const Duration(milliseconds: 150));
   }
 }

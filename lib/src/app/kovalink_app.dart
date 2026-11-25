@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/app/kovalink_home.dart';
+import 'package:kovalink/src/app/kovalink_pages.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
@@ -22,6 +24,7 @@ class KovaLinkApp extends StatefulWidget {
     this.storageRoot,
     this.modelPicker = pickModelFileWithSystemPicker,
     this.autoConnectBuilder,
+    this.navigatorObservers = const [],
   });
 
   /// Asset bundle for the vehicle model pack; null uses rootBundle.
@@ -42,6 +45,9 @@ class KovaLinkApp extends StatefulWidget {
     SettingsController settings,
   )?
   autoConnectBuilder;
+
+  /// Extra observers on the app navigator (tests).
+  final List<NavigatorObserver> navigatorObservers;
 
   static bool get _underFlutterTest =>
       Platform.environment.containsKey('FLUTTER_TEST');
@@ -70,6 +76,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
   );
   String? _loadedModelId;
   bool _modelLoaded = false;
+  late final KovaLinkPages _pages;
 
   @override
   void initState() {
@@ -105,6 +112,24 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
         autoConnect: auto,
       );
     }
+    _pages = KovaLinkPages(
+      controller: controller,
+      vehicleModel: vehicleModel,
+      settings: settings,
+      library: library,
+      modelPicker: widget.modelPicker,
+      kovaParams: kovaParams,
+      autoConnect: autoConnect,
+      drive: (context) => KovaLinkHome(
+        controller: controller,
+        vehicleModel: vehicleModel,
+        settings: settings,
+        library: library,
+        modelPicker: widget.modelPicker,
+        kovaParams: kovaParams,
+        autoConnect: autoConnect,
+      ),
+    );
     WidgetsBinding.instance.addObserver(this);
     _loadVehicleModel();
     settings.load();
@@ -199,15 +224,10 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
       },
       theme: _theme(Brightness.light, accent),
       darkTheme: _theme(Brightness.dark, accent),
-      home: KovaLinkHome(
-        controller: controller,
-        vehicleModel: vehicleModel,
-        settings: settings,
-        library: library,
-        modelPicker: widget.modelPicker,
-        kovaParams: kovaParams,
-        autoConnect: autoConnect,
-      ),
+      // Every full-screen page is a route (see KovaRoutes): system back
+      // goes back to the drive screen, and only there leaves the app.
+      onGenerateRoute: _pages.onGenerateRoute,
+      navigatorObservers: widget.navigatorObservers,
     );
   }
 
@@ -216,6 +236,15 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
     final surface = dark ? const Color(0xFF111820) : const Color(0xFFF4F6F8);
     return ThemeData(
       brightness: brightness,
+      // Android 13+ predictive back (the page follows the back gesture) and
+      // the iOS edge swipe back. These are Flutter's defaults, kept here on
+      // purpose because the back behaviour depends on them.
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       colorScheme: dark
           ? ColorScheme.dark(
               primary: accent,

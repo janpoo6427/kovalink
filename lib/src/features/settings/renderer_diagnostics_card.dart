@@ -2,16 +2,103 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:kovalink/src/app/kova_routes.dart';
 import 'package:kovalink/src/features/road_view/renderer_diagnostics.dart';
+import 'package:kovalink/src/widgets/page_header.dart';
+import 'package:kovalink/src/widgets/readable_width.dart';
+
+/// 설정 → 앱 → 진단 entry: the one-sentence state of the road view; tap
+/// opens [RendererDiagnosticsPage] with the details and 진단 복사.
+class DiagnosticsEntry extends StatelessWidget {
+  const DiagnosticsEntry({this.diagnostics, super.key});
+
+  /// Defaults to [RendererDiagnostics.instance].
+  final RendererDiagnostics? diagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    final diag = diagnostics ?? RendererDiagnostics.instance;
+    return AnimatedBuilder(
+      animation: diag,
+      builder: (context, _) {
+        final r = diag.value;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _Title(),
+            Card(
+              child: ListTile(
+                key: const ValueKey('diagnostics-entry'),
+                leading: Icon(_icon(r.state), color: _tone(r.state)),
+                title: Text(r.headline),
+                subtitle: const Text('눌러서 자세한 내용을 보고 복사할 수 있어요.'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => KovaRoutes.open(
+                  context,
+                  RendererDiagnosticsPage.route(diagnostics: diagnostics),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 진단 page ([KovaRoutes.diagnostics]), opened from the settings 앱 tab.
+class RendererDiagnosticsPage extends StatelessWidget {
+  const RendererDiagnosticsPage({this.diagnostics, super.key});
+
+  final RendererDiagnostics? diagnostics;
+
+  static Route<void> route({RendererDiagnostics? diagnostics}) => KovaPageRoute(
+    name: KovaRoutes.diagnostics,
+    builder: (context) => KovaPage(
+      backTooltip: KovaRoutes.backToSettings,
+      child: RendererDiagnosticsPage(diagnostics: diagnostics),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => ReadableListView(
+    children: [
+      const PageHeader(title: '진단'),
+      const SizedBox(height: 4),
+      RendererDiagnosticsCard(diagnostics: diagnostics, showTitle: false),
+    ],
+  );
+}
+
+class _Title extends StatelessWidget {
+  const _Title();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.only(left: 4, bottom: 8, top: 18),
+    child: Text(
+      '진단',
+      style: TextStyle(color: Color(0xFF8E9DA9), fontWeight: FontWeight.w700),
+    ),
+  );
+}
 
 /// 설정 → 진단: which renderer the road view uses and why, plus device
 /// facts. One screenshot of this card (or the copied text) is meant to be
 /// enough to diagnose a blank road view on a phone.
 class RendererDiagnosticsCard extends StatefulWidget {
-  const RendererDiagnosticsCard({this.diagnostics, super.key});
+  const RendererDiagnosticsCard({
+    this.diagnostics,
+    this.showTitle = true,
+    super.key,
+  });
 
   /// Defaults to [RendererDiagnostics.instance].
   final RendererDiagnostics? diagnostics;
+
+  /// The small 진단 section title above the card (off on the 진단 page,
+  /// which has its own page title).
+  final bool showTitle;
 
   @override
   State<RendererDiagnosticsCard> createState() =>
@@ -54,16 +141,7 @@ class _RendererDiagnosticsCardState extends State<RendererDiagnosticsCard> {
           key: const ValueKey('renderer-diagnostics'),
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(left: 4, bottom: 8, top: 18),
-              child: Text(
-                '진단',
-                style: TextStyle(
-                  color: Color(0xFF8E9DA9),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
+            if (widget.showTitle) const _Title(),
             Card(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
@@ -156,21 +234,21 @@ class _RendererDiagnosticsCardState extends State<RendererDiagnosticsCard> {
       },
     );
   }
-
-  static IconData _icon(RendererState state) => switch (state) {
-    RendererState.gpu => Icons.check_circle_rounded,
-    RendererState.checking => Icons.hourglass_top_rounded,
-    RendererState.fallback => Icons.info_rounded,
-    RendererState.software => Icons.layers_rounded,
-  };
-
-  static Color _tone(RendererState state) => switch (state) {
-    RendererState.gpu => const Color(0xFF58F2C2),
-    RendererState.checking => const Color(0xFF8EC5FF),
-    RendererState.fallback => const Color(0xFFFFC266),
-    RendererState.software => const Color(0xFFB5C0CB),
-  };
 }
+
+IconData _icon(RendererState state) => switch (state) {
+  RendererState.gpu => Icons.check_circle_rounded,
+  RendererState.checking => Icons.hourglass_top_rounded,
+  RendererState.fallback => Icons.info_rounded,
+  RendererState.software => Icons.layers_rounded,
+};
+
+Color _tone(RendererState state) => switch (state) {
+  RendererState.gpu => const Color(0xFF58F2C2),
+  RendererState.checking => const Color(0xFF8EC5FF),
+  RendererState.fallback => const Color(0xFFFFC266),
+  RendererState.software => const Color(0xFFB5C0CB),
+};
 
 class _Row extends StatelessWidget {
   const _Row(this.label, this.value);
