@@ -32,6 +32,15 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    packaging {
+        jniLibs {
+            // KovaLink is handed out as a sideloaded APK (chat attachment), so
+            // keep native libraries deflated inside the APK. This roughly
+            // halves the download; Android extracts them at install time.
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {
