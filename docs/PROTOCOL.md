@@ -313,6 +313,17 @@ Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md` at
 - A switch sends no commit; a reset sends a full 40-character SHA that must
   be in the chosen origin branch's history. Short SHAs and out-of-range
   pages are refused in the app before sending.
+- Branch first: the history is HEAD's, so a reset only goes back inside the
+  current branch. Its `branch` is the tracked origin branch (else the origin
+  branch of the same name; `KovaGitController.resetBranch`) and there is no
+  way to pick another one. A commit of another branch is reached by
+  switching to that branch first and picking from its history after the next
+  read. On a detached HEAD, or a branch origin does not have, tapping a
+  commit opens no preview (long press still copies) and the history says why
+  with a way to the branch list. A `400 invalid_git_request` on a reset (for
+  example a commit made only on the comma) reads
+  "이 커밋은 ‘<branch>’ 브랜치 기록에 없어서 되돌릴 수 없어요."; other 400s
+  keep the general line.
 - Errors: `400 invalid_git_request`, `503 git_busy` (one inspection at a time;
   the app reads status, branches and log one after another),
   `503 git_unavailable`, `403 local_client_required`. Each is one plain line on

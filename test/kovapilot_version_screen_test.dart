@@ -209,7 +209,7 @@ void main() {
     expect(find.byKey(const ValueKey('git-plan-dirty')), findsOneWidget);
   });
 
-  testWidgets('reset preview from history, against another branch', (
+  testWidgets('reset preview from history stays on the current branch', (
     tester,
   ) async {
     final h = await _open(tester);
@@ -225,14 +225,18 @@ void main() {
       'commit': older.sha,
     });
     expect(find.text('master의 최신 커밋보다 앞선 커밋으로 돌아가요.'), findsOneWidget);
-    // release/stable is older than this commit: the comma refuses it.
-    await tester.tap(find.byKey(const ValueKey('git-reset-branch')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('release/stable').last);
-    await tester.pumpAndSettle();
-    expect(h.gateway.posts.last['branch'], 'release/stable');
-    expect(find.byKey(const ValueKey('git-preview-failure')), findsOneWidget);
-    expect(find.text(KovaGitText.invalidRequest), findsOneWidget);
+    // Nothing to pick: one fixed line names the branch.
+    expect(find.byKey(const ValueKey('git-reset-branch')), findsNothing);
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('git-reset-branch-fixed')),
+        matching: find.text('지금 브랜치 ‘master’ 안에서 되돌려요.'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('git-switch-then-pick')), findsNothing);
+    expect(h.gateway.posts.map((p) => p['branch']).toSet(), {'master'});
     expect(
       tester
           .widget<FilledButton>(find.byKey(const ValueKey('git-apply')))
@@ -240,6 +244,282 @@ void main() {
       isNull,
     );
     expect(h.gateway.applyCalls, 0);
+  });
+
+  testWidgets('history and its note name the current branch', (tester) async {
+    await _open(tester);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('git-branches-note'))).data,
+      '브랜치를 누르면 바꿨을 때 무엇이 달라지는지 미리 볼 수 있어요. '
+      '다른 브랜치의 커밋으로 가려면 먼저 그 브랜치로 바꾼 뒤, 그 브랜치의 커밋 기록에서 골라요.',
+    );
+    await _show(tester, find.text('‘master’ 커밋 기록'));
+    expect(find.text('커밋 기록'), findsNothing);
+    expect(find.byKey(const ValueKey('git-reset-blocked')), findsNothing);
+    await _show(tester, find.byKey(const ValueKey('git-history-note')));
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('git-history-note'))).data,
+      '지금 브랜치 ‘master’의 커밋만 보여요. '
+      '커밋을 누르면 그 커밋으로 되돌렸을 때를 미리 볼 수 있어요. 길게 누르면 커밋 번호를 복사해요.',
+    );
+  });
+
+  testWidgets('switch preview to another branch: pick its commits after', (
+    tester,
+  ) async {
+    final h = await _open(tester);
+    await tester.tap(
+      find.byKey(const ValueKey('git-branch-feature/longitudinal-shadow')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('git-switch-then-pick')),
+        matching: find.text(
+          '바꾼 뒤 ‘feature/longitudinal-shadow’의 커밋 기록에서 되돌릴 커밋을 고를 수 있어요.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('git-reset-branch-fixed')), findsNothing);
+    await tester.tap(find.text('닫기'));
+    await tester.pumpAndSettle();
+    // The branch in use: nothing new to pick after it.
+    await tester.tap(find.byKey(const ValueKey('git-branch-master')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('git-plan-files')), findsOneWidget);
+    expect(find.byKey(const ValueKey('git-switch-then-pick')), findsNothing);
+    expect(h.gateway.applyCalls, 0);
+  });
+
+  testWidgets('detached HEAD: no reset preview, copy still works', (
+    tester,
+  ) async {
+    final h = await _open(
+      tester,
+      setup: (g) => g
+        ..head = g.headHistory()[3]
+        ..branch = null
+        ..upstream = null,
+    );
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final blocked = find.byKey(const ValueKey('git-reset-blocked'));
+    await _show(tester, blocked);
+    expect(
+      find.descendant(
+        of: blocked,
+        matching: find.text(
+          '지금 콤마는 브랜치 없이 커밋에 고정돼 있어서 여기서 되돌릴 수 없어요. 먼저 브랜치로 바꿔 주세요.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('커밋 기록'), findsOneWidget);
+    final older = h.gateway.headHistory()[2];
+    final tile = find.byKey(ValueKey('git-commit-${older.sha}'));
+    await _show(tester, tile);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('git-preview-dialog')), findsNothing);
+    expect(h.gateway.posts, isEmpty);
+    await tester.longPress(tile);
+    await tester.pump();
+    expect(copied, older.sha);
+    await _show(tester, find.byKey(const ValueKey('git-history-note')));
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('git-history-note'))).data,
+      '지금 고정된 커밋까지의 기록이에요. 길게 누르면 커밋 번호를 복사해요.',
+    );
+  });
+
+  testWidgets('detached HEAD: the button brings the branch list back', (
+    tester,
+  ) async {
+    final h = await _open(
+      tester,
+      setup: (g) {
+        g
+          ..branch = null
+          ..upstream = null;
+        // A comma with many fetched branches: the list is far above.
+        for (var i = 0; i < 24; i++) {
+          g.origin['feature/extra-${i.toString().padLeft(2, '0')}'] = g.head;
+        }
+      },
+    );
+    final blocked = find.byKey(const ValueKey('git-reset-blocked'));
+    await _show(tester, blocked);
+    final title = find.text('브랜치 28개');
+    final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+    expect(
+      title.evaluate().isEmpty || tester.getRect(title).bottom < 0,
+      isTrue,
+      reason: 'the branch list starts off screen',
+    );
+    await tester.tap(find.byKey(const ValueKey('git-show-branches')));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(title).top, inInclusiveRange(56, screen.height / 2));
+    final shadow = find.byKey(
+      const ValueKey('git-branch-feature/longitudinal-shadow'),
+    );
+    await _show(tester, shadow);
+    await tester.tap(shadow);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('git-switch-then-pick')), findsOneWidget);
+    expect(h.gateway.posts.single, {
+      'operation': 'switch',
+      'branch': 'feature/longitudinal-shadow',
+    });
+  });
+
+  testWidgets('detached HEAD on a tablet: the left column scrolls', (
+    tester,
+  ) async {
+    await _open(
+      tester,
+      size: const Size(1194, 834),
+      setup: (g) {
+        g
+          ..branch = null
+          ..upstream = null;
+        for (var i = 0; i < 24; i++) {
+          g.origin['feature/extra-${i.toString().padLeft(2, '0')}'] = g.head;
+        }
+      },
+    );
+    final left = find.byKey(const ValueKey('git-left-column'));
+    await tester.drag(left, const Offset(0, -1400));
+    await tester.pumpAndSettle();
+    final title = find.text('브랜치 28개');
+    expect(
+      title.evaluate().isEmpty || tester.getRect(title).bottom < 0,
+      isTrue,
+    );
+    await tester.tap(find.byKey(const ValueKey('git-show-branches')));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(title).top, inInclusiveRange(56, 834 / 2));
+  });
+
+  testWidgets('a branch origin does not have: no reset preview', (
+    tester,
+  ) async {
+    final h = await _open(
+      tester,
+      setup: (g) => g
+        ..branch = 'my-local-work'
+        ..upstream = null,
+    );
+    final blocked = find.byKey(const ValueKey('git-reset-blocked'));
+    await _show(tester, blocked);
+    expect(
+      find.descendant(
+        of: blocked,
+        matching: find.text(
+          '지금 브랜치 ‘my-local-work’는 콤마가 받아 둔 브랜치 목록에 없어서 여기서 되돌릴 수 없어요. 먼저 브랜치로 바꿔 주세요.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('‘my-local-work’ 커밋 기록'), findsOneWidget);
+    final tile = find.byKey(
+      ValueKey('git-commit-${h.gateway.headHistory()[1].sha}'),
+    );
+    await _show(tester, tile);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('git-preview-dialog')), findsNothing);
+    expect(h.gateway.posts, isEmpty);
+  });
+
+  testWidgets('a commit made only on the comma: refused in plain words', (
+    tester,
+  ) async {
+    late String local;
+    final h = await _open(
+      tester,
+      setup: (g) => local = g.commitOnComma('wip: 콤마에서만 만든 커밋').sha,
+    );
+    final tile = find.byKey(ValueKey('git-commit-$local'));
+    await _show(tester, tile);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(h.gateway.posts.last, {
+      'operation': 'reset',
+      'branch': 'master',
+      'commit': local,
+    });
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('git-preview-failure')))
+          .data,
+      '이 커밋은 ‘master’ 브랜치 기록에 없어서 되돌릴 수 없어요.',
+    );
+    expect(find.text(KovaGitText.invalidRequest), findsNothing);
+    await tester.tap(find.text('닫기'));
+    await tester.pumpAndSettle();
+    // A switch the comma refuses keeps its own words.
+    h.gateway.origin.remove('release/stable');
+    final stable = find.byKey(const ValueKey('git-branch-release/stable'));
+    // The branch list is above the history: scroll back up to it.
+    await tester.scrollUntilVisible(stable, -250, scrollable: _page);
+    await tester.pumpAndSettle();
+    await tester.tap(stable);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('git-preview-failure')))
+          .data,
+      KovaGitText.invalidRequest,
+    );
+    expect(h.gateway.applyCalls, 0);
+  });
+
+  testWidgets('after the comma switches branch, 새로 읽기 follows it', (
+    tester,
+  ) async {
+    final h = await _open(tester);
+    h.gateway.checkout('feature/longitudinal-shadow');
+    await tester.tap(find.byKey(const ValueKey('git-refresh')));
+    await tester.pumpAndSettle();
+    final shadow = h.gateway.commitOf('feature/longitudinal-shadow');
+    await _show(tester, find.text('‘feature/longitudinal-shadow’ 커밋 기록'));
+    final older = h.gateway.headHistory()[1];
+    expect(older.subject, 'test(longitudinal): shadow planner replay');
+    final tile = find.byKey(ValueKey('git-commit-${older.sha}'));
+    await _show(tester, tile);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(h.gateway.posts.last, {
+      'operation': 'reset',
+      'branch': 'feature/longitudinal-shadow',
+      'commit': older.sha,
+    });
+    expect(
+      find.text('지금 브랜치 ‘feature/longitudinal-shadow’ 안에서 되돌려요.'),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('git-plan')),
+        matching: find.text(shortCommit(shadow.sha)),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('more history until the end', (tester) async {

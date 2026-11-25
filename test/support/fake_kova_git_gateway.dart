@@ -183,6 +183,29 @@ class FakeKovaGitGateway implements KovaParamsTransport {
 
   FakeGitCommit commitOf(String branchName) => origin[branchName]!;
 
+  /// What a branch switch on the comma leaves behind: HEAD at the head of
+  /// `origin/<branchName>`, on a local branch of that name tracking it.
+  void checkout(String branchName) {
+    head = commitOf(branchName);
+    branch = branchName;
+    upstream = 'origin/$branchName';
+  }
+
+  /// A commit made on the comma only (on top of HEAD, never pushed): it is
+  /// in the history but in no origin branch.
+  FakeGitCommit commitOnComma(String subject) {
+    final commit = FakeGitCommit(
+      'comma-${commits.length}',
+      subject,
+      head.time.add(const Duration(hours: 1)),
+      [head],
+      {'openpilot/kovapilot/comma_only.py'},
+    );
+    commits[commit.sha] = commit;
+    head = commit;
+    return commit;
+  }
+
   List<FakeGitCommit> headHistory() =>
       head.ancestry().toList()..sort((a, b) => b.time.compareTo(a.time));
 
