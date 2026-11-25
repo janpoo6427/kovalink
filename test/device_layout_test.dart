@@ -268,7 +268,7 @@ void main() {
       }
     });
 
-    testWidgets('camera notice sits under the turn sign on a phone', (
+    testWidgets('camera notice sits under the overlay zone on a phone', (
       tester,
     ) async {
       final device = portraitDevices[2]; // iPhone 15
@@ -285,16 +285,16 @@ void main() {
       final notice = tester.getRect(
         find.byKey(const ValueKey('camera-notice')),
       );
-      final sign = tester.getRect(find.byType(TurnSign));
-      final lanes = tester.getRect(find.byType(LaneGuidancePill));
-      expect(notice.top, greaterThan(sign.bottom));
-      expect(notice.bottom, lessThan(lanes.top));
+      final signal = tester.getRect(find.byType(SignalPill));
+      final buttons = tester.getRect(find.byTooltip('설정'));
+      expect(notice.top, greaterThan(signal.bottom));
+      expect(notice.bottom, lessThan(buttons.top));
       final road = tester.getRect(find.byType(RoadViewScreen));
       expect(notice.top, greaterThan(navOverlayZoneOf(road).bottom));
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('landscape phone keeps the turn sign clear of the buttons', (
+    testWidgets('landscape phone puts the camera notice under the speed', (
       tester,
     ) async {
       final device = landscapeDevices[1];
@@ -306,13 +306,18 @@ void main() {
       ))!;
       addTearDown(() => tester.runAsync(() => root.delete(recursive: true)));
       await _pumpHome(tester, root);
-      final sign = tester.getRect(find.byType(TurnSign));
+      await tester.tap(find.byTooltip('카메라 화면으로 바꾸기'));
+      await tester.pump();
+      final notice = tester.getRect(
+        find.byKey(const ValueKey('camera-notice')),
+      );
       final settingsButton = tester.getRect(find.byTooltip('설정'));
       final speed = tester.getRect(find.byType(SpeedCluster));
-      // Under the speed, on the left, above the bottom buttons.
-      expect(sign.top, greaterThan(speed.bottom));
-      expect(sign.right, lessThan(device.width / 2));
-      expect(sign.bottom, lessThan(settingsButton.top));
+      final road = tester.getRect(find.byType(RoadViewScreen));
+      // Under the speed, left of the overlay zone, above the buttons.
+      expect(notice.top, greaterThan(speed.bottom));
+      expect(notice.right, lessThan(navOverlayZoneOf(road).left));
+      expect(notice.bottom, lessThan(settingsButton.top));
       await tester.pumpWidget(const SizedBox.shrink());
     });
 

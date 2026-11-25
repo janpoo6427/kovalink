@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kovalink/src/app/kovalink_app.dart';
 import 'package:kovalink/src/features/connect/connect_screen.dart';
+import 'package:kovalink/src/features/road_view/hud/drive_hud.dart';
 import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
@@ -289,7 +290,7 @@ void main() {
       // Only the found comma is saved; every address follows it.
       expect(store.data!.containsKey('telemetryEndpoint'), isFalse);
       // No telemetry socket on this device: the demo keeps playing, no error.
-      expect(find.text('좌회전'), findsOneWidget);
+      expect(find.byType(TrafficLightGlyph), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('auto-connect-chip')));
       await _settle(tester);

@@ -51,7 +51,7 @@ void main() {
   });
 
   group('drive HUD', () {
-    testWidgets('city stop: standby pill, red light countdown, turn row', (
+    testWidgets('city stop: standby pill, red light countdown, no route card', (
       tester,
     ) async {
       await _pumpHud(tester, DemoDriveScenario().sceneAt(_s(0.5)));
@@ -62,55 +62,63 @@ void main() {
       expect(find.text('신호등 12 m'), findsOneWidget);
       expect(find.text('제한속도'), findsOneWidget);
       expect(find.text('50'), findsWidgets);
-      expect(find.text('좌회전'), findsOneWidget);
-      expect(find.text('서울대학로278번길'), findsOneWidget);
-      expect(find.text('목적지까지'), findsOneWidget);
+      // No turn-by-turn guidance on screen (kovapilot sends none).
+      expect(find.text('좌회전'), findsNothing);
+      expect(find.text('서울대학로278번길'), findsNothing);
+      expect(find.text('목적지까지'), findsNothing);
       expect(find.byType(TrafficLightGlyph), findsOneWidget);
     });
 
-    testWidgets('city turn approach shows the green sign and lane guidance', (
+    testWidgets('city turn approach: no turn sign, route card or lanes', (
       tester,
     ) async {
       final scene = DemoDriveScenario().sceneAt(_s(85));
+      // The demo still carries a turn and lane guidance; none is drawn.
+      expect(scene.tbt, isNotNull);
+      expect(scene.laneGuidance, isNotEmpty);
       await _pumpHud(tester, scene);
-      expect(find.byType(TurnSign), findsOneWidget);
-      expect(find.byType(LaneGuidancePill), findsOneWidget);
+      expect(
+        find.text(formatDistanceCompact(scene.tbt!.distanceMeters)),
+        findsNothing,
+      );
       expect(
         find.text(formatDistanceCompact(scene.tbt!.nextDistanceMeters!)),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
-        find.text('좌회전'),
-        findsOneWidget,
-        reason: 'label only in the info card',
+        find.text(formatDistance(scene.tbt!.distanceMeters)),
+        findsNothing,
       );
+      expect(find.text('좌회전'), findsNothing);
+      // Traffic light / blinker row and the limit sign stay.
+      expect(find.byType(SignalPill), findsOneWidget);
+      expect(find.byType(SpeedLimitSign), findsOneWidget);
     });
 
-    testWidgets('highway: engaged, set speed, camera, tollgate, destination', (
+    testWidgets('highway: engaged and set speed, no route card', (
       tester,
     ) async {
       final scene = DemoDriveScenario(route: DemoRoute.highway).sceneAt(_s(10));
       await _pumpHud(tester, scene);
       expect(find.text('조향 보조 작동 중'), findsOneWidget);
       expect(find.text('설정'), findsOneWidget);
-      expect(find.text('과속 카메라'), findsOneWidget);
-      expect(find.text(' · 100 km/h'), findsOneWidget);
-      expect(find.text('톨게이트'), findsOneWidget);
-      expect(find.text('경부고속도로'), findsOneWidget);
-      expect(find.byType(TurnSign), findsNothing);
+      // The route card (road name, cameras, tollgate) is not drawn.
+      expect(find.text('과속 카메라'), findsNothing);
+      expect(find.text(' · 100 km/h'), findsNothing);
+      expect(find.text('톨게이트'), findsNothing);
+      expect(find.text('경부고속도로'), findsNothing);
       expect(find.byType(TrafficLightGlyph), findsNothing);
       expect(find.text('100'), findsWidgets);
     });
 
-    testWidgets('mph converts speed, set speed, limit and camera limit', (
-      tester,
-    ) async {
+    testWidgets('mph converts speed, set speed and limit', (tester) async {
       final scene = DemoDriveScenario(route: DemoRoute.highway).sceneAt(_s(10));
       await _pumpHud(tester, scene, unit: SpeedUnit.mph);
       expect(find.text('mph'), findsOneWidget);
       expect(find.text('km/h'), findsNothing);
       expect(find.text('62'), findsWidgets);
-      expect(find.text(' · 62 mph'), findsOneWidget);
+      // The camera limit was in the route card, which is gone.
+      expect(find.text(' · 62 mph'), findsNothing);
     });
 
     testWidgets('HUD numbers can be hidden', (tester) async {

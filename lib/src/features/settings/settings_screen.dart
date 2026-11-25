@@ -549,7 +549,7 @@ class _LayerSection extends StatelessWidget {
               ),
               toggle(
                 'hud',
-                '속도와 길 안내',
+                '속도와 제한속도',
                 value.showHud,
                 (s, on) => s.copyWith(showHud: on),
               ),

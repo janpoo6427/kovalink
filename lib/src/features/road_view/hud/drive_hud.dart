@@ -18,11 +18,14 @@ abstract final class HudColors {
   static const signalRed = Color(0xFFE5484D);
   static const signalYellow = Color(0xFFF0A92B);
   static const blue = Color(0xFF2F6BEA);
-  static const signGreen = Color(0xFF17643F);
 }
 
 /// Driving HUD: every value comes from [scene]; nothing is invented and
 /// nothing here sends anything to the vehicle.
+///
+/// No turn-by-turn guidance is drawn (no turn sign, route card or lane
+/// guidance): kovapilot sends none, so it only ever showed the demo's
+/// made-up values. [RoadScene] still reads those fields.
 class DriveHud extends StatelessWidget {
   const DriveHud({
     required this.scene,
@@ -36,19 +39,12 @@ class DriveHud extends StatelessWidget {
   final bool compact;
   final SpeedUnit unit;
 
-  /// 설정 → 표시 항목 → HUD 수치 (speed, set speed, limit, info card).
+  /// 설정 → 표시 항목 → 속도와 제한속도 (speed, set speed, limit).
   final bool showNumbers;
 
   @override
   Widget build(BuildContext context) {
-    final tbt = scene.tbt;
-    final showTurnSign =
-        scene.roadType == RoadType.city &&
-        tbt != null &&
-        tbt.maneuver != TbtManeuver.straight &&
-        tbt.maneuver != TbtManeuver.unknown &&
-        tbt.distanceMeters <= 1000;
-    // Bottom parts stay above the home indicator / navigation bar.
+    // Notices stay above the home indicator / navigation bar.
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return LayoutBuilder(
       builder: (context, box) => _buildStack(
@@ -58,13 +54,11 @@ class DriveHud extends StatelessWidget {
           showNumbers: showNumbers,
           bottomInset: bottomInset,
         ),
-        turnSign: showTurnSign ? tbt : null,
       ),
     );
   }
 
-  Widget _buildStack(HudLayout layout, {required TbtInstruction? turnSign}) {
-    final short = layout.short;
+  Widget _buildStack(HudLayout layout) {
     final small = layout.small;
     return DefaultTextStyle.merge(
       style: const TextStyle(color: HudColors.ink),
@@ -75,22 +69,7 @@ class DriveHud extends StatelessWidget {
             Positioned(
               left: HudLayout.margin,
               top: HudLayout.speedTop,
-              child: short && turnSign != null
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SpeedCluster(scene: scene, unit: unit, compact: true),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          width: layout.turnSignWidth,
-                          child: TurnSign(
-                            instruction: turnSign,
-                            showNext: !layout.tight,
-                          ),
-                        ),
-                      ],
-                    )
-                  : SpeedCluster(scene: scene, unit: unit, compact: small),
+              child: SpeedCluster(scene: scene, unit: unit, compact: small),
             ),
           Positioned.fromRect(
             rect: layout.signalRow,
@@ -101,39 +80,6 @@ class DriveHud extends StatelessWidget {
               right: HudLayout.margin,
               top: HudLayout.speedTop,
               child: SpeedLimitSign(limitKph: scene.speedLimitKph, unit: unit),
-            ),
-          if (showNumbers)
-            Positioned(
-              right: HudLayout.margin,
-              top: layout.routeCardTop,
-              width: layout.routeCardWidth,
-              child: RouteInfoCard(scene: scene, unit: unit, compact: small),
-            ),
-          if (turnSign != null && short && !showNumbers)
-            Positioned(
-              left: HudLayout.margin,
-              top: 16,
-              width: layout.turnSignWidth,
-              child: TurnSign(instruction: turnSign),
-            )
-          else if (turnSign != null && !short)
-            Positioned(
-              right: HudLayout.margin,
-              top: layout.turnSignTop,
-              width: layout.turnSignWidth,
-              child: TurnSign(instruction: turnSign),
-            ),
-          if (scene.laneGuidance.isNotEmpty)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: layout.laneBottom,
-              child: Center(
-                child: LaneGuidancePill(
-                  lanes: scene.laneGuidance,
-                  distanceMeters: scene.tbt?.distanceMeters,
-                ),
-              ),
             ),
         ],
       ),
@@ -146,8 +92,8 @@ typedef NoticeArea = ({Rect area, Alignment alignment});
 
 /// Where the HUD puts its parts on a road view of [size]. Every spot is
 /// fixed for a screen shape, so nothing moves when a part comes or goes
-/// (a traffic light, the turn sign). The road view uses it too, to keep
-/// its own notices clear of the HUD and of [navOverlayZone].
+/// (a traffic light). The road view uses it too, to keep its own notices
+/// clear of the HUD, the bottom buttons and [navOverlayZone].
 class HudLayout {
   HudLayout(
     this.size, {
@@ -165,9 +111,8 @@ class HudLayout {
   /// Home indicator / navigation bar under the road view.
   final double bottomInset;
 
-  /// Landscape phone (car mount): too short for the right-hand column
-  /// above the buttons, so the turn sign moves under the speed and the
-  /// signal row sits between the speed and the limit sign.
+  /// Landscape phone (car mount): the signal row sits between the speed
+  /// and the limit sign, and notices go left of [navOverlayZone].
   final bool short;
 
   static const margin = 18.0;
@@ -177,14 +122,12 @@ class HudLayout {
   /// Speed number and pills in their small size.
   static const smallSpeedHeight = 112.0;
 
-  /// Room kept for the turn sign (its rows follow the text size).
-  static const turnSignHeight = 120.0;
-
-  /// Room kept for the lane guidance pill.
-  static const laneHeight = 50.0;
-
   /// Smallest room for a notice card on one row (icon beside the text).
   static const minNoticeHeight = 76.0;
+
+  /// Room kept above the bottom buttons (48 px buttons up to 22 px above
+  /// the inset, plus a gap).
+  static const buttonsClear = 22.0 + 48 + gap;
 
   /// Left edge the signal row keeps clear of on wide screens: a 3-digit
   /// speed in the large type with the unit and gear column.
@@ -194,10 +137,6 @@ class HudLayout {
   static const limitClear = margin + 64 + gap;
 
   bool get small => compact || short;
-
-  /// Landscape screens too low for the full turn sign under the speed
-  /// (Fold cover screen on a mount): the sign drops its second row.
-  bool get tight => short && size.height - bottomInset < 330;
 
   double get signalTop =>
       short ? 16 : (compact ? (showNumbers ? 146 : 16) : 16);
@@ -218,21 +157,6 @@ class HudLayout {
     return Rect.fromLTWH(x, signalTop, width, SignalPill.height);
   }
 
-  double get routeCardTop => short ? 108 : (compact ? 204 : 108);
-  double get routeCardWidth => short ? 260 : (compact ? 250 : 300);
-
-  /// Room kept for the route card (its height follows the rows).
-  double get routeCardHeight => small ? 100 : 116;
-
-  double get turnSignTop => compact ? 336 : 252;
-
-  /// A bit narrower on the narrowest phones, so a notice fits beside it.
-  double get turnSignWidth =>
-      compact || short ? (size.width < 380 ? 160 : 180) : 210;
-
-  /// Lane guidance pill, from the bottom of the road view.
-  double get laneBottom => (compact && !short ? 84 : 26) + bottomInset;
-
   /// Right middle of the screen: navigation apps (T map and the like)
   /// float their own turn overlay there, over other apps. KovaLink does
   /// not draw it; its notices just stay out of the way.
@@ -244,54 +168,35 @@ class HudLayout {
   );
 
   /// Free room for the road view's own notices (camera not connected,
-  /// calibration): clear of every HUD part (also the ones not showing
-  /// right now), the bottom buttons and [navOverlayZone], plus where in
-  /// it the notice sits.
+  /// calibration): clear of the speed, the signal row, the limit sign, the
+  /// bottom buttons and [navOverlayZone], plus where in it the notice sits.
   NoticeArea get noticeArea {
-    final bottom = size.height - laneBottom - laneHeight - gap;
+    final bottom = size.height - bottomInset - buttonsClear;
     final zone = navOverlayZone;
+    final belowTop =
+        math.max(
+          signalRow.bottom,
+          showNumbers && short ? speedTop + smallSpeedHeight : 0.0,
+        ) +
+        gap;
     if (short) {
-      // Between the speed / turn sign column and the route card.
-      final top =
-          math.max(
-            signalRow.bottom,
-            showNumbers ? speedTop + smallSpeedHeight : 0,
-          ) +
-          gap;
-      final right =
-          math.min(
-            showNumbers
-                ? size.width - margin - routeCardWidth
-                : size.width - margin,
-            zone.left,
-          ) -
-          gap;
+      // Under the speed and the signal row, left of the overlay zone.
       return (
-        area: _rect(margin + turnSignWidth + gap, top, right, bottom),
+        area: _rect(margin, belowTop, zone.left - gap, bottom),
         alignment: Alignment.center,
       );
     }
-    // Under the right column (route card, turn sign), above the lane
-    // guidance: the notice sits low, below the navigation overlay.
-    final under =
-        math.max(
-          math.max(turnSignTop + turnSignHeight, signalRow.bottom),
-          zone.bottom,
-        ) +
-        gap;
+    // Under the overlay zone, above the bottom buttons.
+    final under = math.max(zone.bottom, signalRow.bottom) + gap;
     if (bottom - under >= minNoticeHeight) {
       return (
         area: _rect(margin, under, size.width - margin, bottom),
-        alignment: Alignment.bottomCenter,
+        alignment: Alignment.center,
       );
     }
-    // Short screens: left of the turn sign, under the route card.
-    final top =
-        (showNumbers ? routeCardTop + routeCardHeight : signalRow.bottom) + gap;
-    final right =
-        math.min(size.width - margin - turnSignWidth, zone.left) - gap;
+    // Low screens: left of the overlay zone, under the signal row.
     return (
-      area: _rect(margin, top, right, bottom),
+      area: _rect(margin, belowTop, zone.left - gap, bottom),
       alignment: Alignment.center,
     );
   }
@@ -688,312 +593,6 @@ class SpeedLimitSign extends StatelessWidget {
   }
 }
 
-/// Road name, enforcement points, tollgates, next turn and destination.
-class RouteInfoCard extends StatelessWidget {
-  const RouteInfoCard({
-    required this.scene,
-    required this.unit,
-    this.compact = false,
-    super.key,
-  });
-
-  final RoadScene scene;
-  final SpeedUnit unit;
-
-  /// Phone portrait: the narrower card keeps the smaller type.
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final tbt = scene.tbt;
-    final rows = <Widget>[
-      for (final alert in scene.roadAlerts.take(3))
-        _InfoRow(
-          compact: compact,
-          icon: switch (alert.kind) {
-            RoadAlertKind.speedCamera => Icons.photo_camera_outlined,
-            RoadAlertKind.sectionCamera => Icons.videocam_outlined,
-            RoadAlertKind.tollgate => Icons.toll_outlined,
-            RoadAlertKind.schoolZone => Icons.school_outlined,
-            RoadAlertKind.unknown => Icons.info_outline_rounded,
-          },
-          label: switch (alert.kind) {
-            RoadAlertKind.speedCamera => '과속 카메라',
-            RoadAlertKind.sectionCamera => '구간 단속',
-            RoadAlertKind.tollgate => '톨게이트',
-            RoadAlertKind.schoolZone => '어린이 보호구역',
-            RoadAlertKind.unknown => '안내',
-          },
-          detail: alert.speedLimitKph == null
-              ? null
-              : '${unit.fromKph(alert.speedLimitKph!).round()} ${unit.label}',
-          value: formatDistance(alert.distanceMeters),
-        ),
-      if (tbt != null &&
-          tbt.maneuver != TbtManeuver.straight &&
-          tbt.maneuver != TbtManeuver.unknown)
-        _InfoRow(
-          compact: compact,
-          icon: maneuverIcon(tbt.maneuver),
-          label: maneuverLabel(tbt.maneuver),
-          detail: '교차로',
-          value: formatDistance(tbt.distanceMeters),
-        ),
-      if (tbt?.remainingDistanceMeters case final remaining?)
-        _InfoRow(
-          compact: compact,
-          icon: Icons.flag_outlined,
-          label: '목적지까지',
-          value:
-              '${formatDistance(remaining)}'
-              '${tbt!.remainingSeconds == null ? '' : ' · ${formatDuration(tbt.remainingSeconds!)}'}',
-        ),
-    ];
-    if (rows.isEmpty && scene.roadName == null) return const SizedBox.shrink();
-    return _Pill(
-      radius: 18,
-      tint: HudColors.cardGlass,
-      padding: compact
-          ? const EdgeInsets.fromLTRB(14, 10, 14, 10)
-          : const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (scene.roadName case final name?)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                tbt?.roadName ?? name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: compact ? 11.5 : 12,
-                  color: HudColors.muted,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ...rows,
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.detail,
-    this.compact = false,
-  });
-
-  final bool compact;
-  final IconData icon;
-  final String label;
-  final String? detail;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: compact ? 3.5 : 4.5),
-      child: Row(
-        children: [
-          Icon(icon, size: compact ? 17 : 18, color: HudColors.ink),
-          SizedBox(width: compact ? 9 : 10),
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: compact ? 12.5 : 13.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                if (detail != null)
-                  Flexible(
-                    child: Text(
-                      ' · $detail',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: compact ? 12.5 : 13,
-                        color: HudColors.muted,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: compact ? 13.5 : 15.5,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Green Korean-style turn sign: next maneuver large, the one after small.
-class TurnSign extends StatelessWidget {
-  const TurnSign({required this.instruction, this.showNext = true, super.key});
-
-  final TbtInstruction instruction;
-
-  /// The smaller row for the turn after this one.
-  final bool showNext;
-
-  @override
-  Widget build(BuildContext context) {
-    final next = showNext ? instruction.nextManeuver : null;
-    final nextDistance = instruction.nextDistanceMeters;
-    return Container(
-      decoration: BoxDecoration(
-        color: HudColors.signGreen,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.85),
-          width: 1.5,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 12,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Row(
-              children: [
-                Icon(
-                  maneuverIcon(instruction.maneuver),
-                  color: Colors.white,
-                  size: 50,
-                ),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      formatDistanceCompact(instruction.distanceMeters),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (next != null && nextDistance != null) ...[
-            Divider(
-              height: 1,
-              thickness: 1,
-              color: Colors.white.withValues(alpha: 0.25),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 12, 8),
-              child: Row(
-                children: [
-                  Icon(maneuverIcon(next), color: Colors.white70, size: 30),
-                  const SizedBox(width: 14),
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        formatDistanceCompact(nextDistance),
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 21,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class LaneGuidancePill extends StatelessWidget {
-  const LaneGuidancePill({required this.lanes, this.distanceMeters, super.key});
-
-  final List<LaneGuide> lanes;
-  final double? distanceMeters;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Pill(
-      radius: 26,
-      padding: const EdgeInsets.fromLTRB(10, 8, 18, 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final lane in lanes)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
-              decoration: BoxDecoration(
-                color: lane.recommended
-                    ? HudColors.blue
-                    : const Color(0x1F15191E),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final direction in lane.directions)
-                    Icon(
-                      switch (direction) {
-                        LaneDirection.left => Icons.turn_left_rounded,
-                        LaneDirection.right => Icons.turn_right_rounded,
-                        LaneDirection.uTurn => Icons.u_turn_left_rounded,
-                        LaneDirection.straight => Icons.arrow_upward_rounded,
-                      },
-                      size: 20,
-                      color: lane.recommended ? Colors.white : HudColors.muted,
-                    ),
-                ],
-              ),
-            ),
-          if (distanceMeters != null) ...[
-            const SizedBox(width: 12),
-            Text(
-              formatDistance(distanceMeters!),
-              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _Pill extends StatelessWidget {
   const _Pill({
     required this.child,
@@ -1017,23 +616,3 @@ class _Pill extends StatelessWidget {
     child: child,
   );
 }
-
-IconData maneuverIcon(TbtManeuver maneuver) => switch (maneuver) {
-  TbtManeuver.turnLeft => Icons.turn_left_rounded,
-  TbtManeuver.turnRight => Icons.turn_right_rounded,
-  TbtManeuver.slightLeft => Icons.turn_slight_left_rounded,
-  TbtManeuver.slightRight => Icons.turn_slight_right_rounded,
-  TbtManeuver.uTurn => Icons.u_turn_left_rounded,
-  TbtManeuver.arrive => Icons.flag_rounded,
-  _ => Icons.straight_rounded,
-};
-
-String maneuverLabel(TbtManeuver maneuver) => switch (maneuver) {
-  TbtManeuver.turnLeft => '좌회전',
-  TbtManeuver.turnRight => '우회전',
-  TbtManeuver.slightLeft => '왼쪽 방향',
-  TbtManeuver.slightRight => '오른쪽 방향',
-  TbtManeuver.uTurn => '유턴',
-  TbtManeuver.arrive => '목적지 도착',
-  _ => '직진',
-};

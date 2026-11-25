@@ -107,9 +107,6 @@ List<(String, Rect)> driveScreenParts(WidgetTester tester) {
   );
   add('신호 알약', find.byType(SignalPill));
   add('제한속도', find.byType(SpeedLimitSign));
-  add('경로 카드', find.byType(RouteInfoCard));
-  add('회전 표지', find.byType(TurnSign));
-  add('차로 안내', find.byType(LaneGuidancePill));
   add('모델 가져오기 버튼', find.byTooltip('차량 모델 가져오기'));
   add('연결 버튼', find.byTooltip('장치 연결'));
   add('설정 버튼', find.byTooltip('설정'));

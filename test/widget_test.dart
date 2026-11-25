@@ -9,7 +9,8 @@ void main() {
     await tester.pumpWidget(const KovaLinkApp());
     await tester.pump();
     expect(find.text('제한속도'), findsOneWidget);
-    expect(find.text('좌회전'), findsOneWidget);
+    // No turn-by-turn guidance on the drive screen.
+    expect(find.text('좌회전'), findsNothing);
     expect(find.byTooltip('장치 연결'), findsOneWidget);
     expect(find.byTooltip('설정'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
