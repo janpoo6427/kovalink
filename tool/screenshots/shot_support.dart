@@ -56,12 +56,13 @@ Future<void> loadReviewFonts() async {
 Future<void> saveBoundary(
   WidgetTester tester,
   GlobalKey key,
-  String name,
-) async {
+  String name, {
+  double pixelRatio = 1,
+}) async {
   await tester.runAsync(() async {
     final boundary =
         key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-    final image = await boundary.toImage();
+    final image = await boundary.toImage(pixelRatio: pixelRatio);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
     final file = File('$shotDirectory/$name.png');
     file.parent.createSync(recursive: true);
