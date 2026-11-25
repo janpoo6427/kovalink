@@ -2,6 +2,10 @@
 // tracked branch, modified files, updater), the branches it has fetched and
 // the commit history, plus switch/reset previews. Nothing here changes the
 // comma: the gateway only previews, and 적용 stays off with its reason.
+//
+// Branch first: the history is the current branch's, and a reset stays
+// inside it. A commit of another branch is reached by switching to that
+// branch first; on a detached HEAD the history only copies commit numbers.
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -97,6 +101,7 @@ class KovapilotVersionScreen extends StatefulWidget {
 class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
   late final KovaGitController _git = widget.controller ?? KovaGitController();
   final _search = TextEditingController();
+  final _branchesKey = GlobalKey(debugLabel: 'git-branches-section');
 
   @override
   void initState() {
@@ -129,16 +134,44 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
       _preview(KovaGitPlanRequest.switchTo(branch.name));
 
   void _previewReset(KovaGitLogEntry entry) {
-    final branch =
-        _git.defaultResetBranch ??
-        (_git.branches.isEmpty ? null : _git.branches.first.name);
-    if (branch == null) {
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(const SnackBar(content: Text('되돌릴 기준 브랜치가 콤마에 없어요.')));
+    // Only inside the current branch; while blocked the history card says
+    // why and does not call this.
+    final request = _git.resetRequest(entry.commit);
+    if (request != null) _preview(request);
+  }
+
+  /// Scrolls the branch list into view, just under the back button. A list
+  /// far above may not be built (lists only build what is near the
+  /// screen), so go to the top first.
+  Future<void> _showBranches(BuildContext from) async {
+    if (_branchesKey.currentContext == null) {
+      final position = Scrollable.maybeOf(from)?.position;
+      position?.jumpTo(position.minScrollExtent);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+    }
+    await _revealBranches();
+  }
+
+  Future<void> _revealBranches() async {
+    final target = _branchesKey.currentContext;
+    if (target == null) return;
+    final scrollable = Scrollable.maybeOf(target);
+    final box = target.findRenderObject();
+    final viewport = scrollable?.context.findRenderObject();
+    if (scrollable == null || box is! RenderBox || viewport is! RenderBox) {
       return;
     }
-    _preview(KovaGitPlanRequest.resetTo(branch: branch, commit: entry.commit));
+    final position = scrollable.position;
+    final top = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
+    await position.animateTo(
+      (position.pixels + top - 56).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -164,6 +197,7 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
           refreshing: _git.load == KovaGitLoad.loading,
         );
         final branches = _BranchesCard(
+          key: _branchesKey,
           controller: _git,
           search: _search,
           onPick: _previewSwitch,
@@ -172,6 +206,7 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
           controller: _git,
           now: widget.now,
           onPick: _previewReset,
+          onShowBranches: _showBranches,
         );
         final notice = _ApplyNotice(
           mutationEnabled: _git.status!.mutationEnabled,
@@ -610,6 +645,7 @@ class _BranchesCard extends StatelessWidget {
     required this.controller,
     required this.search,
     required this.onPick,
+    super.key,
   });
 
   final KovaGitController controller;
@@ -697,8 +733,10 @@ class _BranchesCard extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
           child: Text(
-            '브랜치를 누르면 바꿨을 때 무엇이 달라지는지 미리 볼 수 있어요.',
-            style: TextStyle(color: _muted, fontSize: 12),
+            '브랜치를 누르면 바꿨을 때 무엇이 달라지는지 미리 볼 수 있어요. '
+            '${KovaGitBranchText.otherBranchCommits}',
+            key: ValueKey('git-branches-note'),
+            style: TextStyle(color: _muted, fontSize: 12, height: 1.4),
           ),
         ),
       ],
@@ -710,22 +748,44 @@ class _HistoryCard extends StatelessWidget {
   const _HistoryCard({
     required this.controller,
     required this.onPick,
+    required this.onShowBranches,
     this.now,
   });
 
   final KovaGitController controller;
   final void Function(KovaGitLogEntry entry) onPick;
+  final void Function(BuildContext from) onShowBranches;
   final DateTime? now;
 
   @override
   Widget build(BuildContext context) {
     final log = controller.log;
     final head = controller.status?.head;
+    final branch = controller.status?.branch;
     final failure = controller.logFailure;
+    final block = controller.resetBlock;
+    final note = [
+      if (block == KovaGitResetBlock.detached)
+        KovaGitBranchText.historyDetached
+      else if (branch != null)
+        KovaGitBranchText.historyOnly(branch),
+      if (block == null) '커밋을 누르면 그 커밋으로 되돌렸을 때를 미리 볼 수 있어요.',
+      '길게 누르면 커밋 번호를 복사해요.',
+    ].join(' ');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('커밋 기록'),
+        _SectionTitle(KovaGitBranchText.historyTitle(branch)),
+        if (block != null)
+          _ResetBlockedNotice(
+            reason: switch (block) {
+              KovaGitResetBlock.detached => KovaGitBranchText.detached,
+              KovaGitResetBlock.notFetched => KovaGitBranchText.notFetched(
+                branch ?? '',
+              ),
+            },
+            onShowBranches: onShowBranches,
+          ),
         Card(
           key: const ValueKey('git-history-card'),
           child: Column(
@@ -763,7 +823,7 @@ class _HistoryCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  onTap: () => onPick(entry),
+                  onTap: block == null ? () => onPick(entry) : null,
                   onLongPress: () => _copyCommit(context, entry.commit),
                 ),
               ],
@@ -799,16 +859,72 @@ class _HistoryCard extends StatelessWidget {
             ],
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
           child: Text(
-            '커밋을 누르면 그 커밋으로 되돌렸을 때를 미리 볼 수 있어요. 길게 누르면 커밋 번호를 복사해요.',
-            style: TextStyle(color: _muted, fontSize: 12, height: 1.4),
+            note,
+            key: const ValueKey('git-history-note'),
+            style: const TextStyle(color: _muted, fontSize: 12, height: 1.4),
           ),
         ),
       ],
     );
   }
+}
+
+/// Above the history while a reset cannot be previewed: why, what to do and
+/// a way to the branch list.
+class _ResetBlockedNotice extends StatelessWidget {
+  const _ResetBlockedNotice({
+    required this.reason,
+    required this.onShowBranches,
+  });
+
+  final String reason;
+  final void Function(BuildContext from) onShowBranches;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('git-reset-blocked'),
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+    decoration: BoxDecoration(
+      color: _warn.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _warn.withValues(alpha: 0.35)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 1),
+              child: Icon(Icons.info_outline_rounded, size: 18, color: _warn),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '$reason ${KovaGitBranchText.switchFirst}',
+                style: const TextStyle(fontSize: 13, height: 1.45),
+              ),
+            ),
+          ],
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            key: const ValueKey('git-show-branches'),
+            onPressed: () => onShowBranches(context),
+            icon: const Icon(Icons.call_split_rounded, size: 18),
+            label: const Text(KovaGitBranchText.showBranches),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _EmptyLine extends StatelessWidget {
@@ -872,9 +988,12 @@ class KovaGitPreviewDialog extends StatefulWidget {
 }
 
 class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
-  late KovaGitPlanRequest _request = widget.initial;
   KovaGitPreview? _preview;
   int _asked = 0;
+
+  /// Fixed: a reset stays inside the current branch, so there is nothing to
+  /// pick here.
+  KovaGitPlanRequest get _request => widget.initial;
 
   @override
   void initState() {
@@ -890,14 +1009,12 @@ class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
     setState(() => _preview = preview);
   }
 
-  void _resetBranch(String? branch) {
-    final commit = _request.commit;
-    if (branch == null || commit == null || branch == _request.branch) return;
-    _request = KovaGitPlanRequest.resetTo(branch: branch, commit: commit);
-    _ask();
-  }
-
   bool get _isReset => _request.operation == KovaGitOperation.reset;
+
+  /// A switch to a branch other than the current one: after it, that
+  /// branch's history is where its commits are picked.
+  bool get _isOtherBranch =>
+      !_isReset && _request.branch != widget.controller.resetBranch;
 
   @override
   Widget build(BuildContext context) {
@@ -917,12 +1034,12 @@ class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_isReset) ...[
-              _ResetBranchPicker(
-                branches: [for (final b in widget.controller.branches) b.name],
-                value: _request.branch,
-                onChanged: _resetBranch,
+              _DialogNote(
+                key: const ValueKey('git-reset-branch-fixed'),
+                icon: Icons.call_split_rounded,
+                text: KovaGitBranchText.resetInside(_request.branch),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
             ],
             if (preview == null)
               const Padding(
@@ -958,6 +1075,14 @@ class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
               )
             else if (plan != null)
               _PlanFacts(plan: plan),
+            if (_isOtherBranch) ...[
+              const SizedBox(height: 10),
+              _DialogNote(
+                key: const ValueKey('git-switch-then-pick'),
+                icon: Icons.history_rounded,
+                text: KovaGitBranchText.pickAfterSwitch(_request.branch),
+              ),
+            ],
             const SizedBox(height: 14),
             Row(
               key: const ValueKey('git-apply-locked'),
@@ -995,35 +1120,26 @@ class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
   }
 }
 
-class _ResetBranchPicker extends StatelessWidget {
-  const _ResetBranchPicker({
-    required this.branches,
-    required this.value,
-    required this.onChanged,
-  });
+/// One quiet line with an icon at the top or bottom of a preview.
+class _DialogNote extends StatelessWidget {
+  const _DialogNote({required this.icon, required this.text, super.key});
 
-  final List<String> branches;
-  final String value;
-  final ValueChanged<String?> onChanged;
+  final IconData icon;
+  final String text;
 
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<String>(
-    key: const ValueKey('git-reset-branch'),
-    initialValue: branches.contains(value) ? value : null,
-    isExpanded: true,
-    decoration: const InputDecoration(
-      labelText: '어느 브랜치 기록에서 찾을까요',
-      isDense: true,
-      border: OutlineInputBorder(),
-    ),
-    items: [
-      for (final name in branches)
-        DropdownMenuItem(
-          value: name,
-          child: Text(name, overflow: TextOverflow.ellipsis),
-        ),
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(top: 1),
+        child: Icon(icon, size: 17, color: _accent),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(text, style: const TextStyle(fontSize: 13.5, height: 1.4)),
+      ),
     ],
-    onChanged: onChanged,
   );
 }
 
