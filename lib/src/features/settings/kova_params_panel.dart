@@ -290,7 +290,7 @@ class _GroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final locale = document.defaultLocale;
     final title = group.title?.resolve(defaultLocale: locale) ?? '기타';
-    // The group title is enough; catalog group descriptions mostly repeat it.
+    final description = group.description?.resolve(defaultLocale: locale);
     return Column(
       key: ValueKey('kova-group-${group.id}'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,6 +302,14 @@ class _GroupCard extends StatelessWidget {
             style: const TextStyle(color: _muted, fontWeight: FontWeight.w700),
           ),
         ),
+        if (description != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8, right: 4),
+            child: Text(
+              description,
+              style: const TextStyle(color: _muted, fontSize: 12),
+            ),
+          ),
         Card(
           child: Column(
             children: [
