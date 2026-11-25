@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kovalink/src/kova_params/kova_params_client.dart';
+import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/network/comma_registry.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
 import 'package:kovalink/src/network/gateway_pin.dart';
@@ -75,6 +76,15 @@ void main() {
     );
     addTearDown(socket.close);
     expect(await socket.first, contains('speedMps'));
+    final kovaParams = KovaParamsController(pollInterval: null);
+    addTearDown(kovaParams.dispose);
+    expect(
+      await kovaParams.connect(gateway.origin, session: link.session),
+      isNull,
+    );
+    expect(kovaParams.isAuthenticatedSession, isTrue);
+    expect(await kovaParams.setValue('e2e.level', 8), isA<KovaUpdateApplied>());
+    expect(kovaParams.document!.setting('e2e.level')!.value, 8);
     expect(settings.value.registeredComma, isNull);
     expect(tokens.tokens, isEmpty);
     expect(

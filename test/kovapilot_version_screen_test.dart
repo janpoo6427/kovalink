@@ -113,6 +113,30 @@ void main() {
     expect(h.gateway.applyCalls, 0);
   });
 
+  testWidgets('shows branch and commit when worktree state is unknown', (
+    tester,
+  ) async {
+    final h = await _open(
+      tester,
+      setup: (gateway) => gateway
+        ..dirty = true
+        ..dirtyKnown = false,
+    );
+    final status = find.byKey(const ValueKey('git-status-card'));
+    expect(
+      find.descendant(of: status, matching: find.text('master')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: status,
+        matching: find.text(shortCommit(h.gateway.commitOf('master').sha)),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('확인 못 했어요'), findsOneWidget);
+  });
+
   testWidgets('branch search and its empty state', (tester) async {
     await _open(tester);
     await tester.enterText(

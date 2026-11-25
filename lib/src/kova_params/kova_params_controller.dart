@@ -47,7 +47,7 @@ typedef KovaClientFactory =
 class KovaParamsController extends ChangeNotifier {
   KovaParamsController({
     KovaClientFactory? clientFactory,
-    this.pollInterval = const Duration(seconds: 15),
+    this.pollInterval = const Duration(seconds: 5),
     this.staleAfter = const Duration(seconds: 45),
     DateTime Function()? clock,
     bool Function()? isAuthenticated,
@@ -131,7 +131,7 @@ class KovaParamsController extends ChangeNotifier {
     KovaWriteLock.none => '',
     KovaWriteLock.notConnected => '연결하면 바꿀 수 있어요.',
     KovaWriteLock.stale => '다시 연결될 때까지 바꿀 수 없어요.',
-    KovaWriteLock.needsPairing => '지금은 보기만 할 수 있어요. 설정 변경은 아직 개발용 연결에서만 돼요.',
+    KovaWriteLock.needsPairing => '이 연결에는 설정을 바꿀 권한이 없어요.',
   };
 
   /// Per-setting line; the connection card shows [writeLockReason].
@@ -146,17 +146,30 @@ class KovaParamsController extends ChangeNotifier {
   String? lockReasonFor(KovaParamSetting setting) {
     final lock = writeLock;
     if (lock != KovaWriteLock.none) return _shortLockReason(lock);
-    if (setting.control == KovaParamControl.readOnly) {
-      return '읽기 전용 항목이에요.';
-    }
     if (setting.status == KovaAvailability.unsupported) {
       return '이 차에서는 쓸 수 없는 기능이에요.';
+    }
+    if (setting.control == KovaParamControl.readOnly) {
+      if (setting.status == KovaAvailability.pendingConsumer) {
+        return '아직 차량에 적용할 수 없는 기능이에요.';
+      }
+      if (setting.access == KovaParamAccess.readOnly &&
+          setting.risk == KovaRisk.control &&
+          health?.authentication == 'localNetwork') {
+        return '소유자 인증 연결에서 바꿀 수 있는 제어 설정이에요.';
+      }
+      return '읽기 전용 항목이에요.';
+    }
+    if (setting.applyPolicy == KovaApplyPolicy.parked &&
+        document?.deviceParked != true &&
+        document?.deviceOffroad != true) {
+      return 'P에 두고 완전히 정차한 뒤 바꿀 수 있어요.';
     }
     final onroad = document?.deviceOffroad == false;
     if (onroad &&
         (setting.applyPolicy == KovaApplyPolicy.offroad ||
             setting.applyPolicy == KovaApplyPolicy.restart)) {
-      return '주행 중에는 바꿀 수 없어요.';
+      return '시동을 끈 뒤 바꿀 수 있어요.';
     }
     if (pending.containsKey(setting.key)) return '보내는 중이에요.';
     return null;

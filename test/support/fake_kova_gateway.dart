@@ -22,6 +22,7 @@ class FakeKovaGateway implements KovaParamsTransport {
 
   final Map<String, dynamic> catalog;
   bool offroad;
+  bool parked = false;
   bool reportOffroad = true;
   bool down = false;
   int revision = 0;
@@ -56,7 +57,7 @@ class FakeKovaGateway implements KovaParamsTransport {
       s['value'] = valueOf(s['key'] as String);
       s['applyStatus'] = s['availability'];
     }
-    if (reportOffroad) doc['device'] = {'offroad': offroad};
+    if (reportOffroad) doc['device'] = {'offroad': offroad, 'parked': parked};
     doc.addAll(extra);
     return doc;
   }
@@ -127,6 +128,13 @@ class FakeKovaGateway implements KovaParamsTransport {
         403,
         'update_forbidden',
         'setting can only be changed offroad: $key',
+      );
+    }
+    if (s['applyPolicy'] == 'parked' && !offroad && !parked) {
+      return _error(
+        403,
+        'update_forbidden',
+        'setting can only be changed when parked or offroad: $key',
       );
     }
     if (!_typeOk(s, value)) {

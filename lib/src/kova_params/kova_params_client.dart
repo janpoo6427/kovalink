@@ -181,8 +181,9 @@ class KovaUpdateFailed extends KovaUpdateOutcome {
 String kovaRejectionReason(String code, String message) {
   final lower = message.toLowerCase();
   return switch (code) {
-    'update_forbidden' when lower.contains('offroad') =>
-      '주행 중에는 바꿀 수 없어요. 차를 세운 뒤 다시 해 주세요.',
+    'update_forbidden' when lower.contains('parked') =>
+      'P에 두고 완전히 정차한 뒤 다시 해 주세요.',
+    'update_forbidden' when lower.contains('offroad') => '시동을 끈 뒤 다시 해 주세요.',
     'update_forbidden' when lower.contains('read-only') =>
       '읽기 전용 항목이라 바꿀 수 없어요.',
     'update_forbidden' => '차에서 이 변경을 막았어요.',

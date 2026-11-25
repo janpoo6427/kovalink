@@ -93,9 +93,12 @@ void main() {
         expect(doc.deviceOffroad, isFalse);
         expect(
           kova.lockReasonFor(doc.setting('steering.always_on')!),
-          contains('주행 중'),
+          contains('시동을 끈 뒤'),
         );
-        expect(kova.lockReasonFor(doc.setting('e2e.gain')!), contains('주행 중'));
+        expect(
+          kova.lockReasonFor(doc.setting('e2e.gain')!),
+          contains('시동을 끈 뒤'),
+        );
         expect(kova.lockReasonFor(doc.setting('e2e.level')!), isNull);
         expect(
           kova.lockReasonFor(doc.setting('e2e.build_label')!),
@@ -123,7 +126,10 @@ void main() {
           kova.notices['steering.always_on']!.kind,
           KovaNoticeKind.rejected,
         );
-        expect(kova.notices['steering.always_on']!.message, contains('주행 중'));
+        expect(
+          kova.notices['steering.always_on']!.message,
+          contains('시동을 끈 뒤'),
+        );
         expect(kova.document!.setting('steering.always_on')!.value, isFalse);
       },
     );

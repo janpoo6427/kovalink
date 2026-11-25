@@ -70,6 +70,7 @@ class KovaGitStatus {
     this.branch,
     this.upstream,
     this.dirty = false,
+    this.dirtyKnown = true,
     this.updaterState,
     this.mutationEnabled = false,
   });
@@ -84,6 +85,7 @@ class KovaGitStatus {
       branch: _optionalString(map, 'branch'),
       upstream: _optionalString(map, 'upstream'),
       dirty: _bool(map, 'dirty'),
+      dirtyKnown: _bool(map, 'dirtyKnown', fallback: true),
       updaterState: updater is String && updater.trim().isNotEmpty
           ? updater.trim()
           : null,
@@ -100,6 +102,7 @@ class KovaGitStatus {
 
   /// True when the device checkout has modified or untracked files.
   final bool dirty;
+  final bool dirtyKnown;
   final String? updaterState;
   final bool mutationEnabled;
 

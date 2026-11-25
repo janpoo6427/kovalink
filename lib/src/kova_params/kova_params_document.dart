@@ -75,7 +75,7 @@ enum KovaParamType { boolean, integer, number, string, choice, unknown }
 
 enum KovaParamAccess { readOnly, readWrite, unknown }
 
-enum KovaApplyPolicy { immediate, offroad, restart, unknown }
+enum KovaApplyPolicy { immediate, offroad, parked, restart, unknown }
 
 enum KovaAvailability { available, pendingConsumer, unsupported, unknown }
 
@@ -341,6 +341,7 @@ class KovaParamsDocument {
     required this.groups,
     required this.settings,
     this.deviceOffroad,
+    this.deviceParked,
   });
 
   final int schemaVersion;
@@ -356,6 +357,9 @@ class KovaParamsDocument {
 
   /// `device.offroad` from the gateway; null when the gateway did not say.
   final bool? deviceOffroad;
+
+  /// True when the Gateway verified P, standstill and disengagement.
+  final bool? deviceParked;
 
   KovaParamSetting? setting(String key) => settings[key];
 
@@ -452,6 +456,9 @@ class KovaParamsDocument {
     final offroad = device is Map && device['offroad'] is bool
         ? device['offroad'] as bool
         : null;
+    final parked = device is Map && device['parked'] is bool
+        ? device['parked'] as bool
+        : null;
     return KovaParamsDocument(
       schemaVersion: major,
       revision: revision,
@@ -460,6 +467,7 @@ class KovaParamsDocument {
       groups: groups,
       settings: settings,
       deviceOffroad: offroad,
+      deviceParked: parked,
     );
   }
 }

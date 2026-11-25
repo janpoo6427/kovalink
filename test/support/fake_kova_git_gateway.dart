@@ -171,6 +171,7 @@ class FakeKovaGitGateway implements KovaParamsTransport {
   String? branch;
   String? upstream;
   bool dirty = false;
+  bool dirtyKnown = true;
   String? updaterState = 'idle';
   FakeGitMode mode = FakeGitMode.normal;
 
@@ -253,6 +254,7 @@ class FakeKovaGitGateway implements KovaParamsTransport {
     'head': head.sha,
     'upstream': upstream,
     'dirty': dirty,
+    if (!dirtyKnown) 'dirtyKnown': false,
     'updaterState': updaterState,
     'mutationEnabled': false,
   };

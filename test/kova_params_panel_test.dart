@@ -77,7 +77,7 @@ void main() {
       find.byKey(const ValueKey('kova-lock-e2e.build_label')),
       findsOneWidget,
     );
-    expect(find.text('정차 중에만 변경'), findsOneWidget);
+    expect(find.text('시동을 끈 뒤 변경'), findsOneWidget);
     expect(find.text('재시작 후 적용'), findsOneWidget);
     expect(find.text('준비 중'), findsOneWidget);
     expect(find.textContaining('개발용 연결'), findsOneWidget);
@@ -199,7 +199,7 @@ void main() {
   ) async {
     await kova.connect('http://192.168.0.10:8082');
     await _pumpPanel(tester, kova);
-    expect(find.textContaining('보기만 할 수 있어요'), findsWidgets);
+    expect(find.textContaining('이 연결에는 설정을 바꿀 권한이 없어요'), findsOneWidget);
     final toggle = tester.widget<Switch>(
       find.byKey(const ValueKey('kova-toggle-steering.always_on')),
     );
@@ -231,6 +231,26 @@ void main() {
     expect(find.byKey(const ValueKey('kova-lock-e2e.level')), findsNothing);
   });
 
+  testWidgets('P unlocks parked settings without unlocking offroad settings', (
+    tester,
+  ) async {
+    gateway.offroad = false;
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((setting) => setting['key'] == 'e2e.level');
+    setting['applyPolicy'] = 'parked';
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    expect(find.text('P에 두고 완전히 정차한 뒤 바꿀 수 있어요.'), findsOneWidget);
+    gateway.parked = true;
+    await kova.refresh();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('kova-lock-e2e.level')), findsNothing);
+    expect(find.text('시동을 끈 뒤 바꿀 수 있어요.'), findsWidgets);
+    await kova.setValue('e2e.level', 8);
+    expect(gateway.posts.single['value'], 8);
+  });
+
   testWidgets('conflict and rejection notices are drawn', (tester) async {
     await kova.connect('http://127.0.0.1:18082');
     await _pumpPanel(tester, kova);
@@ -243,7 +263,7 @@ void main() {
     await kova.refresh();
     await kova.setValue('steering.always_on', true);
     await tester.pump();
-    expect(find.textContaining('주행 중에는 바꿀 수 없어요. 차를 세운 뒤'), findsOneWidget);
+    expect(find.textContaining('시동을 끈 뒤 다시 해 주세요.'), findsOneWidget);
   });
 
   group('settings screen', () {

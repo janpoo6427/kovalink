@@ -630,7 +630,11 @@ class _StatusCard extends StatelessWidget {
                 _Fact(
                   label: '수정된 파일',
                   value: Text(
-                    status.dirty ? '있어요' : '없어요',
+                    !status.dirtyKnown
+                        ? '확인 못 했어요'
+                        : status.dirty
+                        ? '있어요'
+                        : '없어요',
                     key: const ValueKey('git-dirty'),
                     style: TextStyle(
                       color: status.dirty ? _warn : null,
@@ -638,7 +642,7 @@ class _StatusCard extends StatelessWidget {
                       height: 1.5,
                     ),
                   ),
-                  note: status.dirty
+                  note: status.dirtyKnown && status.dirty
                       ? '콤마에서 직접 고친 파일이 있어요. 바꾸기 전에 확인해야 해요.'
                       : null,
                 ),

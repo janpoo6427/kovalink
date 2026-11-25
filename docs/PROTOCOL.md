@@ -223,11 +223,13 @@ KovaLink refuses a gateway whose `schemaVersion` major is not 1.
   `unit`. `enum` has `options` (strings or integers, matched with the exact
   JSON type) and may add localized `optionTitles` keyed by the option text.
 - `access`: `readOnly` | `readWrite`. `applyPolicy`: `immediate` (used right
-  away), `offroad` (may only change while the device is offroad) or `restart`
+  away), `offroad` (may only change while the device is offroad), `parked`
+  (may change offroad or in P with the vehicle stationary and disengaged), or `restart`
   (used after openpilot restarts). `availability`/`applyStatus`: `available`,
   `pendingConsumer` (value is stored but nothing uses it yet), `unsupported`.
-- `device.offroad` is read by the gateway from the device's own `IsOffroad`.
-  It is informational; the gateway enforces the policy on update.
+- `device.offroad` comes from `IsOffroad`. Optional `device.parked` comes from
+  fresh, valid vehicle and selfdrive messages. The gateway evaluates these
+  conditions again on update.
 - `503 kova_params_unavailable`: stored state failed validation.
 
 KovaLink parsing rules:
@@ -274,7 +276,8 @@ KovaLink write rules:
   may have stored the value after the app gave up).
 - While the document says `device.offroad == false`, `offroad` and `restart`
   settings are locked in the app. (The gateway itself rejects only `offroad`
-  settings onroad.)
+  settings unconditionally onroad.) `parked` settings remain locked until
+  either `device.offroad` or `device.parked` is true.
 - `risk: control` settings ask for confirmation first.
 - Writes are locked while the connection is stale (last read failed or older
   than 45 s).
@@ -306,12 +309,15 @@ Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md` at
 
 | Request | Answer |
 | --- | --- |
-| `GET /v1/git/status` | `{branch\|null, head, upstream\|null, dirty, updaterState\|null, mutationEnabled: false}` |
+| `GET /v1/git/status` | `{branch\|null, head, upstream\|null, dirty, dirtyKnown?, updaterState\|null, mutationEnabled: false}` |
 | `GET /v1/git/branches` | `{branches: [{name, commit}]}` (fetched `origin/*` refs, no `origin/HEAD`) |
 | `GET /v1/git/log?limit=1..100&cursor=0..10000` | `{entries: [{commit, parents, authorTime, subject}], nextCursor\|null}` (HEAD history) |
 | `POST /v1/git/plan` `{operation: switch\|reset, branch, commit?}` | `{operation, branch, commit, branchHead, beforeHead, beforeBranch, dirty, requiresRestart, mutationEnabled: false, changedFileCount, planDigest}` |
 | `POST /v1/git/apply` | `403 git_mutation_disabled` |
 
+- `dirtyKnown: false` means inspection of local changes failed. The app
+  still shows branch and HEAD, marks the change state unknown, and can only
+  receive a preview once the gateway can confirm the change state.
 - A switch sends no commit; a reset sends a full 40-character SHA that must
   be in the chosen origin branch's history. Short SHAs and out-of-range
   pages are refused in the app before sending.

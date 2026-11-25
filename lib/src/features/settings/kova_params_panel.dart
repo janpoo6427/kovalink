@@ -170,13 +170,14 @@ class KovaConnectionCard extends StatelessWidget {
                           : '설정을 바꿀 수 있어요.')
                     : KovaParamsController.writeLockReason(lock),
               ),
-              if (document.deviceOffroad == false) ...[
+              if (document.deviceOffroad == false &&
+                  document.deviceParked != true) ...[
                 const SizedBox(height: 6),
                 const _Banner(
                   key: ValueKey('kova-onroad-banner'),
                   color: _warn,
                   icon: Icons.directions_car_filled_outlined,
-                  text: '주행 중이에요. 일부 설정은 차를 세운 뒤 바꿀 수 있어요.',
+                  text: '일부 설정은 P 정차 또는 시동 종료가 필요해요.',
                 ),
               ],
             ],
@@ -562,7 +563,8 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
   /// dialog.
   List<Widget> _badges() {
     final policy = switch (s.applyPolicy) {
-      KovaApplyPolicy.offroad => ('정차 중에만 변경', _warn),
+      KovaApplyPolicy.offroad => ('시동을 끈 뒤 변경', _warn),
+      KovaApplyPolicy.parked => ('P 정차 중 변경', _warn),
       KovaApplyPolicy.restart => ('재시작 후 적용', const Color(0xFF72A7FF)),
       KovaApplyPolicy.immediate || KovaApplyPolicy.unknown => null,
     };
@@ -675,7 +677,8 @@ class _Details extends StatelessWidget {
         '범위: ${s.describe(s.minimum, defaultLocale: locale)} – ${s.describe(s.maximum, defaultLocale: locale)}',
       '적용: ${switch (s.applyPolicy) {
         KovaApplyPolicy.immediate => '바로 적용돼요.',
-        KovaApplyPolicy.offroad => '차를 세웠을 때만 바꿀 수 있어요.',
+        KovaApplyPolicy.offroad => '시동을 끈 뒤 바꿀 수 있어요.',
+        KovaApplyPolicy.parked => 'P에 두고 완전히 정차했을 때 바꿀 수 있어요.',
         KovaApplyPolicy.restart => 'kovapilot을 다시 시작하면 적용돼요. 주행 중에는 바꿀 수 없어요.',
         KovaApplyPolicy.unknown => '언제 적용되는지 알 수 없어 앱에서는 바꿀 수 없어요.',
       }}',
