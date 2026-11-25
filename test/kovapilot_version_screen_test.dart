@@ -217,6 +217,24 @@ void main() {
     expect(find.text('적용하면 kovapilot을 다시 시작해야 해요.'), findsNothing);
   });
 
+  testWidgets('an eligible preview submits the reviewed branch for staging', (
+    tester,
+  ) async {
+    final h = await _open(tester, setup: (g) => g.mutationEnabled = true);
+    await tester.tap(
+      find.byKey(const ValueKey('git-branch-feature/longitudinal-shadow')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('git-apply')));
+    await tester.pumpAndSettle();
+    expect(h.gateway.applyCalls, 1);
+    expect(h.gateway.posts.last['operation'], 'switch');
+    expect(h.gateway.posts.last['branch'], 'feature/longitudinal-shadow');
+    expect(h.gateway.posts.last['planDigest'], hasLength(64));
+    expect(h.gateway.branch, 'master');
+    expect(find.textContaining('설치 준비를 요청했어요'), findsOneWidget);
+  });
+
   testWidgets('modified files: status and preview warn', (tester) async {
     await _open(tester, setup: (g) => g.dirty = true);
     expect(
@@ -707,6 +725,6 @@ void main() {
     );
     expect(kovaCommitTimeLabel(null), '');
     expect(kovaApplyLockedReason(false), '콤마에서 아직 바꾸기를 허용하지 않아요.');
-    expect(kovaApplyLockedReason(true), '이 앱에서는 아직 바꾸기를 할 수 없어요.');
+    expect(kovaApplyLockedReason(true), '작업 트리 상태와 미리보기를 확인해 주세요.');
   });
 }

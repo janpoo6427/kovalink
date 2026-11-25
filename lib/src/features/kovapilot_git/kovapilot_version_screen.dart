@@ -1,11 +1,11 @@
 // 설정 → kovapilot → kovapilot 버전: what the comma runs (branch, commit,
 // tracked branch, modified files, updater), the branches it has fetched and
-// the commit history, plus switch/reset previews. Nothing here changes the
-// comma: the gateway only previews, and 적용 stays off with its reason.
+// the commit history, switch/reset previews and eligible updater requests.
 //
 // Branch first: the history is the current branch's, and a reset stays
 // inside it. A commit of another branch is reached by switching to that
 // branch first; on a detached HEAD the history only copies commit numbers.
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -47,10 +47,10 @@ String kovaCommitTimeLabel(DateTime? time, {DateTime? now}) {
   return '${local.month}월 ${local.day}일 ${two(local.hour)}:${two(local.minute)}';
 }
 
-/// Why 적용 is off. The gateway says `mutationEnabled: false` today; even
+/// Why 적용 is off when the current Gateway does not offer maintenance.
 /// when it says true this app does not send apply yet.
 String kovaApplyLockedReason(bool mutationEnabled) =>
-    mutationEnabled ? '이 앱에서는 아직 바꾸기를 할 수 없어요.' : KovaGitText.mutationDisabled;
+    mutationEnabled ? '작업 트리 상태와 미리보기를 확인해 주세요.' : KovaGitText.mutationDisabled;
 
 /// Copies [sha] and says so in one line.
 Future<void> _copyCommit(BuildContext context, String sha) async {
@@ -228,6 +228,8 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
         );
         final notice = _ApplyNotice(
           mutationEnabled: _git.status!.mutationEnabled,
+          maintenancePhase: _git.status!.maintenancePhase,
+          mutationBlock: _git.status!.mutationBlock,
         );
         if (box.maxWidth < kovapilotVersionWideWidth) {
           return ReadableListView(
@@ -420,9 +422,28 @@ class _FailureCard extends StatelessWidget {
 
 /// One line saying everything below is a preview, and why.
 class _ApplyNotice extends StatelessWidget {
-  const _ApplyNotice({required this.mutationEnabled});
+  const _ApplyNotice({
+    required this.mutationEnabled,
+    this.maintenancePhase,
+    this.mutationBlock,
+  });
 
   final bool mutationEnabled;
+  final String? maintenancePhase;
+  final String? mutationBlock;
+
+  String get message => switch (maintenancePhase) {
+    'queued' => '업데이트 준비 요청을 받았어요.',
+    'staged' => '설치가 준비됐어요. 콤마를 다시 시작하면 적용돼요.',
+    'installed' => '선택한 버전이 설치됐어요.',
+    'failed' => '업데이트를 준비하지 못했어요. 현재 버전을 확인해 주세요.',
+    _ when mutationEnabled => '미리보기에서 적용을 누르면 설치를 준비해요.',
+    _ when mutationBlock == 'authorization' =>
+      'Git 변경은 소유자 인증으로 연결한 뒤 신청할 수 있어요.',
+    _ when mutationBlock == 'offroadOrUpdaterBusy' =>
+      '시동을 끄고 기존 업데이트가 끝나면 Git 변경을 신청할 수 있어요.',
+    _ => '지금은 미리보기만 할 수 있어요. ${kovaApplyLockedReason(mutationEnabled)}',
+  };
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -441,7 +462,7 @@ class _ApplyNotice extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '지금은 미리보기만 할 수 있어요. ${kovaApplyLockedReason(mutationEnabled)}',
+              message,
               style: const TextStyle(fontSize: 13, height: 1.4),
             ),
           ),
@@ -1011,6 +1032,9 @@ class KovaGitPreviewDialog extends StatefulWidget {
 
 class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
   KovaGitPreview? _preview;
+  bool _applying = false;
+  bool _queued = false;
+  String? _applyError;
   int _asked = 0;
 
   /// Fixed: a reset stays inside the current branch, so there is nothing to
@@ -1031,6 +1055,24 @@ class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
     setState(() => _preview = preview);
   }
 
+  Future<void> _apply(KovaGitPlan plan) async {
+    setState(() {
+      _applying = true;
+      _applyError = null;
+    });
+    try {
+      await widget.controller.apply(_request, plan);
+      if (!mounted) return;
+      setState(() => _queued = true);
+      unawaited(widget.controller.refresh());
+    } on KovaGitException catch (error) {
+      if (!mounted) return;
+      setState(() => _applyError = error.message);
+    } finally {
+      if (mounted) setState(() => _applying = false);
+    }
+  }
+
   bool get _isReset => _request.operation == KovaGitOperation.reset;
 
   /// A switch to a branch other than the current one: after it, that
@@ -1045,6 +1087,14 @@ class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
     final status = widget.controller.status;
     final mutationEnabled =
         (plan?.mutationEnabled ?? false) && (status?.mutationEnabled ?? false);
+    final canApply =
+        mutationEnabled &&
+        plan != null &&
+        plan.dirtyKnown &&
+        !plan.dirty &&
+        !_queued &&
+        !_applying &&
+        !(plan.isNoOp && plan.branch == plan.beforeBranch);
     return AlertDialog(
       key: const ValueKey('git-preview-dialog'),
       title: Text(_isReset ? '이 커밋으로 되돌리기 미리보기' : '브랜치 바꾸기 미리보기'),
@@ -1106,20 +1156,28 @@ class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
               ),
             ],
             const SizedBox(height: 14),
-            Row(
-              key: const ValueKey('git-apply-locked'),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.lock_outline_rounded, size: 16, color: _muted),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    kovaApplyLockedReason(mutationEnabled),
-                    style: const TextStyle(color: _muted, fontSize: 12.5),
+            if (_queued || _applyError != null || !canApply && !_applying)
+              Row(
+                key: const ValueKey('git-apply-locked'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.lock_outline_rounded,
+                    size: 16,
+                    color: _muted,
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _queued
+                          ? '설치 준비를 요청했어요. 준비가 끝난 뒤 다시 시작하면 적용돼요.'
+                          : _applyError ??
+                                kovaApplyLockedReason(mutationEnabled),
+                      style: const TextStyle(color: _muted, fontSize: 12.5),
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -1127,15 +1185,13 @@ class _KovaGitPreviewDialogState extends State<KovaGitPreviewDialog> {
         if (preview?.failure != null)
           TextButton(onPressed: _ask, child: const Text('다시 물어보기')),
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _applying ? null : () => Navigator.of(context).pop(),
           child: const Text('닫기'),
         ),
-        const FilledButton(
-          key: ValueKey('git-apply'),
-          // Off on purpose: the comma does not allow changes yet, and this
-          // app never sends /v1/git/apply.
-          onPressed: null,
-          child: Text('적용'),
+        FilledButton(
+          key: const ValueKey('git-apply'),
+          onPressed: canApply ? () => _apply(plan) : null,
+          child: Text(_applying ? '요청 중…' : '적용'),
         ),
       ],
     );

@@ -1,6 +1,5 @@
 // State for the kovapilot version screen: current checkout, fetched origin
-// branches, HEAD history pages and switch/reset previews. Read-only; the
-// apply step is never sent.
+// branches, HEAD history pages and switch/reset previews.
 //
 // A reset only ever goes back inside the branch the comma is on: the
 // history the gateway gives is that branch's (HEAD), so a commit of another
@@ -262,6 +261,17 @@ class KovaGitController extends ChangeNotifier {
       }
       return KovaGitPreview.failed(error);
     }
+  }
+
+  Future<void> apply(KovaGitPlanRequest request, KovaGitPlan plan) async {
+    final client = _client;
+    if (client == null) {
+      throw const KovaGitException(
+        KovaGitFailure.transport,
+        KovaGitText.transport,
+      );
+    }
+    await client.apply(plan.planDigest, request: request);
   }
 
   void _notify() {

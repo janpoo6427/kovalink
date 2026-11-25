@@ -132,6 +132,7 @@ class KovaParamSetting {
     required this.defaultValue,
     this.applyStatus,
     this.saveAnytime = false,
+    this.saveParkedOnly = false,
     this.applyState,
     this.appliedValue,
     this.minimum,
@@ -153,6 +154,7 @@ class KovaParamSetting {
   final KovaAvailability availability;
   final String? applyStatus;
   final bool saveAnytime;
+  final bool saveParkedOnly;
   final String? applyState;
   final Object? appliedValue;
   final KovaRisk risk;
@@ -222,6 +224,7 @@ class KovaParamSetting {
           ? json['applyStatus'] as String
           : null,
       saveAnytime: json['savePolicy'] == 'anytime',
+      saveParkedOnly: json['savePolicy'] == 'parked',
       applyState: json['applyState'] is String
           ? json['applyState'] as String
           : null,

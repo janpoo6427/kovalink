@@ -393,12 +393,14 @@ class KovaParamsClient {
   Future<KovaUpdateOutcome> update(
     String key,
     Object? value,
-    int expectedRevision,
-  ) async {
+    int expectedRevision, {
+    Object? expectedValue,
+  }) async {
     final body = jsonEncode({
       'key': key,
       'value': value,
       'expectedRevision': expectedRevision,
+      'expectedValue': ?expectedValue,
     });
     final KovaHttpResponse response;
     try {

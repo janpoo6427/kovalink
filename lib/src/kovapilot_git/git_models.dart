@@ -1,9 +1,4 @@
-// Typed view of the kovapilot gateway Git maintenance API
-// (kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md`, contract at
-// `master-jh@7cc3b3280`). The gateway only inspects the device checkout and
-// previews a branch switch or a reset; `mutationEnabled` stays false and
-// `POST /v1/git/apply` answers 403 until authenticated updater integration
-// exists. Nothing here changes the device.
+// Data returned by the kovapilot Gateway Git maintenance API.
 
 final RegExp _fullSha = RegExp(r'^[0-9a-f]{40}$');
 final RegExp _digest = RegExp(r'^[0-9a-f]{64}$');
@@ -73,6 +68,8 @@ class KovaGitStatus {
     this.dirtyKnown = true,
     this.updaterState,
     this.mutationEnabled = false,
+    this.maintenancePhase,
+    this.mutationBlock,
   });
 
   factory KovaGitStatus.fromJson(Object? json) {
@@ -80,6 +77,7 @@ class KovaGitStatus {
     // UpdaterState is a free-form Params string on the device; anything that
     // is not a string is treated as unknown rather than failing the screen.
     final updater = map['updaterState'];
+    final maintenance = map['maintenance'];
     return KovaGitStatus(
       head: _sha(map, 'head'),
       branch: _optionalString(map, 'branch'),
@@ -90,6 +88,10 @@ class KovaGitStatus {
           ? updater.trim()
           : null,
       mutationEnabled: _bool(map, 'mutationEnabled', fallback: false),
+      mutationBlock: _optionalString(map, 'mutationBlock'),
+      maintenancePhase: maintenance is Map && maintenance['phase'] is String
+          ? maintenance['phase'] as String
+          : null,
     );
   }
 
@@ -105,6 +107,8 @@ class KovaGitStatus {
   final bool dirtyKnown;
   final String? updaterState;
   final bool mutationEnabled;
+  final String? maintenancePhase;
+  final String? mutationBlock;
 
   bool get detached => branch == null;
 

@@ -296,9 +296,8 @@ KovaLink write rules:
 A supported HTTPS health response with `bindScope: "wifi"` and
 `authentication: "localNetwork"` lets Link connect automatically on the
 same private subnet. It pins the certificate observed during discovery for
-HTTPS and WSS. The Gateway grants display, comfort and behavior writes
-subject to the catalog and its apply policies. Control settings are
-read-only in this mode.
+HTTPS and WSS. The Gateway grants writable catalog preferences, subject
+to their save and apply policies. Git maintenance needs an authorized session.
 
 An explicitly provisioned Gateway can instead answer with a Bearer
 challenge. Link uses the saved registration or asks for its token and
@@ -312,17 +311,16 @@ isolated `PARAMS_ROOT`). It is skipped unless `KOVA_E2E_GATEWAY_HOOK` is set.
 
 ## Git maintenance HTTP (kovapilot version screen)
 
-Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md` at
-`master-jh@7cc3b3280`. Client: `lib/src/kovapilot_git/`; screen:
+Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md`. Client: `lib/src/kovapilot_git/`; screen:
 설정 → kovapilot → kovapilot 버전 (`/settings/kovapilot/version`).
 
 | Request | Answer |
 | --- | --- |
-| `GET /v1/git/status` | `{branch\|null, head, upstream\|null, dirty, dirtyKnown?, updaterState\|null, mutationEnabled: false}` |
+| `GET /v1/git/status` | `{branch\|null, head, upstream\|null, dirty, dirtyKnown?, updaterState\|null, mutationEnabled, maintenance?}` |
 | `GET /v1/git/branches` | `{branches: [{name, commit}]}` (fetched `origin/*` refs, no `origin/HEAD`) |
 | `GET /v1/git/log?limit=1..100&cursor=0..10000` | `{entries: [{commit, parents, authorTime, subject}], nextCursor\|null}` (HEAD history) |
-| `POST /v1/git/plan` `{operation: switch\|reset, branch, commit?}` | `{operation, branch, commit, branchHead, beforeHead, beforeBranch, dirty, dirtyKnown?, requiresRestart, mutationEnabled: false, changedFileCount, planDigest}` |
-| `POST /v1/git/apply` | `403 git_mutation_disabled` |
+| `POST /v1/git/plan` `{operation: switch\|reset, branch, commit?}` | `{operation, branch, commit, branchHead, beforeHead, beforeBranch, dirty, dirtyKnown?, requiresRestart, mutationEnabled, changedFileCount, planDigest}` |
+| `POST /v1/git/apply` `{operation, branch, commit?, planDigest}` | `202 {maintenance: {phase: queued, branch, commit}}` |
 
 - `dirtyKnown: false` means inspection of local changes failed. The app
   shows the branch, HEAD and any preview based on the committed snapshots,
@@ -345,9 +343,13 @@ Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md` at
   the app reads status, branches and log one after another),
   `503 git_unavailable`, `403 local_client_required`. Each is one plain line on
   screen; the gateway's message is never shown.
-- Every switch/reset is a preview. 적용 is drawn but off with its reason
-  ("콤마에서 아직 바꾸기를 허용하지 않아요."); the app never sends
-  `/v1/git/apply` (`KovaGitClient.apply` exists only for the 403 test).
+- The app enables 적용 when status and preview both allow mutation and the
+  worktree is known and clean. The server rechecks both conditions and the
+  preview digest. Wi-Fi maintenance uses an authenticated session. Link
+  requests staging. The comma can install the staged update on restart.
+- `cruise.openpilot_longitudinal` reports a numeric saved and applied
+  value. Link sends `expectedValue` with this setting's update. Its
+  `savePolicy: parked` requires a live Park state before saving.
 
 ### Loopback-only gateway (`403 local_client_required`)
 

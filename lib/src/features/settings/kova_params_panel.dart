@@ -575,6 +575,7 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
   /// and control-risk items already say so in the lock line / confirm
   /// dialog.
   List<Widget> _badges() {
+    if (s.status == KovaAvailability.unsupported) return [];
     final currentState = widget.controller.status == KovaLinkStatus.connected
         ? s.applyState
         : null;
@@ -599,6 +600,7 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
     return [
       if (policy case (final text, final color))
         _Badge(text, color, key: ValueKey('kova-badge-policy-${s.key}')),
+      if (s.saveParkedOnly) _Badge('P 정차 중 저장', _warn),
       if (s.status == KovaAvailability.pendingConsumer)
         _Badge('준비 중', _muted, key: ValueKey('kova-badge-pending-${s.key}')),
     ];

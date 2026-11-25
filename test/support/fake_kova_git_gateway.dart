@@ -172,6 +172,8 @@ class FakeKovaGitGateway implements KovaParamsTransport {
   String? upstream;
   bool dirty = false;
   bool dirtyKnown = true;
+  bool mutationEnabled = false;
+  String? maintenancePhase;
   String? updaterState = 'idle';
   FakeGitMode mode = FakeGitMode.normal;
 
@@ -256,7 +258,8 @@ class FakeKovaGitGateway implements KovaParamsTransport {
     'dirty': dirty,
     if (!dirtyKnown) 'dirtyKnown': false,
     'updaterState': updaterState,
-    'mutationEnabled': false,
+    'mutationEnabled': mutationEnabled,
+    if (maintenancePhase != null) 'maintenance': {'phase': maintenancePhase},
   };
 
   @override
@@ -328,6 +331,14 @@ class FakeKovaGitGateway implements KovaParamsTransport {
     if (gated != null) return gated;
     if (uri.path == '/v1/git/apply') {
       applyCalls++;
+      if (mutationEnabled) {
+        posts.add(jsonDecode(body) as Map<String, dynamic>);
+        maintenancePhase = 'queued';
+        mutationEnabled = false;
+        return _json(202, {
+          'maintenance': {'phase': 'queued'},
+        });
+      }
       return _error(
         403,
         'git_mutation_disabled',
@@ -405,7 +416,7 @@ class FakeKovaGitGateway implements KovaParamsTransport {
       'dirty': dirty,
       if (!dirtyKnown) 'dirtyKnown': false,
       'requiresRestart': true,
-      'mutationEnabled': false,
+      'mutationEnabled': mutationEnabled,
       'changedFileCount': changedFiles(head, commit),
     };
     plan['planDigest'] = fakeSha(jsonEncode(plan), length: 64);

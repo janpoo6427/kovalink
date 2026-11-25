@@ -224,6 +224,39 @@ void main() {
     expect(kova.document!.setting('e2e.level')!.value, 8);
   });
 
+  testWidgets('native longitudinal saves the reviewed value only in Park', (
+    tester,
+  ) async {
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((item) => item['key'] == 'steering.always_on');
+    setting
+      ..['key'] = 'cruise.openpilot_longitudinal'
+      ..['type'] = 'enum'
+      ..['control'] = 'switch'
+      ..['options'] = [0, 1]
+      ..['defaultValue'] = 0
+      ..['applyPolicy'] = 'restart'
+      ..['savePolicy'] = 'parked';
+    gateway.offroad = false;
+    gateway.parked = false;
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    final toggle = find.byKey(
+      const ValueKey('kova-toggle-cruise.openpilot_longitudinal'),
+    );
+    expect(tester.widget<Switch>(toggle).onChanged, isNull);
+    gateway.parked = true;
+    await kova.refresh();
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('kova-confirm-change')));
+    await tester.pumpAndSettle();
+    expect(gateway.posts.single['expectedValue'], 0);
+    expect(gateway.posts.single['value'], 1);
+  });
+
   testWidgets('LAN connection is read-only with every control disabled', (
     tester,
   ) async {

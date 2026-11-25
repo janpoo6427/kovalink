@@ -120,6 +120,18 @@ KovaGitException kovaGitError(int statusCode, String? code) =>
         statusCode: statusCode,
         code: code,
       ),
+      (403, 'git_apply_blocked') => KovaGitException(
+        KovaGitFailure.mutationDisabled,
+        '작업 트리가 깨끗하고 업데이트가 쉬고 있을 때 적용할 수 있어요.',
+        statusCode: statusCode,
+        code: code,
+      ),
+      (409, 'git_plan_changed') => KovaGitException(
+        KovaGitFailure.invalidRequest,
+        '콤마나 원격 브랜치가 바뀌었어요. 미리보기를 다시 열어 주세요.',
+        statusCode: statusCode,
+        code: code,
+      ),
       (503, 'git_busy') => KovaGitException(
         KovaGitFailure.busy,
         KovaGitText.busy,
@@ -191,7 +203,10 @@ class KovaGitClient {
   Uri _uri(String path, [Map<String, String>? query]) =>
       baseUri.replace(path: path, queryParameters: query);
 
-  Future<Object?> _call(Future<KovaHttpResponse> Function() send) async {
+  Future<Object?> _call(
+    Future<KovaHttpResponse> Function() send, {
+    int expectedStatus = 200,
+  }) async {
     final KovaHttpResponse response;
     try {
       response = await send();
@@ -221,7 +236,10 @@ class KovaGitClient {
     } on FormatException {
       json = null;
     }
-    if (response.statusCode != 200) {
+    if (response.statusCode != expectedStatus) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        throw const KovaGitException(KovaGitFailure.format, KovaGitText.format);
+      }
       String? code;
       if (json is Map && json['error'] is Map) {
         final value = (json['error'] as Map)['code'];
@@ -295,19 +313,21 @@ class KovaGitClient {
     );
   }
 
-  /// `POST /v1/git/apply`. The app never calls this: the gateway refuses it
-  /// with 403 `git_mutation_disabled` until authenticated updater
-  /// integration exists. Kept only so tests can pin that refusal. Any answer
-  /// other than an error is treated as unexpected and reported as a failure.
-  Future<Never> apply(String planDigest) async {
-    await _call(
+  /// Submit a reviewed plan for the device updater to stage.
+  Future<void> apply(String planDigest, {KovaGitPlanRequest? request}) async {
+    final result = await _call(
       () => transport.postJson(
         _uri('/v1/git/apply'),
-        jsonEncode({'planDigest': planDigest}),
+        jsonEncode({...?request?.toJson(), 'planDigest': planDigest}),
         timeout,
       ),
+      expectedStatus: 202,
     );
-    throw const KovaGitException(KovaGitFailure.format, KovaGitText.format);
+    if (result is! Map ||
+        result['maintenance'] is! Map ||
+        (result['maintenance'] as Map)['phase'] != 'queued') {
+      throw const KovaGitException(KovaGitFailure.format, KovaGitText.format);
+    }
   }
 
   void close() => transport.close();
