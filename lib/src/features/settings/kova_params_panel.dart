@@ -1,0 +1,835 @@
+// "kovapilot 설정" tab: connection card + settings drawn from the gateway's
+// kova_params document. Nothing here lists settings by name; titles,
+// descriptions, groups and options all come from the document.
+import 'package:flutter/material.dart';
+import 'package:kovalink/src/kova_params/kova_params_controller.dart';
+import 'package:kovalink/src/kova_params/kova_params_document.dart';
+
+const _muted = Color(0xFF8E9DA9);
+const _accent = Color(0xFF58F2C2);
+const _warn = Color(0xFFFFC857);
+const _danger = Color(0xFFFF6B72);
+
+class KovaParamsPanel extends StatelessWidget {
+  const KovaParamsPanel({
+    required this.controller,
+    required this.address,
+    this.onEditAddress,
+    this.now,
+    super.key,
+  });
+
+  final KovaParamsController controller;
+
+  /// Saved settings address (app-local setting).
+  final String address;
+  final VoidCallback? onEditAddress;
+
+  /// Clock for "n초 전" (tests/captures).
+  final DateTime Function()? now;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final document = controller.document;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            KovaConnectionCard(
+              controller: controller,
+              address: address,
+              onEditAddress: onEditAddress,
+              now: now,
+            ),
+            if (document == null)
+              const Card(
+                key: ValueKey('kova-empty'),
+                child: ListTile(
+                  leading: Icon(Icons.tune_outlined),
+                  title: Text('아직 읽어 온 설정이 없어요'),
+                  subtitle: Text(
+                    '연결하면 장치(kovapilot)가 보내 준 설정 목록과 설명이 그대로 보여요.',
+                  ),
+                ),
+              )
+            else ...[
+              for (final group in document.groups)
+                _GroupCard(
+                  group: group,
+                  document: document,
+                  controller: controller,
+                ),
+              if (document.groups.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.inbox_outlined),
+                    title: Text('장치가 보여 줄 설정이 없어요'),
+                  ),
+                ),
+            ],
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+              child: Text(
+                '바꾼 값은 장치가 확인해 준 뒤에만 확정돼요. 차량 제어 명령·진단·인증 정보는 앱에서 다루지 않아요.',
+                style: TextStyle(color: _muted, fontSize: 12),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+String _ago(DateTime? at, DateTime now) {
+  if (at == null) return '아직 못 읽음';
+  final seconds = now.difference(at).inSeconds;
+  if (seconds < 5) return '방금 읽음';
+  if (seconds < 60) return '$seconds초 전에 읽음';
+  return '${seconds ~/ 60}분 전에 읽음';
+}
+
+class KovaConnectionCard extends StatelessWidget {
+  const KovaConnectionCard({
+    required this.controller,
+    required this.address,
+    this.onEditAddress,
+    this.now,
+    super.key,
+  });
+
+  final KovaParamsController controller;
+  final String address;
+  final VoidCallback? onEditAddress;
+  final DateTime Function()? now;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = controller.status;
+    final (label, color, icon) = switch (status) {
+      KovaLinkStatus.disconnected => ('연결 안 됨', _muted, Icons.link_off),
+      KovaLinkStatus.connecting => ('연결 중', _warn, Icons.sync),
+      KovaLinkStatus.connected => ('연결됨', _accent, Icons.link),
+      KovaLinkStatus.stale => ('오래됨 · 다시 연결 중', _warn, Icons.sync_problem),
+    };
+    final document = controller.document;
+    final lock = controller.writeLock;
+    final health = controller.health;
+    final clock = now ?? DateTime.now;
+    final shownAddress = controller.endpoint ?? address;
+    return Card(
+      key: const ValueKey('kova-connection-card'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 22),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'kovapilot 장치',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
+                ),
+                Container(
+                  key: const ValueKey('kova-status'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    shownAddress,
+                    style: const TextStyle(color: _muted, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (onEditAddress != null &&
+                    status == KovaLinkStatus.disconnected)
+                  IconButton(
+                    key: const ValueKey('kova-edit-address'),
+                    tooltip: '설정 주소 바꾸기',
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    onPressed: onEditAddress,
+                  ),
+              ],
+            ),
+            if (document != null || health != null)
+              Text(
+                [
+                  _ago(controller.lastReadAt, clock()),
+                  if (document != null) '설정판 ${document.revision}',
+                  if (health?.bindScope == 'loopback') '같은 기기 전용 서버',
+                ].join(' · '),
+                style: const TextStyle(color: _muted, fontSize: 12),
+              ),
+            if (document != null) ...[
+              const SizedBox(height: 10),
+              _Banner(
+                key: const ValueKey('kova-write-banner'),
+                color: lock == KovaWriteLock.none ? _accent : _warn,
+                icon: lock == KovaWriteLock.none
+                    ? Icons.lock_open
+                    : Icons.lock_outline,
+                text: lock == KovaWriteLock.none
+                    ? (controller.isLoopback
+                          ? '바꿀 수 있어요 · 같은 기기(loopback) 개발 연결'
+                          : '바꿀 수 있어요 · 인증된 연결')
+                    : KovaParamsController.writeLockReason(lock),
+              ),
+              if (document.deviceOffroad == false) ...[
+                const SizedBox(height: 6),
+                const _Banner(
+                  key: ValueKey('kova-onroad-banner'),
+                  color: _warn,
+                  icon: Icons.directions_car_filled_outlined,
+                  text: '주행 중이에요. 정차 중에만 바꿀 수 있는 항목은 잠겼어요.',
+                ),
+              ],
+            ],
+            if (controller.error case final error?) ...[
+              const SizedBox(height: 8),
+              Text(
+                error,
+                key: const ValueKey('kova-error'),
+                style: const TextStyle(color: _danger, fontSize: 12),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              children: [
+                if (status == KovaLinkStatus.disconnected)
+                  FilledButton.icon(
+                    key: const ValueKey('kova-connect'),
+                    onPressed: () => controller.connect(address),
+                    icon: const Icon(Icons.link, size: 18),
+                    label: const Text('연결'),
+                  )
+                else if (status == KovaLinkStatus.connecting)
+                  const FilledButton(onPressed: null, child: Text('연결 중…'))
+                else ...[
+                  OutlinedButton.icon(
+                    key: const ValueKey('kova-refresh'),
+                    onPressed: controller.refresh,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('다시 읽기'),
+                  ),
+                  TextButton(
+                    key: const ValueKey('kova-disconnect'),
+                    onPressed: controller.disconnect,
+                    child: const Text('끊기'),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  const _Banner({
+    required this.color,
+    required this.icon,
+    required this.text,
+    super.key,
+  });
+
+  final Color color;
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(color: color, fontSize: 12.5, height: 1.35),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _GroupCard extends StatelessWidget {
+  const _GroupCard({
+    required this.group,
+    required this.document,
+    required this.controller,
+  });
+
+  final KovaParamGroup group;
+  final KovaParamsDocument document;
+  final KovaParamsController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = document.defaultLocale;
+    final title = group.title?.resolve(defaultLocale: locale) ?? '기타';
+    final description = group.description?.resolve(defaultLocale: locale);
+    return Column(
+      key: ValueKey('kova-group-${group.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, top: 18, bottom: 6),
+          child: Text(
+            title,
+            style: const TextStyle(color: _muted, fontWeight: FontWeight.w700),
+          ),
+        ),
+        if (description != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8, right: 4),
+            child: Text(
+              description,
+              style: const TextStyle(color: _muted, fontSize: 12),
+            ),
+          ),
+        Card(
+          child: Column(
+            children: [
+              for (var i = 0; i < group.settings.length; i++) ...[
+                KovaSettingTile(
+                  setting: group.settings[i],
+                  document: document,
+                  controller: controller,
+                ),
+                if (i != group.settings.length - 1) const Divider(height: 1),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class KovaSettingTile extends StatefulWidget {
+  KovaSettingTile({
+    required this.setting,
+    required this.document,
+    required this.controller,
+  }) : super(key: ValueKey('kova-setting-${setting.key}'));
+
+  final KovaParamSetting setting;
+  final KovaParamsDocument document;
+  final KovaParamsController controller;
+
+  @override
+  State<KovaSettingTile> createState() => _KovaSettingTileState();
+}
+
+class _KovaSettingTileState extends State<KovaSettingTile> {
+  bool _expanded = false;
+  double? _drag;
+  late final TextEditingController _input = TextEditingController();
+  String? _inputError;
+  Object? _inputShownFor;
+
+  KovaParamSetting get s => widget.setting;
+  String? get _locale => widget.document.defaultLocale;
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  Future<void> _change(Object? value) async {
+    setState(() => _inputError = null);
+    if (s.risk == KovaRisk.control) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) =>
+            _ConfirmDialog(setting: s, value: value, locale: _locale),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    await widget.controller.setValue(s.key, value);
+    if (mounted) setState(() => _drag = null);
+  }
+
+  num _snap(double raw) {
+    final min = s.minimum!;
+    final step = s.step;
+    var v = step == null ? raw : min + ((raw - min) / step).round() * step;
+    v = v.clamp(min, s.maximum!).toDouble();
+    if (s.type == KovaParamType.integer) return v.round();
+    return double.parse(s.formatNumber(v));
+  }
+
+  void _submitInput() {
+    final text = _input.text.trim();
+    final parsed = s.type == KovaParamType.integer
+        ? int.tryParse(text)
+        : double.tryParse(text);
+    if (parsed == null) {
+      setState(() => _inputError = '숫자를 입력해 주세요.');
+      return;
+    }
+    final error = s.check(parsed);
+    if (error != null) {
+      setState(() => _inputError = error);
+      return;
+    }
+    _change(parsed);
+  }
+
+  Future<void> _openChoices(Object? current) async {
+    final picked = await showModalBottomSheet<Object>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Text(
+                s.title.resolve(defaultLocale: _locale),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+            for (final option in s.options)
+              ListTile(
+                key: ValueKey('kova-option-${s.key}-${option.value}'),
+                title: Text(option.label(defaultLocale: _locale)),
+                trailing: option.matches(current)
+                    ? const Icon(Icons.check_circle, color: _accent)
+                    : null,
+                onTap: () => Navigator.of(context).pop(option.value),
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+    if (picked != null && !KovaParamOption(picked, null).matches(current)) {
+      await _change(picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final hasPending = controller.pending.containsKey(s.key);
+    final shown = hasPending ? controller.pending[s.key] : s.value;
+    final lock = controller.lockReasonFor(s);
+    final editable = lock == null;
+    final control = s.control;
+    final description = s.description?.resolve(defaultLocale: _locale);
+    final longDescription = description != null && description.length > 48;
+    final notice = controller.notices[s.key];
+
+    if ((control == KovaParamControl.slider ||
+            control == KovaParamControl.numberField) &&
+        _inputShownFor != s.value) {
+      _inputShownFor = s.value;
+      _input.text = s.value is num ? s.formatNumber(s.value as num) : '';
+    }
+
+    Widget? trailing;
+    if (control == KovaParamControl.toggle) {
+      trailing = Switch(
+        key: ValueKey('kova-toggle-${s.key}'),
+        value: shown == true,
+        onChanged: editable ? (v) => _change(v) : null,
+      );
+    } else if (control != KovaParamControl.slider) {
+      trailing = Text(
+        s.describe(shown, defaultLocale: _locale),
+        key: ValueKey('kova-value-${s.key}'),
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          color: hasPending ? _muted : null,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  s.title.resolve(defaultLocale: _locale),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15.5,
+                  ),
+                ),
+              ),
+              ?trailing,
+            ],
+          ),
+          if (description != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              description,
+              maxLines: _expanded ? null : 2,
+              overflow: _expanded ? null : TextOverflow.ellipsis,
+              style: const TextStyle(color: _muted, fontSize: 13, height: 1.4),
+            ),
+          ],
+          if (longDescription || _expanded)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                key: ValueKey('kova-more-${s.key}'),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 30),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () => setState(() => _expanded = !_expanded),
+                child: Text(_expanded ? '접기' : '자세히'),
+              ),
+            ),
+          if (_expanded) _Details(setting: s, locale: _locale),
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 6, children: _badges()),
+          if (control == KovaParamControl.slider) _slider(shown, editable),
+          if (control == KovaParamControl.numberField) _numberField(editable),
+          if (control == KovaParamControl.choice)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OutlinedButton.icon(
+                key: ValueKey('kova-choice-${s.key}'),
+                onPressed: editable ? () => _openChoices(shown) : null,
+                icon: const Icon(Icons.tune, size: 18),
+                label: const Text('고르기'),
+              ),
+            ),
+          if (lock != null && !hasPending)
+            _Line(
+              key: ValueKey('kova-lock-${s.key}'),
+              icon: Icons.lock_outline,
+              color: _muted,
+              text: lock,
+            ),
+          if (hasPending)
+            _Line(
+              key: ValueKey('kova-pending-${s.key}'),
+              color: _warn,
+              text: '보내는 중… 장치가 확인하면 확정돼요.',
+              spinner: true,
+            )
+          else if (notice != null && notice.kind != KovaNoticeKind.sending)
+            _Line(
+              key: ValueKey('kova-notice-${s.key}'),
+              icon: switch (notice.kind) {
+                KovaNoticeKind.applied => Icons.check_circle_outline,
+                KovaNoticeKind.rejected => Icons.block,
+                KovaNoticeKind.conflict => Icons.sync_problem,
+                _ => Icons.help_outline,
+              },
+              color: switch (notice.kind) {
+                KovaNoticeKind.applied => _accent,
+                KovaNoticeKind.rejected => _danger,
+                _ => _warn,
+              },
+              text: notice.message,
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _badges() {
+    final (policy, policyColor) = switch (s.applyPolicy) {
+      KovaApplyPolicy.immediate => ('바로 적용', _accent),
+      KovaApplyPolicy.offroad => ('정차 중에만 변경', _warn),
+      KovaApplyPolicy.restart => ('재시작 후 적용', const Color(0xFF72A7FF)),
+      KovaApplyPolicy.unknown => ('적용 시점 모름', _muted),
+    };
+    return [
+      _Badge(policy, policyColor, key: ValueKey('kova-badge-policy-${s.key}')),
+      if (s.status == KovaAvailability.pendingConsumer)
+        _Badge(
+          '준비 중 · 값만 저장돼요',
+          _muted,
+          key: ValueKey('kova-badge-pending-${s.key}'),
+        ),
+      if (s.status == KovaAvailability.unsupported)
+        const _Badge('이 차량 미지원', _muted),
+      if (s.risk == KovaRisk.control) const _Badge('주행 제어 관련', _danger),
+      if (s.control == KovaParamControl.readOnly) const _Badge('읽기 전용', _muted),
+    ];
+  }
+
+  Widget _slider(Object? shown, bool editable) {
+    final min = s.minimum!.toDouble();
+    final max = s.maximum!.toDouble();
+    final current = (_drag ?? (shown is num ? shown.toDouble() : min))
+        .clamp(min, max)
+        .toDouble();
+    final step = s.step;
+    final divisions = step != null && step > 0
+        ? ((max - min) / step).round()
+        : null;
+    final unit = s.unit?.resolve(defaultLocale: _locale);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              s.formatNumber(min),
+              style: const TextStyle(color: _muted, fontSize: 12),
+            ),
+            Expanded(
+              child: Slider(
+                key: ValueKey('kova-slider-${s.key}'),
+                value: current,
+                min: min,
+                max: max,
+                divisions:
+                    divisions != null && divisions > 0 && divisions <= 1000
+                    ? divisions
+                    : null,
+                label: s.describe(_snap(current), defaultLocale: _locale),
+                onChanged: editable ? (v) => setState(() => _drag = v) : null,
+                onChangeEnd: editable ? (v) => _change(_snap(v)) : null,
+              ),
+            ),
+            Text(
+              s.formatNumber(max),
+              style: const TextStyle(color: _muted, fontSize: 12),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Text(
+              '지금 ${s.describe(_drag != null ? _snap(_drag!) : shown, defaultLocale: _locale)}',
+              key: ValueKey('kova-value-${s.key}'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const Spacer(),
+            SizedBox(width: 132, child: _inputField(editable, unit)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _numberField(bool editable) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: _inputField(editable, s.unit?.resolve(defaultLocale: _locale)),
+  );
+
+  Widget _inputField(bool editable, String? unit) => TextField(
+    key: ValueKey('kova-input-${s.key}'),
+    controller: _input,
+    enabled: editable,
+    keyboardType: TextInputType.numberWithOptions(
+      decimal: s.type == KovaParamType.number,
+      signed: (s.minimum ?? -1) < 0,
+    ),
+    textInputAction: TextInputAction.done,
+    onSubmitted: (_) => _submitInput(),
+    decoration: InputDecoration(
+      isDense: true,
+      suffixText: unit,
+      errorText: _inputError,
+      errorMaxLines: 2,
+      suffixIcon: IconButton(
+        key: ValueKey('kova-apply-${s.key}'),
+        tooltip: '이 값으로 바꾸기',
+        icon: const Icon(Icons.check, size: 18),
+        onPressed: editable ? _submitInput : null,
+      ),
+    ),
+  );
+}
+
+class _Details extends StatelessWidget {
+  const _Details({required this.setting, required this.locale});
+
+  final KovaParamSetting setting;
+  final String? locale;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = setting;
+    final lines = <String>[
+      '기본값: ${s.describe(s.defaultValue, defaultLocale: locale)}',
+      if (s.hasRange)
+        '범위: ${s.describe(s.minimum, defaultLocale: locale)} – ${s.describe(s.maximum, defaultLocale: locale)}',
+      '적용: ${switch (s.applyPolicy) {
+        KovaApplyPolicy.immediate => '바꾸면 바로 쓰여요.',
+        KovaApplyPolicy.offroad => '차가 멈춰 있을 때(오프로드)만 바꿀 수 있어요.',
+        KovaApplyPolicy.restart => 'openpilot을 다시 시작한 뒤에 쓰여요. 주행 중에는 바꾸지 않아요.',
+        KovaApplyPolicy.unknown => '장치가 알려 준 적용 시점을 이 앱이 몰라 바꾸지 않아요.',
+      }}',
+      if (s.status == KovaAvailability.pendingConsumer)
+        '상태: 값은 저장되지만 이 값을 쓰는 기능이 아직 장치에 없어요.',
+      if (s.requiredCapabilities.isNotEmpty)
+        '필요 기능: ${s.requiredCapabilities.join(', ')}',
+      '항목 키: ${s.key}',
+    ];
+    return Container(
+      key: ValueKey('kova-details-${s.key}'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 4, bottom: 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0x14FFFFFF),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        lines.join('\n'),
+        style: const TextStyle(color: _muted, fontSize: 12, height: 1.5),
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge(this.text, this.color, {super.key});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      border: Border.all(color: color.withValues(alpha: 0.6)),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(
+        color: color,
+        fontSize: 11.5,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
+class _Line extends StatelessWidget {
+  const _Line({
+    required this.color,
+    required this.text,
+    this.icon,
+    this.spinner = false,
+    super.key,
+  });
+
+  final Color color;
+  final String text;
+  final IconData? icon;
+  final bool spinner;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (spinner)
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2, color: color),
+          )
+        else if (icon != null)
+          Icon(icon, size: 15, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(color: color, fontSize: 12.5, height: 1.35),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ConfirmDialog extends StatelessWidget {
+  const _ConfirmDialog({
+    required this.setting,
+    required this.value,
+    required this.locale,
+  });
+
+  final KovaParamSetting setting;
+  final Object? value;
+  final String? locale;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = setting.title.resolve(defaultLocale: locale);
+    return AlertDialog(
+      icon: const Icon(Icons.warning_amber_rounded, color: _warn),
+      title: const Text('주행 제어와 관련된 설정이에요'),
+      content: Text(
+        '「$title」을(를) ${setting.describe(value, defaultLocale: locale)}(으)로 바꿉니다.\n\n'
+        '이 설정은 조향·가감속 같은 주행 동작에 영향을 줄 수 있어요. '
+        '${setting.applyPolicy == KovaApplyPolicy.offroad ? '차가 멈춰 있을 때만 바뀌고, ' : ''}'
+        '장치가 확인한 뒤에 확정돼요.'
+        '${setting.status == KovaAvailability.pendingConsumer ? '\n\n지금은 값만 저장되고, 실제 동작은 아직 바뀌지 않아요.' : ''}',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          key: const ValueKey('kova-confirm-change'),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('바꾸기'),
+        ),
+      ],
+    );
+  }
+}

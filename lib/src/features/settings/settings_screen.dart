@@ -6,7 +6,9 @@ import 'package:kovalink/src/features/road_view/render_quality.dart';
 import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
+import 'package:kovalink/src/features/settings/kova_params_panel.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
+import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/models/display_units.dart';
 import 'package:kovalink/src/models/ego_vehicle_profile.dart';
 import 'package:kovalink/src/models/road_scene.dart';
@@ -17,13 +19,22 @@ import 'package:kovalink/src/settings/app_settings.dart';
 import 'package:kovalink/src/vehicle_pack/vehicle_model_library.dart';
 import 'package:kovalink/src/widgets/page_header.dart';
 
-class SettingsScreen extends StatelessWidget {
+/// Which settings the screen shows. They live in different places and are
+/// never mixed: the app's own settings (this phone), the current gateway
+/// session (gone when disconnected) and kovapilot's settings (stored on the
+/// device, drawn from its kova_params document).
+enum SettingsTab { app, session, kovapilot }
+
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     required this.controller,
     this.vehicleModel,
     this.settings,
     this.library,
     this.modelPicker = pickModelFileWithSystemPicker,
+    this.kovaParams,
+    this.initialTab = SettingsTab.app,
+    this.now,
     super.key,
   });
 
@@ -36,28 +47,130 @@ class SettingsScreen extends StatelessWidget {
   final VehicleModelLibrary? library;
   final ModelFilePicker modelPicker;
 
+  /// kovapilot settings connection. Null = the screen owns one (no network
+  /// until the user taps 연결).
+  final KovaParamsController? kovaParams;
+  final SettingsTab initialTab;
+
+  /// Clock for "n초 전" labels (captures).
+  final DateTime Function()? now;
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late SettingsTab _tab = widget.initialTab;
+  KovaParamsController? _ownedKova;
+
+  KovaParamsController get _kova =>
+      widget.kovaParams ?? (_ownedKova ??= KovaParamsController());
+
+  @override
+  void dispose() {
+    _ownedKova?.dispose();
+    super.dispose();
+  }
+
+  String get _settingsAddress =>
+      widget.settings?.value.settingsEndpoint ??
+      AppSettings.defaultSettingsEndpoint;
+
+  Future<void> _editSettingsAddress() async {
+    final settings = widget.settings;
+    if (settings == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _SettingsAddressDialog(settings: settings),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final settings = this.settings;
+    final controller = widget.controller;
+    final vehicleModel = widget.vehicleModel;
+    final settings = widget.settings;
+    final modelPicker = widget.modelPicker;
     return AnimatedBuilder(
-      animation: Listenable.merge([controller, ?vehicleModel, ?settings]),
+      animation: Listenable.merge([
+        controller,
+        ?vehicleModel,
+        ?settings,
+        _kova,
+      ]),
       builder: (context, _) => ListView(
         padding: const EdgeInsets.fromLTRB(20, 64, 20, 32),
         children: [
           const PageHeader(
             title: '설정',
-            subtitle: '앱 화면과 동작만 바꿉니다. 차량 제어·안전 설정은 앱에서 바꿀 수 없습니다.',
+            subtitle:
+                '앱 설정은 이 휴대폰에, kovapilot 설정은 차에 저장돼요. 차량 제어 명령·안전 설정은 앱에서 바꿀 수 없습니다.',
           ),
-          const SizedBox(height: 22),
-          if (settings != null) ...[
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<SettingsTab>(
+              key: const ValueKey('settings-tabs'),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: SettingsTab.app,
+                  icon: Icon(Icons.phone_iphone, size: 18),
+                  label: Text('앱'),
+                ),
+                ButtonSegment(
+                  value: SettingsTab.session,
+                  icon: Icon(Icons.cable, size: 18),
+                  label: Text('연결 세션'),
+                ),
+                ButtonSegment(
+                  value: SettingsTab.kovapilot,
+                  icon: Icon(Icons.directions_car_outlined, size: 18),
+                  label: Text('kovapilot'),
+                ),
+              ],
+              selected: {_tab},
+              onSelectionChanged: (s) => setState(() => _tab = s.first),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+            child: Text(
+              switch (_tab) {
+                SettingsTab.app => '이 휴대폰에만 저장돼요. 장치가 없어도 바꿀 수 있어요.',
+                SettingsTab.session =>
+                  '지금 연결에만 쓰여요. 연결이 끊기면 사라지고 차에는 저장되지 않아요.',
+                SettingsTab.kovapilot =>
+                  '차(kovapilot)에 저장돼요. 장치가 확인해 준 값만 보여요.',
+              },
+              key: const ValueKey('settings-tab-caption'),
+              style: const TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (_tab == SettingsTab.kovapilot) ...[
+            const SizedBox(height: 10),
+            KovaParamsPanel(
+              controller: _kova,
+              address: _settingsAddress,
+              onEditAddress: settings == null ? null : _editSettingsAddress,
+              now: widget.now,
+            ),
+          ] else if (_tab == SettingsTab.session)
+            _SessionSection(
+              controller: controller,
+              settings: settings,
+              kova: _kova,
+            )
+          else if (settings != null) ...[
             _DisplaySection(settings: settings),
             _LayerSection(settings: settings),
             _DemoSection(settings: settings, controller: controller),
             _EndpointSection(settings: settings),
-            if (library != null)
+            if (widget.library != null)
               _VehicleModelSection(
                 settings: settings,
-                library: library!,
+                library: widget.library!,
                 current:
                     vehicleModel?.value ??
                     VehicleModelLoadResult.bundledDefault,
@@ -79,60 +192,162 @@ class SettingsScreen extends StatelessWidget {
               result:
                   vehicleModel?.value ?? VehicleModelLoadResult.bundledDefault,
             ),
-          const SizedBox(height: 6),
-          const _SectionTitle('차량 설정 (gateway)'),
-          if (!controller.canEditSettings)
-            const Card(
-              color: Color(0xFF17202A),
-              child: ListTile(
-                leading: Icon(Icons.lock_outline),
-                title: Text(
-                  '설정 변경 잠김',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text('인증된 gateway 연결 후 안전한 설정만 활성화됩니다.'),
+          if (_tab == SettingsTab.app)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+              child: Text(
+                'Safety parameter, cloud privacy policy, 차량 actuation은 앱에서 변경할 수 없습니다.',
+                style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
               ),
             ),
-          _SettingSection(
-            title: '주행 화면',
-            enabled: controller.canEditSettings,
-            items: const [
-              _SettingItem(
-                '기본 로드뷰',
-                '3D semantic scene',
-                Icons.view_in_ar_outlined,
-              ),
-              _SettingItem('Telemetry rate', '10 Hz', Icons.speed_outlined),
-              _SettingItem('카메라 자동 시작', '사용 안 함', Icons.videocam_off_outlined),
-            ],
-          ),
-          const _SettingSection(
-            title: '개인정보',
-            enabled: false,
-            items: [
-              _SettingItem(
-                'Comma Connect',
-                '소스 정책으로 비활성화',
-                Icons.cloud_off_outlined,
-              ),
-              _SettingItem(
-                'Route upload',
-                '소스 정책으로 비활성화',
-                Icons.upload_file_outlined,
-              ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
-            child: Text(
-              'Safety parameter, cloud privacy policy, 차량 actuation은 앱에서 변경할 수 없습니다.',
-              style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
-            ),
-          ),
         ],
       ),
     );
   }
+}
+
+/// Current gateway session facts. Nothing here is stored on the car.
+class _SessionSection extends StatelessWidget {
+  const _SessionSection({
+    required this.controller,
+    required this.settings,
+    required this.kova,
+  });
+
+  final GatewayController controller;
+  final SettingsController? settings;
+  final KovaParamsController kova;
+
+  @override
+  Widget build(BuildContext context) {
+    final telemetry = switch (controller.mode) {
+      GatewayMode.demo => '데모 주행 중 (네트워크 안 씀)',
+      GatewayMode.connecting => '연결 중',
+      GatewayMode.live => '받는 중',
+      GatewayMode.disconnected => '연결 안 됨',
+      GatewayMode.error => '끊김',
+    };
+    final kovaStatus = switch (kova.status) {
+      KovaLinkStatus.disconnected => '연결 안 됨',
+      KovaLinkStatus.connecting => '연결 중',
+      KovaLinkStatus.connected => '연결됨',
+      KovaLinkStatus.stale => '오래됨 · 다시 연결 중',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle('지금 연결'),
+        Card(
+          key: const ValueKey('session-card'),
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.speed_outlined),
+                title: const Text('주행 정보(telemetry)'),
+                subtitle: Text(
+                  '$telemetry · ${controller.connectedEndpoint ?? settings?.value.telemetryEndpoint ?? AppSettings.defaultTelemetryEndpoint}',
+                ),
+              ),
+              const Divider(height: 1, indent: 56),
+              ListTile(
+                leading: const Icon(Icons.videocam_outlined),
+                title: const Text('카메라 보기'),
+                subtitle: Text(
+                  '보는 동안만 연결 · ${settings?.value.signalingEndpoint ?? AppSettings.defaultSignalingEndpoint}',
+                ),
+              ),
+              const Divider(height: 1, indent: 56),
+              ListTile(
+                leading: const Icon(Icons.tune_outlined),
+                title: const Text('kovapilot 설정 연결'),
+                subtitle: Text(
+                  '$kovaStatus · ${kova.endpoint ?? settings?.value.settingsEndpoint ?? AppSettings.defaultSettingsEndpoint}',
+                ),
+              ),
+              const Divider(height: 1, indent: 56),
+              ListTile(
+                leading: Icon(
+                  controller.gatewayAuthenticated
+                      ? Icons.verified_user_outlined
+                      : Icons.no_encryption_gmailerrorred_outlined,
+                ),
+                title: const Text('장치 인증'),
+                subtitle: Text(
+                  controller.gatewayAuthenticated
+                      ? '인증됨'
+                      : 'pairing 전 · LAN 주소에서는 kovapilot 설정을 읽기만 해요',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 10, 4, 0),
+          child: Text(
+            '연결 주소는 「앱」 탭의 「연결 장치 주소」에서 바꿉니다. 이 탭의 내용은 차에 저장되지 않아요.',
+            style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettingsAddressDialog extends StatefulWidget {
+  const _SettingsAddressDialog({required this.settings});
+
+  final SettingsController settings;
+
+  @override
+  State<_SettingsAddressDialog> createState() => _SettingsAddressDialogState();
+}
+
+class _SettingsAddressDialogState extends State<_SettingsAddressDialog> {
+  late final text = TextEditingController(
+    text: widget.settings.value.settingsEndpoint,
+  );
+  String? error;
+
+  @override
+  void dispose() {
+    text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('kovapilot 설정 주소'),
+    content: TextField(
+      key: const ValueKey('kova-address-field'),
+      controller: text,
+      keyboardType: TextInputType.url,
+      autocorrect: false,
+      decoration: InputDecoration(
+        hintText: AppSettings.defaultSettingsEndpoint,
+        helperText: '같은 기기 개발용: http://127.0.0.1:8082',
+        errorText: error,
+        errorMaxLines: 3,
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('취소'),
+      ),
+      FilledButton(
+        key: const ValueKey('kova-address-save'),
+        onPressed: () {
+          final result = widget.settings.setSettingsEndpoint(text.text);
+          if (result == null) {
+            Navigator.of(context).pop();
+          } else {
+            setState(() => error = result);
+          }
+        },
+        child: const Text('저장'),
+      ),
+    ],
+  );
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -446,14 +661,19 @@ class _EndpointSectionState extends State<_EndpointSection> {
   late final signaling = TextEditingController(
     text: widget.settings.value.signalingEndpoint,
   );
+  late final settingsAddress = TextEditingController(
+    text: widget.settings.value.settingsEndpoint,
+  );
   String? telemetryError;
   String? signalingError;
+  String? settingsError;
   String? saved;
 
   @override
   void dispose() {
     telemetry.dispose();
     signaling.dispose();
+    settingsAddress.dispose();
     super.dispose();
   }
 
@@ -461,7 +681,11 @@ class _EndpointSectionState extends State<_EndpointSection> {
     setState(() {
       telemetryError = widget.settings.setTelemetryEndpoint(telemetry.text);
       signalingError = widget.settings.setSignalingEndpoint(signaling.text);
-      saved = telemetryError == null && signalingError == null
+      settingsError = widget.settings.setSettingsEndpoint(settingsAddress.text);
+      saved =
+          telemetryError == null &&
+              signalingError == null &&
+              settingsError == null
           ? '저장했습니다.'
           : null;
     });
@@ -501,6 +725,19 @@ class _EndpointSectionState extends State<_EndpointSection> {
                     labelText: 'Camera signaling',
                     hintText: AppSettings.defaultSignalingEndpoint,
                     errorText: signalingError,
+                    errorMaxLines: 2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const ValueKey('setting-settings-endpoint'),
+                  controller: settingsAddress,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: 'kovapilot 설정 (HTTP)',
+                    hintText: AppSettings.defaultSettingsEndpoint,
+                    errorText: settingsError,
                     errorMaxLines: 2,
                   ),
                 ),
@@ -784,61 +1021,4 @@ class VehicleModelCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SettingSection extends StatelessWidget {
-  const _SettingSection({
-    required this.title,
-    required this.enabled,
-    required this.items,
-  });
-  final String title;
-  final bool enabled;
-  final List<_SettingItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8),
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Color(0xFF8E9DA9),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Card(
-            child: Column(
-              children: [
-                for (var index = 0; index < items.length; index++) ...[
-                  ListTile(
-                    enabled: enabled,
-                    leading: Icon(items[index].icon),
-                    title: Text(items[index].label),
-                    subtitle: Text(items[index].value),
-                    trailing: const Icon(Icons.chevron_right),
-                  ),
-                  if (index != items.length - 1)
-                    const Divider(height: 1, indent: 56),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingItem {
-  const _SettingItem(this.label, this.value, this.icon);
-  final String label;
-  final String value;
-  final IconData icon;
 }

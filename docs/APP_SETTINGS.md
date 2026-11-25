@@ -4,8 +4,18 @@
 vehicle controls (steering, acceleration, braking, engagement), no safety
 parameters, no kovapilot developer switches (for example
 `ENABLE_CANFD_LONGITUDINAL_STAGING`), and the app never writes vehicle
-Params. Vehicle settings through a paired gateway stay locked until the
-pairing/allowlist work exists (existing "차량 설정 (gateway)" section).
+Params directly.
+
+The 설정 screen has three tabs that are never mixed:
+
+- 앱: the settings below, stored only on this phone.
+- 연결 세션: facts about the current telemetry, camera and kovapilot settings
+  connections. Nothing there is stored on the car.
+- kovapilot: kovapilot user settings stored on the device, drawn entirely
+  from the gateway's `kova_params` document (`GET /v1/kova-params`). The app
+  holds no list of those settings. Writes are sent only on a loopback
+  development connection until pairing exists; LAN addresses are read-only.
+  See [PROTOCOL.md](PROTOCOL.md) "Settings HTTP".
 
 ## Items
 
@@ -19,14 +29,16 @@ pairing/allowlist work exists (existing "차량 설정 (gateway)" section).
 | 표시 항목 | 차선 · 주변 차량 · 경로 · 배경 · HUD 수치 | on |
 | 데모 | 데모 모드 | on; ignored while a gateway is connected |
 | | 데모 경로 | 도심 · 고속도로 (도심) |
-| 연결 장치 주소 | Telemetry WebSocket / Camera signaling | `ws://comma.local:8082/v1/telemetry`, `http://comma.local:8082/v1/stream` |
+| 연결 장치 주소 | Telemetry WebSocket / Camera signaling / kovapilot 설정 (HTTP) | `ws://comma.local:8082/v1/telemetry`, `http://comma.local:8082/v1/stream`, `http://comma.local:8082` |
 | 차량 모델 | select / preview / delete / 파일 가져오기 | `khronos-toy-car` |
 | | GLB 3D 모델 겹치기 (실험) | off |
 
 Addresses are saved only if `LocalEndpointPolicy` accepts them (loopback,
 `.local`, private IPv4, link-local / unique-local IPv6 literals). Public
 hosts are refused with "KovaLink는 로컬·사설 네트워크 gateway에만
-연결합니다." The connect screen starts from the saved addresses.
+연결합니다." The connect screen starts from the saved addresses. The
+kovapilot settings address (`settingsEndpoint`) is an origin only: a path,
+query, fragment or user-info is refused.
 
 - 화질 (`renderQuality`): 자동 (default; GPU where the device has it, falls
   back to software if the GPU view cannot start or averages over 70 ms per

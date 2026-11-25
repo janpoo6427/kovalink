@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/app/kovalink_home.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
+import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
@@ -37,6 +38,9 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
   late final GatewayController controller;
   late final SettingsController settings;
   late final VehicleModelLibrary library;
+  // kovapilot settings over HTTP. No request is made until the user taps
+  // 연결 in the kovapilot tab.
+  final kovaParams = KovaParamsController();
   final vehicleModel = ValueNotifier<VehicleModelLoadResult>(
     VehicleModelLoadResult.bundledDefault,
   );
@@ -103,6 +107,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
   void dispose() {
     settings.removeListener(_applySettings);
     controller.dispose();
+    kovaParams.dispose();
     settings.dispose();
     vehicleModel.dispose();
     super.dispose();
@@ -127,6 +132,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
         settings: settings,
         library: library,
         modelPicker: widget.modelPicker,
+        kovaParams: kovaParams,
       ),
     );
   }

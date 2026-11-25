@@ -6,6 +6,7 @@ import 'package:kovalink/src/features/road_view/road_view_screen.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_director.dart';
 import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
+import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
@@ -21,6 +22,7 @@ class KovaLinkHome extends StatefulWidget {
     this.modelPicker = pickModelFileWithSystemPicker,
     this.gpuSurfaceBuilder,
     this.director,
+    this.kovaParams,
     super.key,
   });
 
@@ -29,6 +31,9 @@ class KovaLinkHome extends StatefulWidget {
   final SettingsController? settings;
   final VehicleModelLibrary? library;
   final ModelFilePicker modelPicker;
+
+  /// kovapilot settings connection shown in the settings tab.
+  final KovaParamsController? kovaParams;
 
   /// Capture/test hooks forwarded to [RoadViewScreen].
   final GpuSurfaceBuilder? gpuSurfaceBuilder;
@@ -64,6 +69,7 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
                   settings: settings,
                   library: widget.library,
                   modelPicker: widget.modelPicker,
+                  kovaParams: widget.kovaParams,
                 ),
               ],
             ),
