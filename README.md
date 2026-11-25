@@ -1,5 +1,8 @@
 # KovaLink 설치 파일
 
+- `kovalink-1.0.0-57b9725-arm64-v8a.apk`는 `master@57b9725`의 Android arm64 빌드입니다.
+  - **설정 → kovapilot** 탭 맨 위에서 **kovapilot 버전 및 Git**을 열 수 있습니다. 현재 브랜치, 커밋 기록 및 변경 미리보기를 확인할 수 있습니다.
+  - Gateway는 기존 `kovapilot master-jh@01079ba` 이상을 사용합니다. 직전 `c499d88` APK와 같은 서명입니다.
 - `kovalink-1.0.0-c499d88-arm64-v8a.apk`는 `master@c499d88`의 Android arm64 빌드입니다.
   - 콤마를 kovapilot `master-jh@01079ba` 이상으로 업데이트하세요. 같은 사설 네트워크에서 콤마를 부팅하고 Link를 열면 자동으로 연결합니다. [Gateway 동작 안내](https://github.com/janpoo6427/kovapilot/blob/01079ba2dc1ae061f9f853335da788e990a03fb1/docs/kovapilot/KOVALINK_GATEWAY.md)
   - P 완전 정차에서 순정 ACC 동기화 진단을 바꿀 수 있습니다. 설정 화면은 P 정차 조건과 시동을 꺼야 하는 조건을 구분해 보여 줍니다.
