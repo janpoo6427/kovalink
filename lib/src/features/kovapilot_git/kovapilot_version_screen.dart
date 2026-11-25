@@ -1262,26 +1262,20 @@ class KovapilotVersionEntry extends StatelessWidget {
   final GatewaySession? Function(String address)? sessionFor;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const _SectionTitle('버전'),
-      Card(
-        child: ListTile(
-          key: const ValueKey('kovapilot-version-entry'),
-          leading: const Icon(Icons.commit_rounded),
-          title: const Text('kovapilot 버전'),
-          subtitle: const Text('콤마의 브랜치와 커밋을 보고, 바꾸면 어떻게 되는지 미리 봐요.'),
-          trailing: const Icon(Icons.chevron_right_rounded),
-          onTap: () => KovaRoutes.open(
-            context,
-            KovapilotVersionScreen.route(
-              endpoint: endpoint,
-              sessionFor: sessionFor,
-            ),
-          ),
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      key: const ValueKey('kovapilot-version-entry'),
+      leading: const Icon(Icons.commit_rounded),
+      title: const Text('kovapilot 버전 및 Git'),
+      subtitle: const Text('현재 브랜치, 커밋 기록, 변경 미리보기'),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => KovaRoutes.open(
+        context,
+        KovapilotVersionScreen.route(
+          endpoint: endpoint,
+          sessionFor: sessionFor,
         ),
       ),
-    ],
+    ),
   );
 }

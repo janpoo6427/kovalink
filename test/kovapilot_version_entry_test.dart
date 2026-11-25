@@ -1,4 +1,4 @@
-// 설정 → kovapilot → kovapilot 버전 is a pushed route: back returns to the
+// 설정 → kovapilot → kovapilot 버전 및 Git is a pushed route: back returns to the
 // kovapilot tab, and the app can open it by name.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,8 +26,10 @@ class _Names extends NavigatorObserver {
 }
 
 void main() {
-  testWidgets('kovapilot tab → kovapilot 버전 → back', (tester) async {
-    tester.view.physicalSize = const Size(824, 1830);
+  testWidgets('Git entry is visible without scrolling and opens its route', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(720, 1080);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     final gateway = GatewayController();
@@ -46,12 +48,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     final entry = find.byKey(const ValueKey('kovapilot-version-entry'));
-    await tester.scrollUntilVisible(
-      entry,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('kovapilot 버전'), findsOneWidget);
+    expect(entry.hitTestable(), findsOneWidget);
+    expect(find.text('kovapilot 버전 및 Git'), findsOneWidget);
     await tester.tap(entry);
     await tester.pumpAndSettle();
     expect(find.byType(KovapilotVersionScreen), findsOneWidget);

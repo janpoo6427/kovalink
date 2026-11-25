@@ -140,14 +140,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 6),
           if (_tab == SettingsTab.kovapilot) ...[
             const SizedBox(height: 10),
+            KovapilotVersionEntry(
+              endpoint: _kova.endpoint ?? _settingsAddress,
+              sessionFor: _kova.sessionFor,
+            ),
             KovaParamsPanel(
               controller: _kova,
               address: _settingsAddress,
               now: widget.now,
-            ),
-            KovapilotVersionEntry(
-              endpoint: _kova.endpoint ?? _settingsAddress,
-              sessionFor: _kova.sessionFor,
             ),
           ] else if (_tab == SettingsTab.session)
             _SessionSection(
