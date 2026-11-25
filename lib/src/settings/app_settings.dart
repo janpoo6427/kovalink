@@ -39,6 +39,8 @@ class AppSettings {
     this.vehicleModelId,
     this.nativeVehicleOverlay = false,
     this.renderQuality = RenderQuality.auto,
+    this.autoConnect = true,
+    this.lastDeviceEndpoint,
   });
 
   static const schemaVersion = 1;
@@ -76,6 +78,14 @@ class AppSettings {
   /// 화질: 자동 (GPU, 느리면 소프트웨어) / 고품질 (GPU) / 절약 (소프트웨어).
   final RenderQuality renderQuality;
 
+  /// 자동 연결: look for the kovapilot device on the phone's Wi-Fi /
+  /// hotspot until it answers (on by default).
+  final bool autoConnect;
+
+  /// Settings origin of the last device found by auto-connect (tried first
+  /// next time). Same local-only policy as [settingsEndpoint].
+  final String? lastDeviceEndpoint;
+
   SceneLayers get layers => SceneLayers(
     lanes: showLanes,
     objects: showObjects,
@@ -103,6 +113,8 @@ class AppSettings {
     bool clearVehicleModel = false,
     bool? nativeVehicleOverlay,
     RenderQuality? renderQuality,
+    bool? autoConnect,
+    String? lastDeviceEndpoint,
   }) => AppSettings(
     speedUnit: speedUnit ?? this.speedUnit,
     viewpoint: viewpoint ?? this.viewpoint,
@@ -124,6 +136,8 @@ class AppSettings {
         : vehicleModelId ?? this.vehicleModelId,
     nativeVehicleOverlay: nativeVehicleOverlay ?? this.nativeVehicleOverlay,
     renderQuality: renderQuality ?? this.renderQuality,
+    autoConnect: autoConnect ?? this.autoConnect,
+    lastDeviceEndpoint: lastDeviceEndpoint ?? this.lastDeviceEndpoint,
   );
 
   Map<String, dynamic> toJson() => {
@@ -146,6 +160,8 @@ class AppSettings {
     'vehicleModelId': ?vehicleModelId,
     'nativeVehicleOverlay': nativeVehicleOverlay,
     'renderQuality': renderQuality.name,
+    'autoConnect': autoConnect,
+    'lastDeviceEndpoint': ?lastDeviceEndpoint,
   };
 
   /// Tolerant parser: each unknown or invalid field falls back to its
@@ -176,6 +192,7 @@ class AppSettings {
 
     final brightness = json['brightness'];
     final modelId = json['vehicleModelId'];
+    final lastDevice = json['lastDeviceEndpoint'];
     return AppSettings(
       speedUnit: pick(SpeedUnit.values, 'speedUnit', defaults.speedUnit),
       viewpoint: pick(SceneViewpoint.values, 'viewpoint', defaults.viewpoint),
@@ -220,6 +237,12 @@ class AppSettings {
         'renderQuality',
         defaults.renderQuality,
       ),
+      autoConnect: flag('autoConnect', defaults.autoConnect),
+      lastDeviceEndpoint:
+          lastDevice is String &&
+              LocalEndpointPolicy.validateSettings(lastDevice) == null
+          ? lastDevice.trim()
+          : null,
     );
   }
 
@@ -359,5 +382,37 @@ class SettingsController extends ChangeNotifier {
       update((s) => s.copyWith(settingsEndpoint: endpoint.trim()));
     }
     return error;
+  }
+
+  /// Auto-connect found a device at [host]:[port]: remember it and point the
+  /// settings, telemetry and camera addresses at it (path and scheme of the
+  /// telemetry/camera addresses are kept). Refused unless the local-only
+  /// policy accepts the new origin.
+  String? rememberDevice(String host, int port) {
+    final origin = Uri(scheme: 'http', host: host, port: port).toString();
+    final error = LocalEndpointPolicy.validateSettings(origin);
+    if (error != null) return error;
+    String moved(String endpoint, String? Function(String) validate) {
+      final uri = Uri.tryParse(endpoint);
+      if (uri == null) return endpoint;
+      final next = uri.replace(host: host, port: port).toString();
+      return validate(next) == null ? next : endpoint;
+    }
+
+    update(
+      (s) => s.copyWith(
+        lastDeviceEndpoint: origin,
+        settingsEndpoint: origin,
+        telemetryEndpoint: moved(
+          s.telemetryEndpoint,
+          LocalEndpointPolicy.validate,
+        ),
+        signalingEndpoint: moved(
+          s.signalingEndpoint,
+          LocalEndpointPolicy.validateSignaling,
+        ),
+      ),
+    );
+    return null;
   }
 }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/features/connect/auto_connect_panel.dart';
+import 'package:kovalink/src/services/auto_connect_controller.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
@@ -6,12 +8,20 @@ import 'package:kovalink/src/widgets/page_header.dart';
 import 'package:kovalink/src/widgets/status_pill.dart';
 
 class ConnectScreen extends StatefulWidget {
-  const ConnectScreen({required this.controller, this.settings, super.key});
+  const ConnectScreen({
+    required this.controller,
+    this.settings,
+    this.autoConnect,
+    super.key,
+  });
 
   final GatewayController controller;
 
   /// Saved device addresses (설정 → 연결 장치 주소). Optional.
   final SettingsController? settings;
+
+  /// 자동 연결 (network search). Optional.
+  final AutoConnectController? autoConnect;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -30,7 +40,37 @@ class _ConnectScreenState extends State<ConnectScreen> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    _savedTelemetry = widget.settings?.value.telemetryEndpoint;
+    _savedSignaling = widget.settings?.value.signalingEndpoint;
+    widget.settings?.addListener(_followSavedAddresses);
+  }
+
+  String? _savedTelemetry;
+  String? _savedSignaling;
+
+  /// Auto-connect moves the saved addresses to the device it found. Follow
+  /// them unless the user has typed something else.
+  void _followSavedAddresses() {
+    final value = widget.settings!.value;
+    if (value.telemetryEndpoint != _savedTelemetry) {
+      if (endpointController.text.trim() == _savedTelemetry) {
+        endpointController.text = value.telemetryEndpoint;
+      }
+      _savedTelemetry = value.telemetryEndpoint;
+    }
+    if (value.signalingEndpoint != _savedSignaling) {
+      if (cameraEndpointController.text.trim() == _savedSignaling) {
+        cameraEndpointController.text = value.signalingEndpoint;
+      }
+      _savedSignaling = value.signalingEndpoint;
+    }
+  }
+
+  @override
   void dispose() {
+    widget.settings?.removeListener(_followSavedAddresses);
     endpointController.dispose();
     cameraEndpointController.dispose();
     super.dispose();
@@ -48,6 +88,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
         children: [
           const PageHeader(title: '장치 연결'),
           const SizedBox(height: 22),
+          if (widget.autoConnect case final auto?) ...[
+            AutoConnectPanel(controller: auto, settings: widget.settings),
+            const SizedBox(height: 14),
+          ],
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),

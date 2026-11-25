@@ -10,7 +10,16 @@ import 'package:kovalink/src/services/web_rtc_road_stream.dart';
 
 enum GatewayMode { demo, connecting, live, disconnected, error }
 
+/// Opens a telemetry WebSocket (tests replace the network).
+typedef WebSocketConnector = Future<WebSocket> Function(String url);
+
 class GatewayController extends ChangeNotifier {
+  GatewayController({WebSocketConnector? webSocketConnector})
+    : _connectSocket = webSocketConnector ?? ((url) => WebSocket.connect(url));
+
+  final WebSocketConnector _connectSocket;
+  bool _backgroundAttempt = false;
+
   final WebRtcRoadStream roadStream = WebRtcRoadStream();
   GatewayMode mode = GatewayMode.disconnected;
   RoadScene scene = DemoDriveScenario().sceneAt(Duration.zero);
@@ -81,26 +90,57 @@ class GatewayController extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      final socket = await WebSocket.connect(
+      final socket = await _connectSocket(
         endpoint.trim(),
       ).timeout(const Duration(seconds: 5));
-      _socket = socket;
-      connectedEndpoint = endpoint.trim();
-      gatewayAuthenticated = false;
-      mode = GatewayMode.live;
-      _socketSubscription = socket.listen(
-        _handleMessage,
-        onDone: () => _handleDisconnect('차와 연결이 끊겼어요.'),
-        onError: (Object error) =>
-            _handleDisconnect('차와 연결이 끊겼어요. 다시 연결해 주세요.'),
-        cancelOnError: true,
-      );
-      notifyListeners();
+      _attach(socket, endpoint.trim());
       return null;
     } on Object {
       _handleDisconnect('차에 연결할 수 없어요. 주소와 네트워크를 확인해 주세요.');
       return errorMessage;
     }
+  }
+
+  /// Auto-connect: tries [endpoint] without touching the current state (the
+  /// demo keeps playing, no error is shown) and switches to live only when
+  /// the socket opens. Returns true when live.
+  Future<bool> connectInBackground(String endpoint) async {
+    if (mode == GatewayMode.live) return true;
+    if (mode == GatewayMode.connecting || _backgroundAttempt) return false;
+    if (LocalEndpointPolicy.validate(endpoint) != null) return false;
+    _backgroundAttempt = true;
+    try {
+      final socket = await _connectSocket(
+        endpoint.trim(),
+      ).timeout(const Duration(seconds: 5));
+      if (mode == GatewayMode.live || mode == GatewayMode.connecting) {
+        // A manual connection started meanwhile; keep that one.
+        unawaited(socket.close());
+        return mode == GatewayMode.live;
+      }
+      _closeTransport();
+      errorMessage = null;
+      _attach(socket, endpoint.trim());
+      return true;
+    } on Object {
+      return false;
+    } finally {
+      _backgroundAttempt = false;
+    }
+  }
+
+  void _attach(WebSocket socket, String endpoint) {
+    _socket = socket;
+    connectedEndpoint = endpoint;
+    gatewayAuthenticated = false;
+    mode = GatewayMode.live;
+    _socketSubscription = socket.listen(
+      _handleMessage,
+      onDone: () => _handleDisconnect('차와 연결이 끊겼어요.'),
+      onError: (Object error) => _handleDisconnect('차와 연결이 끊겼어요. 다시 연결해 주세요.'),
+      cancelOnError: true,
+    );
+    notifyListeners();
   }
 
   void disconnect() {
