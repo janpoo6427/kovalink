@@ -72,7 +72,7 @@ class ConnectScreen extends StatelessWidget {
     final link = this.link;
     return AnimatedBuilder(
       animation: Listenable.merge([
-        controller,
+        controller.status,
         controller.roadStream,
         ?settings,
         ?link,

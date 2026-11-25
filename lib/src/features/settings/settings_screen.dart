@@ -102,7 +102,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final modelPicker = widget.modelPicker;
     return AnimatedBuilder(
       animation: Listenable.merge([
-        controller,
+        controller.status,
         ?vehicleModel,
         ?settings,
         _kova,

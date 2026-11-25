@@ -41,6 +41,28 @@ class GatewayController extends ChangeNotifier {
 
   bool get canEditSettings => mode == GatewayMode.live && gatewayAuthenticated;
 
+  /// Notifies when the connection changes (mode, error, address, sign-in,
+  /// demo route) but not on every telemetry frame. Pages that show the
+  /// connection and not the road listen to this instead of the controller.
+  Listenable get status => _status;
+  final _status = _StatusNotifier();
+  Object? _lastStatus;
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    final now = (
+      mode,
+      errorMessage,
+      connectedEndpoint,
+      gatewayAuthenticated,
+      demoRoute,
+    );
+    if (now == _lastStatus) return;
+    _lastStatus = now;
+    _status.changed();
+  }
+
   /// Elapsed demo time. Advances by exactly one frame interval per tick so
   /// the demo is deterministic (independent of wall-clock jitter).
   Duration get demoElapsed => _demoElapsed;
@@ -232,6 +254,11 @@ class GatewayController extends ChangeNotifier {
   void dispose() {
     _closeTransport();
     roadStream.dispose();
+    _status.dispose();
     super.dispose();
   }
+}
+
+class _StatusNotifier extends ChangeNotifier {
+  void changed() => notifyListeners();
 }
