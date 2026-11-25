@@ -7,6 +7,7 @@ import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart'
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
 import 'package:kovalink/src/features/settings/kova_params_panel.dart';
+import 'package:kovalink/src/features/settings/renderer_diagnostics_card.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/models/display_units.dart';
@@ -158,6 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     VehicleModelLoadResult.bundledDefault,
                 picker: modelPicker,
               ),
+            const RendererDiagnosticsCard(),
             if (settings.storageError case final error?)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
