@@ -8,6 +8,8 @@ import 'dart:io';
 import 'package:kovalink/src/kova_params/kova_params_client.dart'
     show IoKovaParamsTransport, KovaHttpResponse, KovaParamsTransport;
 import 'package:kovalink/src/kovapilot_git/git_models.dart';
+import 'package:kovalink/src/network/comma_link_text.dart';
+import 'package:kovalink/src/network/gateway_pin.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 
 enum KovaGitFailure {
@@ -38,6 +40,15 @@ enum KovaGitFailure {
 
   /// The answer did not match the contract.
   format,
+
+  /// 401: the comma refused the token.
+  unauthorized,
+
+  /// 403 `wifi_client_required`: the comma refused this phone.
+  notAllowed,
+
+  /// The certificate pin is not the registered comma's; nothing was sent.
+  identity,
 
   /// Any other HTTP error.
   http,
@@ -85,6 +96,18 @@ abstract final class KovaGitText {
 /// Maps an HTTP status and gateway error code to a failure.
 KovaGitException kovaGitError(int statusCode, String? code) =>
     switch ((statusCode, code)) {
+      (401, _) => KovaGitException(
+        KovaGitFailure.unauthorized,
+        KovaLinkText.message(KovaLinkProblem.tokenRejected),
+        statusCode: statusCode,
+        code: code,
+      ),
+      (403, 'wifi_client_required') => KovaGitException(
+        KovaGitFailure.notAllowed,
+        KovaLinkText.message(KovaLinkProblem.notAllowed),
+        statusCode: statusCode,
+        code: code,
+      ),
       (403, 'local_client_required') => KovaGitException(
         KovaGitFailure.localOnly,
         KovaGitText.localOnly,
@@ -176,6 +199,16 @@ class KovaGitClient {
       throw const KovaGitException(KovaGitFailure.timeout, KovaGitText.timeout);
     } on FormatException {
       throw const KovaGitException(KovaGitFailure.format, KovaGitText.format);
+    } on GatewayIdentityMismatch {
+      throw KovaGitException(
+        KovaGitFailure.identity,
+        KovaLinkText.message(KovaLinkProblem.identityMismatch),
+      );
+    } on GatewayOriginRefused {
+      throw const KovaGitException(
+        KovaGitFailure.transport,
+        KovaGitText.transport,
+      );
     } on IOException {
       throw const KovaGitException(
         KovaGitFailure.transport,

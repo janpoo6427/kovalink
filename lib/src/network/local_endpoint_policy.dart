@@ -15,7 +15,7 @@ class LocalEndpointPolicy {
     }, '주소는 http:// 또는 https://로 시작해야 해요.');
   }
 
-  /// kovapilot settings API origin, e.g. `http://comma.local:8082`. Only the
+  /// kovapilot settings API origin, e.g. `https://192.168.43.20:8082`. Only the
   /// origin is used; a path other than `/` is refused so the app always
   /// calls the documented `/v1/...` routes.
   static String? validateSettings(String value) {
@@ -29,7 +29,7 @@ class LocalEndpointPolicy {
         uri.hasQuery ||
         uri.hasFragment ||
         uri.userInfo.isNotEmpty) {
-      return '주소와 포트까지만 적어 주세요. 예: http://comma.local:8082';
+      return '주소와 포트까지만 적어 주세요. 예: https://192.168.43.20:8082';
     }
     return null;
   }

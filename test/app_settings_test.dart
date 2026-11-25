@@ -101,8 +101,9 @@ void main() {
       expect(settings.viewpoint, SceneViewpoint.topDown);
       expect(settings.brightness, 1.0);
       expect(settings.showPath, isTrue);
-      expect(settings.telemetryEndpoint, AppSettings.defaultTelemetryEndpoint);
-      expect(settings.signalingEndpoint, AppSettings.defaultSignalingEndpoint);
+      // No comma found yet: no address (there is no comma.local default).
+      expect(settings.telemetryEndpoint, isNull);
+      expect(settings.signalingEndpoint, isNull);
       expect(settings.vehicleModelId, isNull);
       expect(
         AppSettings.fromJson({'brightness': 0.1}).brightness,

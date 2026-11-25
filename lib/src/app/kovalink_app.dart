@@ -6,8 +6,11 @@ import 'package:kovalink/src/app/kovalink_home.dart';
 import 'package:kovalink/src/app/kovalink_pages.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
+import 'package:kovalink/src/network/comma_advert_source.dart';
+import 'package:kovalink/src/network/comma_registry.dart';
 import 'package:kovalink/src/services/app_auto_connect_target.dart';
 import 'package:kovalink/src/services/auto_connect_controller.dart';
+import 'package:kovalink/src/services/comma_link.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
@@ -24,6 +27,7 @@ class KovaLinkApp extends StatefulWidget {
     this.modelPicker = pickModelFileWithSystemPicker,
     this.autoConnectBuilder,
     this.navigatorObservers = const [],
+    this.tokenStore,
   });
 
   /// Asset bundle for the vehicle model pack; null uses rootBundle.
@@ -48,6 +52,10 @@ class KovaLinkApp extends StatefulWidget {
   /// Extra observers on the app navigator (tests).
   final List<NavigatorObserver> navigatorObservers;
 
+  /// Where comma tokens are kept; null = the phone's secure storage, or an
+  /// in-memory store under `flutter test`.
+  final CommaTokenStore? tokenStore;
+
   static bool get _underFlutterTest =>
       Platform.environment.containsKey('FLUTTER_TEST');
 
@@ -68,8 +76,10 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
   AutoConnectController? autoConnect;
   TelemetryWatch? _telemetryWatch;
   // kovapilot settings over HTTP. Opened by 자동 연결 once the comma answers,
-  // or when the user taps 연결 in the kovapilot tab.
-  final kovaParams = KovaParamsController();
+  // or when the user taps 연결 in the kovapilot tab; a comma on Wi-Fi goes
+  // through the registered comma's session.
+  late final KovaParamsController kovaParams;
+  late final CommaLink link;
   final vehicleModel = ValueNotifier<VehicleModelLoadResult>(
     VehicleModelLoadResult.bundledDefault,
   );
@@ -88,12 +98,22 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
     settings = SettingsController(
       store: widget.settingsStore ?? FileSettingsStore(storageRoot),
     )..addListener(_applySettings);
+    link = CommaLink(
+      settings: settings,
+      tokens:
+          widget.tokenStore ??
+          (KovaLinkApp._underFlutterTest
+              ? MemoryCommaTokenStore()
+              : SecureCommaTokenStore()),
+    );
+    kovaParams = KovaParamsController(sessionFor: link.sessionFor);
     controller = GatewayController()
       ..startDemo(route: settings.value.demoRoute);
     final target = AppAutoConnectTarget(
       controller: controller,
       settings: settings,
       kovaParams: kovaParams,
+      link: link,
     );
     autoConnect =
         widget.autoConnectBuilder?.call(target, settings) ??
@@ -101,13 +121,16 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
             ? null
             : AutoConnectController(
                 target: target,
-                lastEndpoint: () => settings.value.lastDeviceEndpoint,
-                // comma.local is always worth a try besides the last comma;
-                // only kovapilot's own port is probed.
-                knownEndpoints: () => const [
-                  AppSettings.defaultSettingsEndpoint,
-                ],
+                // The registered comma's last address first, then the last
+                // device; only kovapilot's own port is probed. No fixed name
+                // is tried: the comma is found on the network or by IP.
+                lastEndpoint: () =>
+                    settings.value.registeredComma?.endpoints.origin ??
+                    settings.value.lastDeviceEndpoint,
+                canAttach: link.canAttach,
+                adverts: BonsoirCommaAdvertSource(),
               ));
+    target.onProblem = (device, problem) => autoConnect?.hold(device, problem);
     if (autoConnect case final auto?) {
       _telemetryWatch = TelemetryWatch(
         controller: controller,
@@ -122,6 +145,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
       modelPicker: widget.modelPicker,
       kovaParams: kovaParams,
       autoConnect: autoConnect,
+      link: link,
       drive: (context) => KovaLinkHome(
         controller: controller,
         vehicleModel: vehicleModel,
@@ -130,6 +154,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
         modelPicker: widget.modelPicker,
         kovaParams: kovaParams,
         autoConnect: autoConnect,
+        link: link,
       ),
     );
     WidgetsBinding.instance.addObserver(this);
@@ -199,6 +224,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
     settings.removeListener(_applySettings);
     controller.dispose();
     kovaParams.dispose();
+    link.dispose();
     settings.dispose();
     vehicleModel.dispose();
     super.dispose();

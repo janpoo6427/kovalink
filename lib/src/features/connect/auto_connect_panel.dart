@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/network/comma_link_text.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
 import 'package:kovalink/src/services/auto_connect_controller.dart';
+import 'package:kovalink/src/services/comma_link.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
 import 'package:kovalink/src/widgets/liquid_glass.dart';
 
@@ -9,6 +11,7 @@ Color autoConnectColor(AutoConnectPhase phase) => switch (phase) {
   AutoConnectPhase.searching => const Color(0xFFFFC857),
   AutoConnectPhase.choosing => const Color(0xFF72A7FF),
   AutoConnectPhase.waiting => const Color(0xFFFF9F5A),
+  AutoConnectPhase.needsAttention => const Color(0xFFFF6B72),
   AutoConnectPhase.off || AutoConnectPhase.paused => const Color(0xFF8E9DA9),
 };
 
@@ -81,23 +84,50 @@ class AutoConnectStatusChip extends StatelessWidget {
   }
 }
 
-/// Connection screen card, comma_finder style: current networks, search
-/// progress, found devices and a live activity log.
+/// The Finder on the connection screen, comma_finder style: current
+/// networks, search progress, the commas found on this Wi-Fi or hotspot
+/// (connect the registered one, register a new one), 지금 찾기, IP로 연결
+/// and a live activity log.
 class AutoConnectPanel extends StatelessWidget {
-  const AutoConnectPanel({required this.controller, this.settings, super.key});
+  const AutoConnectPanel({
+    required this.controller,
+    this.settings,
+    this.link,
+    this.onRegister,
+    this.onConnectByIp,
+    super.key,
+  });
 
   final AutoConnectController controller;
   final SettingsController? settings;
 
+  /// The registered comma and the live connection (problems, 등록됨).
+  final CommaLink? link;
+
+  /// Opens registration for a comma that is not registered yet.
+  final void Function(KovaDevice device)? onRegister;
+
+  /// Opens IP entry. Null hides the button.
+  final VoidCallback? onConnectByIp;
+
   @override
   Widget build(BuildContext context) {
     final settings = this.settings;
+    final link = this.link;
+    final onRegister = this.onRegister;
     return AnimatedBuilder(
-      animation: Listenable.merge([controller, ?settings]),
+      animation: Listenable.merge([controller, ?settings, ?link]),
       builder: (context, _) {
         final c = controller;
         final color = autoConnectColor(c.phase);
-        final muted = const Color(0xFF8E9DA9);
+        const muted = Color(0xFF8E9DA9);
+        final problem = c.problem ?? link?.problem;
+        final devices = {...c.found, ?c.device};
+        final nothingFound =
+            devices.isEmpty &&
+            (c.phase == AutoConnectPhase.waiting ||
+                c.phase == AutoConnectPhase.needsAttention ||
+                c.phase == AutoConnectPhase.off);
         return Card(
           key: const ValueKey('auto-connect-panel'),
           child: Padding(
@@ -142,7 +172,7 @@ class AutoConnectPanel extends StatelessWidget {
                     c.phase == AutoConnectPhase.off
                         ? '자동 연결을 켜면 네트워크를 확인해요.'
                         : '연결된 와이파이·핫스팟이 없어요.',
-                    style: TextStyle(color: muted, fontSize: 12),
+                    style: const TextStyle(color: muted, fontSize: 12),
                   )
                 else
                   for (final n in c.networks)
@@ -193,23 +223,65 @@ class AutoConnectPanel extends StatelessWidget {
                 ],
                 Text(
                   _progressLine(c),
-                  style: TextStyle(color: muted, fontSize: 12),
+                  style: const TextStyle(color: muted, fontSize: 12),
                 ),
-                if (c.found.isNotEmpty || c.device != null) ...[
+                if (problem != null &&
+                    c.phase != AutoConnectPhase.searching) ...[
+                  const SizedBox(height: 10),
+                  LinkProblemNote(problem: problem),
+                ],
+                if (devices.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   _Label('찾은 콤마'),
-                  for (final d in {...c.found, ?c.device})
+                  for (final d in devices)
                     _DeviceRow(
                       device: d,
                       connected: d == c.device,
-                      onChoose: c.phase == AutoConnectPhase.choosing
+                      registered:
+                          !d.secure ||
+                          (link?.registered?.isPresentedBy(d) ?? false),
+                      onChoose:
+                          c.phase == AutoConnectPhase.choosing && c.canAttach(d)
                           ? () => c.choose(d)
+                          : null,
+                      onRetry:
+                          c.phase == AutoConnectPhase.needsAttention &&
+                              c.canAttach(d) &&
+                              problem != KovaLinkProblem.tokenRejected
+                          ? () => c.connectTo(d, how: '다시 연결')
+                          : null,
+                      onRegister:
+                          onRegister != null &&
+                              d != c.device &&
+                              (!c.canAttach(d) ||
+                                  problem == KovaLinkProblem.tokenRejected ||
+                                  problem == KovaLinkProblem.needsToken)
+                          ? () => onRegister(d)
                           : null,
                     ),
                 ],
                 const SizedBox(height: 12),
-                Row(
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
+                    if (onConnectByIp case final byIp? when nothingFound)
+                      FilledButton.icon(
+                        key: const ValueKey('connect-by-ip'),
+                        onPressed: byIp,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 52),
+                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                        ),
+                        icon: const Icon(Icons.dialpad, size: 20),
+                        label: const Text(
+                          'IP로 연결',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                     OutlinedButton.icon(
                       key: const ValueKey('auto-connect-retry'),
                       onPressed:
@@ -221,6 +293,13 @@ class AutoConnectPanel extends StatelessWidget {
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('지금 찾기'),
                     ),
+                    if (onConnectByIp case final byIp? when !nothingFound)
+                      OutlinedButton.icon(
+                        key: const ValueKey('connect-by-ip'),
+                        onPressed: byIp,
+                        icon: const Icon(Icons.dialpad, size: 18),
+                        label: const Text('IP로 연결'),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -246,7 +325,10 @@ class AutoConnectPanel extends StatelessWidget {
       AutoConnectPhase.waiting =>
         '${c.attempt}번 찾았지만 없었어요. ${c.nextRetry?.inSeconds ?? 0}초 뒤 다시 찾아요.',
       AutoConnectPhase.choosing =>
-        '콤마가 ${c.found.length}대 있어요. 연결할 기기를 골라 주세요.',
+        c.found.any(c.canAttach)
+            ? '콤마가 ${c.found.length}대 있어요. 연결할 기기를 골라 주세요.'
+            : '콤마를 찾았어요. 눌러서 등록하면 연결할 수 있어요.',
+      AutoConnectPhase.needsAttention => '콤마가 답했지만 연결을 이어 가지 못했어요.',
       AutoConnectPhase.connected => switch (c.device) {
         final device? when c.telemetryHeld =>
           '${device.displayName}에 연결돼 있어요. 데모를 보는 동안에는 주행 정보를 잇지 않아요.',
@@ -254,6 +336,86 @@ class AutoConnectPanel extends StatelessWidget {
         null => '콤마에 연결돼 있어요.',
       },
     };
+  }
+}
+
+/// One problem line in plain words, with the longer explanation folded.
+class LinkProblemNote extends StatefulWidget {
+  const LinkProblemNote({required this.problem, super.key});
+
+  final KovaLinkProblem problem;
+
+  @override
+  State<LinkProblemNote> createState() => _LinkProblemNoteState();
+}
+
+class _LinkProblemNoteState extends State<LinkProblemNote> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final serious = switch (widget.problem) {
+      KovaLinkProblem.tokenRejected ||
+      KovaLinkProblem.identityMismatch ||
+      KovaLinkProblem.notAllowed ||
+      KovaLinkProblem.versionMismatch ||
+      KovaLinkProblem.needsToken => true,
+      _ => false,
+    };
+    final color = serious ? const Color(0xFFFF6B72) : const Color(0xFFFFC857);
+    return Container(
+      key: ValueKey('link-problem-${widget.problem.name}'),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                serious ? Icons.error_outline : Icons.info_outline,
+                size: 18,
+                color: color,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  KovaLinkText.message(widget.problem),
+                  style: const TextStyle(fontSize: 13, height: 1.35),
+                ),
+              ),
+            ],
+          ),
+          TextButton(
+            key: const ValueKey('link-problem-more'),
+            onPressed: () => setState(() => _open = !_open),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 26),
+              minimumSize: const Size(0, 32),
+            ),
+            child: Text(_open ? '접기' : '자세히 보기'),
+          ),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(26, 0, 0, 8),
+              child: Text(
+                KovaLinkText.detail(widget.problem),
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: Color(0xFF8E9DA9),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -280,15 +442,26 @@ class _DeviceRow extends StatelessWidget {
   const _DeviceRow({
     required this.device,
     required this.connected,
+    required this.registered,
     this.onChoose,
+    this.onRetry,
+    this.onRegister,
   });
 
   final KovaDevice device;
   final bool connected;
+  final bool registered;
   final VoidCallback? onChoose;
+  final VoidCallback? onRetry;
+  final VoidCallback? onRegister;
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = !device.secure
+        ? 'kovapilot이 답했어요'
+        : registered
+        ? '등록한 콤마예요'
+        : '등록하면 연결할 수 있어요';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -309,9 +482,12 @@ class _DeviceRow extends StatelessWidget {
                   '콤마 · ${device.displayName}',
                   style: const TextStyle(fontSize: 13),
                 ),
-                const Text(
-                  'kovapilot이 답했어요',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF8E9DA9)),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8E9DA9),
+                  ),
                 ),
               ],
             ),
@@ -330,7 +506,21 @@ class _DeviceRow extends StatelessWidget {
               key: ValueKey('auto-connect-choose-${device.label}'),
               onPressed: onChoose,
               child: const Text('연결'),
+            )
+          else if (onRetry != null)
+            OutlinedButton(
+              key: ValueKey('auto-connect-retry-${device.label}'),
+              onPressed: onRetry,
+              child: const Text('다시 연결'),
             ),
+          if (onRegister != null) ...[
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              key: ValueKey('auto-connect-register-${device.label}'),
+              onPressed: onRegister,
+              child: Text(registered ? '다시 등록' : '등록'),
+            ),
+          ],
         ],
       ),
     );

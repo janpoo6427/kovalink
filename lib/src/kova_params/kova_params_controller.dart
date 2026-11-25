@@ -2,18 +2,18 @@
 // API, the last authoritative document, per-setting "보내는 중" state and
 // the write lock.
 //
-// Write lock (decision pending, see docs/PROTOCOL.md): the gateway has no
-// pairing or authentication yet and binds only to loopback. KovaLink
-// therefore sends writes only when the settings address is loopback
-// (`127.0.0.1`, `::1`, `localhost`) — a development connection on the same
-// machine — or when [isAuthenticated] reports a paired session (always false
-// until pairing exists). Any LAN address stays read-only.
+// Write lock (docs/PROTOCOL.md): writes are sent only on a loopback
+// development connection (`127.0.0.1`, `::1`, `localhost`) or on a Wi-Fi
+// session to a registered comma whose certificate pin matched and whose
+// token the comma accepted (`/v1/health` says bindScope wifi, bearer
+// authentication). Any other LAN address stays read-only.
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:kovalink/src/kova_params/kova_params_client.dart';
 import 'package:kovalink/src/kova_params/kova_params_document.dart';
+import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 
 enum KovaLinkStatus { disconnected, connecting, connected, stale }
@@ -53,6 +53,7 @@ class KovaParamsController extends ChangeNotifier {
     this.staleAfter = const Duration(seconds: 45),
     DateTime Function()? clock,
     bool Function()? isAuthenticated,
+    this.sessionFor,
   }) : _clientFactory =
            clientFactory ??
            ((endpoint, onError) =>
@@ -63,6 +64,19 @@ class KovaParamsController extends ChangeNotifier {
   final KovaClientFactory _clientFactory;
   final DateTime Function() _clock;
   final bool Function() _isAuthenticated;
+
+  /// The open session to the comma at a settings address (the app's
+  /// registered comma), used when [connect] is not given one.
+  final GatewaySession? Function(String address)? sessionFor;
+
+  GatewaySession? _session;
+  bool _sessionAuthenticated = false;
+
+  /// Why the last connect or read failed, or null.
+  KovaFailureKind? lastFailure;
+
+  /// True on a Wi-Fi session the comma authenticated.
+  bool get isAuthenticatedSession => _sessionAuthenticated;
 
   /// Background re-read while connected; null disables polling (tests).
   final Duration? pollInterval;
@@ -109,7 +123,9 @@ class KovaParamsController extends ChangeNotifier {
   KovaWriteLock get writeLock {
     if (document == null || _client == null) return KovaWriteLock.notConnected;
     if (status == KovaLinkStatus.stale) return KovaWriteLock.stale;
-    if (isLoopback || _isAuthenticated()) return KovaWriteLock.none;
+    if (isLoopback || _sessionAuthenticated || _isAuthenticated()) {
+      return KovaWriteLock.none;
+    }
     return KovaWriteLock.needsPairing;
   }
 
@@ -149,11 +165,29 @@ class KovaParamsController extends ChangeNotifier {
   }
 
   /// Connects to the settings origin: health check, then the document.
-  Future<String?> connect(String address) async {
+  /// A comma on Wi-Fi goes through [session] (or [sessionFor]): its pinned
+  /// client and token.
+  Future<String?> connect(String address, {GatewaySession? session}) async {
     _closeClient();
     final generation = ++_generation;
     String? policyError;
-    final client = _clientFactory(address, (e) => policyError = e);
+    final candidate = session ?? sessionFor?.call(address.trim());
+    final open =
+        candidate != null &&
+            !candidate.isClosed &&
+            LocalEndpointPolicy.validateSettings(address) == null &&
+            candidate.covers(LocalEndpointPolicy.settingsBase(address))
+        ? candidate
+        : null;
+    final KovaParamsClient? client;
+    if (open != null) {
+      client = KovaParamsClient(
+        LocalEndpointPolicy.settingsBase(address),
+        transport: open.transport,
+      );
+    } else {
+      client = _clientFactory(address, (e) => policyError = e);
+    }
     if (client == null) {
       error = policyError ?? '주소를 다시 확인해 주세요.';
       _status = KovaLinkStatus.disconnected;
@@ -161,6 +195,9 @@ class KovaParamsController extends ChangeNotifier {
       return error;
     }
     _client = client;
+    _session = open;
+    _sessionAuthenticated = false;
+    lastFailure = null;
     endpoint = address.trim();
     _status = KovaLinkStatus.connecting;
     error = null;
@@ -171,6 +208,10 @@ class KovaParamsController extends ChangeNotifier {
     try {
       health = await client.health();
       if (generation != _generation) return null;
+      _sessionAuthenticated =
+          _session?.sendsToken == true &&
+          health?.bindScope == 'wifi' &&
+          health?.authentication == 'bearer';
       await _read(client);
       if (generation != _generation) return null;
       _status = KovaLinkStatus.connected;
@@ -181,6 +222,7 @@ class KovaParamsController extends ChangeNotifier {
     } on KovaParamsException catch (e) {
       if (generation != _generation) return null;
       error = e.message;
+      lastFailure = e.kind;
       _status = KovaLinkStatus.disconnected;
       _closeClient();
       _notify();
@@ -210,8 +252,12 @@ class KovaParamsController extends ChangeNotifier {
     } on KovaParamsException catch (e) {
       if (generation != _generation) return false;
       error = e.message;
-      if (e.kind == KovaFailureKind.schema) {
-        // Unknown major schema: close instead of showing old values.
+      lastFailure = e.kind;
+      if (e.kind == KovaFailureKind.schema ||
+          e.kind == KovaFailureKind.identity ||
+          e.kind == KovaFailureKind.unauthorized) {
+        // Unknown major schema, another comma or a refused token: close
+        // instead of showing old values.
         document = null;
         _status = KovaLinkStatus.disconnected;
         _closeClient();
@@ -336,8 +382,11 @@ class KovaParamsController extends ChangeNotifier {
   void _closeClient() {
     _poll?.cancel();
     _poll = null;
+    // A session's transport leaves the shared client open.
     _client?.close();
     _client = null;
+    _session = null;
+    _sessionAuthenticated = false;
   }
 
   void _notify() {

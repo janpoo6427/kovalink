@@ -10,6 +10,7 @@ import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/services/auto_connect_controller.dart';
+import 'package:kovalink/src/services/comma_link.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
@@ -31,6 +32,7 @@ class KovaLinkHome extends StatelessWidget {
     this.director,
     this.kovaParams,
     this.autoConnect,
+    this.link,
     super.key,
   });
 
@@ -46,6 +48,9 @@ class KovaLinkHome extends StatelessWidget {
   /// 자동 연결; shown as a small chip on the road view.
   final AutoConnectController? autoConnect;
 
+  /// Registered comma and its session (connect screen).
+  final CommaLink? link;
+
   /// Capture/test hooks forwarded to [RoadViewScreen].
   final GpuSurfaceBuilder? gpuSurfaceBuilder;
   final GpuViewHost? gpuViewHost;
@@ -59,6 +64,7 @@ class KovaLinkHome extends StatelessWidget {
     modelPicker: modelPicker,
     kovaParams: kovaParams,
     autoConnect: autoConnect,
+    link: link,
   );
 
   @override

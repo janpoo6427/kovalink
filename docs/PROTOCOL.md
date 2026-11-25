@@ -173,10 +173,9 @@ vehicle-side livestream processes to idle.
 ## Settings HTTP (kovapilot `kova_params`)
 
 KovaLink reads and changes kovapilot user settings through the gateway's JSON
-HTTP API on the same local origin as telemetry. The app stores only the
-origin (`settingsEndpoint`, default `http://comma.local:8082`); a path, query,
-fragment or user-info in that address is refused. The same local-only host
-policy applies.
+HTTP API on the same local origin as telemetry. The app derives every
+transport from the registered Gateway origin and applies the same local-only
+host policy. The device token is held in platform secure storage.
 
 The setting list, groups, order, translations, constraints and apply policy
 all come from the document. The app does not hard-code any of them.
@@ -280,15 +279,15 @@ KovaLink write rules:
 - Writes are locked while the connection is stale (last read failed or older
   than 45 s).
 
-### Write lock before pairing (decision pending)
+### Authenticated Wi-Fi connection
 
-The gateway has no pairing, TLS or credential yet and binds to `127.0.0.1`
-only. Until pairing exists KovaLink sends writes only when the settings
-address is loopback (`127.0.0.1`, `::1`, `localhost`), i.e. a development
-connection on the same machine. Every LAN address (`.local`, private IPv4,
-link-local/ULA IPv6) is read-only. A future paired session may unlock LAN
-writes; `GatewayController.gatewayAuthenticated` and `canEditSettings`
-(telemetry socket) are unchanged and do not affect this lock.
+The operator provisions and enables the Gateway on comma first. In
+**연결 → 콤마 등록**, choose the discovered address or enter the current IP.
+Registration needs the operator-provided token and SHA-256 public-key pin
+(or a trusted copy of the device certificate). The app verifies the device
+pin before sending the bearer token over HTTPS or WSS. Rediscovery can use the
+same identity at a new private IP. Settings writes also require a current
+settings document and any per-setting policy checks.
 
 ### End-to-end test
 
@@ -334,13 +333,10 @@ Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md` at
 
 ### Loopback-only gateway (`403 local_client_required`)
 
-The gateway binds `127.0.0.1:8082` and refuses any request whose peer is not
-loopback, that carries an `Origin` header, or whose `Host` is not
-`localhost`/`127.0.0.1`/`[::1]`. A phone on Wi-Fi therefore cannot use it
-yet. When some proxy or a future LAN bind still answers with this 403, the
-app says "콤마를 찾았지만 아직 휴대폰 연결을 허용하지 않아요" — in 자동 연결
-(`ProbeOutcome.localOnly`, never "콤마가 아니에요"), the settings client and
-the version screen. Authenticated LAN access is a later gateway step.
+Without Wi-Fi provisioning the Gateway only listens on
+`127.0.0.1:8082`. If a local-only Gateway answers through a proxy with
+`403 local_client_required`, the app reports that the device was found and
+phone access is unavailable.
 
 ### End-to-end test
 

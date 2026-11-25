@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:kovalink/src/models/road_scene.dart';
+import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 import 'package:kovalink/src/services/demo_drive_scenario.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
@@ -76,7 +77,10 @@ class GatewayController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> connect(String endpoint) async {
+  /// Opens telemetry at [endpoint]. A comma on Wi-Fi goes through
+  /// [session] (pinned client, token); a loopback development gateway is
+  /// opened directly.
+  Future<String?> connect(String endpoint, {GatewaySession? session}) async {
     final validationError = LocalEndpointPolicy.validate(endpoint);
     if (validationError != null) {
       errorMessage = validationError;
@@ -90,10 +94,11 @@ class GatewayController extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      final socket = await _connectSocket(
+      final socket = await _open(
         endpoint.trim(),
+        session,
       ).timeout(const Duration(seconds: 5));
-      _attach(socket, endpoint.trim());
+      _attach(socket, endpoint.trim(), authenticated: _authenticated(session));
       return null;
     } on Object {
       _handleDisconnect('차에 연결할 수 없어요. 주소와 네트워크를 확인해 주세요.');
@@ -104,23 +109,37 @@ class GatewayController extends ChangeNotifier {
   /// Auto-connect: tries [endpoint] without touching the current state (the
   /// demo keeps playing, no error is shown) and switches to live only when
   /// the socket opens. Returns true when live.
-  Future<bool> connectInBackground(String endpoint) async {
-    if (mode == GatewayMode.live) return true;
+  ///
+  /// With a [session] (the registered comma on Wi-Fi) a live socket to
+  /// another address is replaced once the new one is open: the comma got a
+  /// new IP, and its old socket can stay half-open for a long time after
+  /// the old address is gone.
+  Future<bool> connectInBackground(
+    String endpoint, {
+    GatewaySession? session,
+  }) async {
+    final moved =
+        mode == GatewayMode.live &&
+        session != null &&
+        connectedEndpoint != endpoint.trim();
+    if (mode == GatewayMode.live && !moved) return true;
     if (mode == GatewayMode.connecting || _backgroundAttempt) return false;
     if (LocalEndpointPolicy.validate(endpoint) != null) return false;
     _backgroundAttempt = true;
     try {
-      final socket = await _connectSocket(
+      final socket = await _open(
         endpoint.trim(),
+        session,
       ).timeout(const Duration(seconds: 5));
-      if (mode == GatewayMode.live || mode == GatewayMode.connecting) {
+      if (mode == GatewayMode.connecting ||
+          (mode == GatewayMode.live && !moved)) {
         // A manual connection started meanwhile; keep that one.
         unawaited(socket.close());
         return mode == GatewayMode.live;
       }
       _closeTransport();
       errorMessage = null;
-      _attach(socket, endpoint.trim());
+      _attach(socket, endpoint.trim(), authenticated: _authenticated(session));
       return true;
     } on Object {
       return false;
@@ -129,10 +148,30 @@ class GatewayController extends ChangeNotifier {
     }
   }
 
-  void _attach(WebSocket socket, String endpoint) {
+  /// A Wi-Fi URL only opens through a session for that comma: the token
+  /// and certificate check never get skipped.
+  Future<WebSocket> _open(String url, GatewaySession? session) {
+    final uri = Uri.parse(url);
+    if (session != null && !session.isClosed && session.covers(uri)) {
+      return session.openWebSocket(url);
+    }
+    if (uri.scheme == 'wss' && !LocalEndpointPolicy.isLoopbackHost(uri.host)) {
+      return Future.error(const SocketException('no session for this comma'));
+    }
+    return _connectSocket(url);
+  }
+
+  static bool _authenticated(GatewaySession? session) =>
+      session != null && session.sendsToken;
+
+  void _attach(
+    WebSocket socket,
+    String endpoint, {
+    bool authenticated = false,
+  }) {
     _socket = socket;
     connectedEndpoint = endpoint;
-    gatewayAuthenticated = false;
+    gatewayAuthenticated = authenticated;
     mode = GatewayMode.live;
     _socketSubscription = socket.listen(
       _handleMessage,
