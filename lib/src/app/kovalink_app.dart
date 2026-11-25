@@ -30,6 +30,12 @@ class KovaLinkApp extends StatefulWidget {
   final Future<Directory> Function()? storageRoot;
   final ModelFilePicker modelPicker;
 
+  static const accentColor = Color(0xFF58F2C2);
+
+  /// The app theme (also used by layout tests and review captures).
+  static ThemeData theme(Brightness brightness) =>
+      _KovaLinkAppState._theme(brightness, accentColor);
+
   @override
   State<KovaLinkApp> createState() => _KovaLinkAppState();
 }
@@ -115,7 +121,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF58F2C2);
+    const accent = KovaLinkApp.accentColor;
     return MaterialApp(
       title: 'KovaLink',
       debugShowCheckedModeBanner: false,

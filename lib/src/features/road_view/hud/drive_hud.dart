@@ -46,6 +46,33 @@ class DriveHud extends StatelessWidget {
         tbt.maneuver != TbtManeuver.straight &&
         tbt.maneuver != TbtManeuver.unknown &&
         tbt.distanceMeters <= 1000;
+    // Bottom parts stay above the home indicator / navigation bar.
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    return LayoutBuilder(
+      builder: (context, box) {
+        // Landscape phone (car mount): too short for the right-hand column
+        // above the buttons, so the turn sign moves under the speed and the
+        // signal pill sits between the speed and the limit sign.
+        final short = box.maxHeight < 520 && box.maxWidth > box.maxHeight;
+        return _buildStack(
+          tbt: tbt,
+          city: city,
+          showTurnSign: showTurnSign,
+          short: short,
+          bottomInset: bottomInset,
+        );
+      },
+    );
+  }
+
+  Widget _buildStack({
+    required TbtInstruction? tbt,
+    required bool city,
+    required bool showTurnSign,
+    required bool short,
+    required double bottomInset,
+  }) {
+    final small = compact || short;
     return DefaultTextStyle.merge(
       style: const TextStyle(color: HudColors.ink),
       child: Stack(
@@ -55,14 +82,26 @@ class DriveHud extends StatelessWidget {
             Positioned(
               left: 18,
               top: 14,
-              child: SpeedCluster(scene: scene, unit: unit, compact: compact),
+              child: short && showTurnSign && city
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SpeedCluster(scene: scene, unit: unit, compact: true),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: 180,
+                          child: TurnSign(instruction: tbt!),
+                        ),
+                      ],
+                    )
+                  : SpeedCluster(scene: scene, unit: unit, compact: small),
             ),
           Positioned(
-            top: compact ? (showNumbers ? 146 : 16) : 16,
-            left: 0,
-            right: 0,
+            top: short ? 16 : (compact ? (showNumbers ? 146 : 16) : 16),
+            left: short && showNumbers ? 200 : 0,
+            right: short && showNumbers ? 100 : 0,
             child: Center(
-              child: SignalPill(scene: scene, compact: compact),
+              child: SignalPill(scene: scene, compact: small),
             ),
           ),
           if (showNumbers)
@@ -74,22 +113,29 @@ class DriveHud extends StatelessWidget {
           if (showNumbers)
             Positioned(
               right: 18,
-              top: compact ? 204 : 108,
-              width: compact ? 250 : 300,
-              child: RouteInfoCard(scene: scene, unit: unit, compact: compact),
+              top: short ? 108 : (compact ? 204 : 108),
+              width: short ? 260 : (compact ? 250 : 300),
+              child: RouteInfoCard(scene: scene, unit: unit, compact: small),
             ),
-          if (showTurnSign && city)
+          if (showTurnSign && city && short && !showNumbers)
+            Positioned(
+              left: 18,
+              top: 16,
+              width: 180,
+              child: TurnSign(instruction: tbt!),
+            )
+          else if (showTurnSign && city && !short)
             Positioned(
               right: 18,
               top: compact ? 336 : 252,
               width: compact ? 180 : 210,
-              child: TurnSign(instruction: tbt),
+              child: TurnSign(instruction: tbt!),
             ),
           if (scene.laneGuidance.isNotEmpty)
             Positioned(
               left: 0,
               right: 0,
-              bottom: compact ? 84 : 26,
+              bottom: (compact && !short ? 84 : 26) + bottomInset,
               child: Center(
                 child: LaneGuidancePill(
                   lanes: scene.laneGuidance,

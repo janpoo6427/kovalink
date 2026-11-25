@@ -18,6 +18,7 @@ import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
 import 'package:kovalink/src/vehicle_pack/vehicle_model_library.dart';
 import 'package:kovalink/src/widgets/page_header.dart';
+import 'package:kovalink/src/widgets/readable_width.dart';
 
 /// Which settings the screen shows. They live in different places and are
 /// never mixed: the app's own settings (this phone), the current gateway
@@ -98,8 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ?settings,
         _kova,
       ]),
-      builder: (context, _) => ListView(
-        padding: const EdgeInsets.fromLTRB(20, 64, 20, 32),
+      builder: (context, _) => ReadableListView(
         children: [
           const PageHeader(title: '설정'),
           const SizedBox(height: 16),
@@ -112,17 +112,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ButtonSegment(
                   value: SettingsTab.app,
                   icon: Icon(Icons.phone_iphone, size: 18),
-                  label: Text('앱'),
+                  label: _TabLabel('앱'),
                 ),
                 ButtonSegment(
                   value: SettingsTab.session,
                   icon: Icon(Icons.cable, size: 18),
-                  label: Text('연결 상태'),
+                  label: _TabLabel('연결 상태'),
                 ),
                 ButtonSegment(
                   value: SettingsTab.kovapilot,
                   icon: Icon(Icons.directions_car_outlined, size: 18),
-                  label: Text('kovapilot'),
+                  label: _TabLabel('kovapilot'),
                 ),
               ],
               selected: {_tab},
@@ -178,6 +178,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+/// Tab label that shrinks to fit a narrow phone instead of wrapping.
+class _TabLabel extends StatelessWidget {
+  const _TabLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => FittedBox(
+    fit: BoxFit.scaleDown,
+    child: Text(text, maxLines: 1, softWrap: false),
+  );
 }
 
 /// Current gateway session facts. Nothing here is stored on the car.

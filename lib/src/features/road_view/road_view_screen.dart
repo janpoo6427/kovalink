@@ -117,7 +117,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                 ),
                 Positioned(
                   left: 18,
-                  bottom: 22,
+                  bottom: 22 + MediaQuery.paddingOf(context).bottom,
                   child: _ModeButton(
                     mode: mode,
                     onPressed: () => setState(() {
