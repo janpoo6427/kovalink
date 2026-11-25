@@ -225,7 +225,12 @@ KovaLink refuses a gateway whose `schemaVersion` major is not 1.
 - `access`: `readOnly` | `readWrite`. `applyPolicy`: `immediate` (used right
   away), `offroad` (may only change while the device is offroad), `parked`
   (may change offroad or in P with the vehicle stationary and disengaged), or `restart`
-  (used after openpilot restarts). `availability`/`applyStatus`: `available`,
+  (used when the consuming process next starts). Optional `savePolicy: anytime`
+  enables authorized saves independently of ignition and gear. Older
+  documents without the field keep their existing write restrictions.
+  A restart setting can report `applyState` of `awaitingStart`,
+  `pendingRestart`, or `applied` with the optional `appliedValue` from
+  the running process. `availability`/`applyStatus`: `available`,
   `pendingConsumer` (value is stored but nothing uses it yet), `unsupported`.
 - `device.offroad` comes from `IsOffroad`. Optional `device.parked` comes from
   fresh, valid vehicle and selfdrive messages. The gateway evaluates these
@@ -274,13 +279,14 @@ KovaLink write rules:
   a `200` document. A timeout or transport failure is never a success: the
   app re-reads the document and shows whatever the device holds (the device
   may have stored the value after the app gave up).
-- While the document says `device.offroad == false`, `offroad` and `restart`
-  settings are locked in the app. (The gateway itself rejects only `offroad`
-  settings unconditionally onroad.) `parked` settings remain locked until
-  either `device.offroad` or `device.parked` is true.
+- Older gateways use device state to guard `offroad`, `restart`, and
+  `parked` settings. Settings advertising `savePolicy: anytime` can be
+  saved with write permission in any vehicle state.
 - `risk: control` settings ask for confirmation first.
-- Writes are locked while the connection is stale (last read failed or older
-  than 45 s).
+- Link fetches the latest settings immediately before each write, then uses
+  that revision and permissions. If the value the user reviewed changed, Link
+  shows the current value and leaves the save for a new explicit request.
+  A failed preflight makes no update request.
 
 ### Wi-Fi connection
 

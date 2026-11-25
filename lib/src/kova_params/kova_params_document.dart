@@ -131,6 +131,9 @@ class KovaParamSetting {
     required this.value,
     required this.defaultValue,
     this.applyStatus,
+    this.saveAnytime = false,
+    this.applyState,
+    this.appliedValue,
     this.minimum,
     this.maximum,
     this.step,
@@ -148,6 +151,9 @@ class KovaParamSetting {
   final KovaApplyPolicy applyPolicy;
   final KovaAvailability availability;
   final String? applyStatus;
+  final bool saveAnytime;
+  final String? applyState;
+  final Object? appliedValue;
   final KovaRisk risk;
   final LocalizedText title;
   final LocalizedText? description;
@@ -213,6 +219,11 @@ class KovaParamSetting {
       applyStatus: json['applyStatus'] is String
           ? json['applyStatus'] as String
           : null,
+      saveAnytime: json['savePolicy'] == 'anytime',
+      applyState: json['applyState'] is String
+          ? json['applyState'] as String
+          : null,
+      appliedValue: json['appliedValue'],
       risk: _pick(KovaRisk.values, json['risk'], KovaRisk.unknown),
       title: title,
       description: LocalizedText.tryParse(json['description']),

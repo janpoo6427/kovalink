@@ -143,7 +143,10 @@ class KovaParamsController extends ChangeNotifier {
   };
 
   /// Why [setting] cannot be changed now, or null when it can.
-  String? lockReasonFor(KovaParamSetting setting) {
+  String? lockReasonFor(
+    KovaParamSetting setting, {
+    bool alreadySending = false,
+  }) {
     final lock = writeLock;
     if (lock != KovaWriteLock.none) return _shortLockReason(lock);
     if (setting.status == KovaAvailability.unsupported) {
@@ -160,18 +163,20 @@ class KovaParamsController extends ChangeNotifier {
       }
       return '읽기 전용 항목이에요.';
     }
-    if (setting.applyPolicy == KovaApplyPolicy.parked &&
+    if (!setting.saveAnytime &&
+        setting.applyPolicy == KovaApplyPolicy.parked &&
         document?.deviceParked != true &&
         document?.deviceOffroad != true) {
       return 'P에 두고 완전히 정차한 뒤 바꿀 수 있어요.';
     }
     final onroad = document?.deviceOffroad == false;
-    if (onroad &&
+    if (!setting.saveAnytime &&
+        onroad &&
         (setting.applyPolicy == KovaApplyPolicy.offroad ||
             setting.applyPolicy == KovaApplyPolicy.restart)) {
       return '시동을 끈 뒤 바꿀 수 있어요.';
     }
-    if (pending.containsKey(setting.key)) return '보내는 중이에요.';
+    if (!alreadySending && pending.containsKey(setting.key)) return '보내는 중이에요.';
     return null;
   }
 
@@ -243,7 +248,9 @@ class KovaParamsController extends ChangeNotifier {
   }
 
   Future<void> _read(KovaParamsClient client) async {
-    document = await client.fetch();
+    final fetched = await client.fetch();
+    if (_client != client) return;
+    document = fetched;
     lastReadAt = _clock();
   }
 
@@ -299,7 +306,11 @@ class KovaParamsController extends ChangeNotifier {
 
   /// Sends one change. The screen shows "보내는 중" until the gateway
   /// answers; only a 200 document changes the confirmed value.
-  Future<KovaUpdateOutcome?> setValue(String key, Object? value) async {
+  Future<KovaUpdateOutcome?> setValue(
+    String key,
+    Object? value, {
+    KovaParamSetting? reviewedSetting,
+  }) async {
     final client = _client;
     final current = document;
     final setting = current?.setting(key);
@@ -316,7 +327,48 @@ class KovaParamsController extends ChangeNotifier {
     notices[key] = const KovaSettingNotice(KovaNoticeKind.sending, '보내는 중…');
     _notify();
 
-    final outcome = await client.update(key, value, current.revision);
+    final refreshed = await refresh();
+    if (generation != _generation) return null;
+    if (!refreshed) {
+      pending.remove(key);
+      const message = '콤마의 현재 설정을 확인하지 못해 저장하지 않았어요.';
+      notices[key] = const KovaSettingNotice(KovaNoticeKind.failed, message);
+      _notify();
+      return const KovaUpdateFailed(message);
+    }
+    final latest = document!;
+    final refreshedSetting = latest.setting(key);
+    final reviewed = reviewedSetting ?? setting;
+    if (refreshedSetting == null ||
+        refreshedSetting.value != reviewed.value ||
+        refreshedSetting.type != reviewed.type ||
+        refreshedSetting.risk != reviewed.risk ||
+        refreshedSetting.applyPolicy != reviewed.applyPolicy) {
+      pending.remove(key);
+      notices[key] = KovaSettingNotice(
+        KovaNoticeKind.conflict,
+        refreshedSetting == null
+            ? '콤마의 설정 항목이 바뀌었어요. 다시 확인해 주세요.'
+            : '다른 곳에서 먼저 바뀌었어요. 지금 값: '
+                  '${refreshedSetting.describe(refreshedSetting.value, defaultLocale: latest.defaultLocale)}'
+                  '${refreshedSetting.value == reviewed.value ? '' : ', 이전: ${reviewed.describe(reviewed.value, defaultLocale: current.defaultLocale)}'}',
+      );
+      _notify();
+      return const KovaUpdateConflict();
+    }
+    final lock = lockReasonFor(refreshedSetting, alreadySending: true);
+    final rejection = lock ?? refreshedSetting.check(value);
+    if (rejection != null) {
+      pending.remove(key);
+      notices[key] = KovaSettingNotice(KovaNoticeKind.rejected, rejection);
+      _notify();
+      return KovaUpdateRejected(
+        code: lock == null ? 'invalid_value' : 'update_forbidden',
+        statusCode: lock == null ? 400 : 403,
+        reason: rejection,
+      );
+    }
+    final outcome = await client.update(key, value, latest.revision);
     if (generation != _generation) return outcome;
     pending.remove(key);
     final locale = current.defaultLocale;

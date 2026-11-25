@@ -231,6 +231,34 @@ void main() {
     expect(find.byKey(const ValueKey('kova-lock-e2e.level')), findsNothing);
   });
 
+  testWidgets(
+    'onroad a saved restart setting stays editable and shows pending',
+    (tester) async {
+      gateway.offroad = false;
+      final setting = (gateway.catalog['settings'] as List)
+          .cast<Map<String, dynamic>>()
+          .firstWhere((setting) => setting['key'] == 'e2e.level');
+      setting
+        ..['applyPolicy'] = 'restart'
+        ..['savePolicy'] = 'anytime'
+        ..['applyState'] = 'pendingRestart'
+        ..['appliedValue'] = 4;
+      await kova.connect('http://127.0.0.1:18082');
+      await _pumpPanel(tester, kova);
+      expect(
+        tester
+            .widget<Slider>(find.byKey(const ValueKey('kova-slider-e2e.level')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(find.text('저장됨 · 다음 시작 때 적용'), findsOneWidget);
+      setting['applyState'] = 'applied';
+      await kova.refresh();
+      await tester.pump();
+      expect(find.text('적용됨'), findsOneWidget);
+    },
+  );
+
   testWidgets('P unlocks parked settings without unlocking offroad settings', (
     tester,
   ) async {
