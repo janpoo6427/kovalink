@@ -1,6 +1,10 @@
 # KovaLink 설치 파일
 
-- kovalink-1.0.0-7835b96-arm64-v8a.apk: arm64 휴대폰용 최신판, 7835b96(master) 빌드, 개발용 키 서명(Play 스토어용 아님)
+- `kovalink-1.0.0-5e9d600-arm64-v8a.apk`는 `master@5e9d600`의 Android arm64 빌드입니다.
+  - **연결 → 콤마 등록**에서 콤마를 찾거나 IP를 직접 입력하고, Gateway 설정 때 사용한 토큰과 인증서 지문으로 등록할 수 있습니다.
+  - 이 빌드는 이전 배포본과 서명이 다릅니다. 기존 앱을 제거한 뒤 설치하세요.
+  - 콤마는 kovapilot `master-jh@cf3f7d038` 이상으로 업데이트하고 Gateway를 한 번 설정해야 합니다. [Gateway 설정 안내](https://github.com/janpoo6427/kovapilot/blob/cf3f7d038b5d9794b30df9b6b5dfb105f3863896/docs/kovapilot/KOVALINK_GATEWAY.md)
+- kovalink-1.0.0-7835b96-arm64-v8a.apk: arm64 휴대폰용, 7835b96(master) 빌드, 개발용 키 서명(Play 스토어용 아님)
   - 주행 화면 위 속도 칸을 세 자리(888) 폭으로 고정했어요. 0부터 199까지 속도가 바뀌어도 속도 칸과 옆 표시의 자리가 그대로예요
   - 속도 숫자는 카메라가 없거나 어두운 화면에서도 읽히게 했어요
   - 기어(P R N D)는 어두운 캡슐 위에 올려서 밝은 하늘·눈 배경에서도 잘 보여요
