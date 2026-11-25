@@ -295,3 +295,47 @@ writes; `GatewayController.gatewayAuthenticated` and `canEditSettings`
 `test/kovapilot_gateway_e2e_test.dart` drives a real gateway process through
 `tool/e2e/kovapilot_gateway_hook.sh` (container with `--network host`, an
 isolated `PARAMS_ROOT`). It is skipped unless `KOVA_E2E_GATEWAY_HOOK` is set.
+
+## Git maintenance HTTP (kovapilot version screen)
+
+Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md` at
+`master-jh@7cc3b3280`. Client: `lib/src/kovapilot_git/`; screen:
+설정 → kovapilot → kovapilot 버전 (`/settings/kovapilot/version`).
+
+| Request | Answer |
+| --- | --- |
+| `GET /v1/git/status` | `{branch\|null, head, upstream\|null, dirty, updaterState\|null, mutationEnabled: false}` |
+| `GET /v1/git/branches` | `{branches: [{name, commit}]}` (fetched `origin/*` refs, no `origin/HEAD`) |
+| `GET /v1/git/log?limit=1..100&cursor=0..10000` | `{entries: [{commit, parents, authorTime, subject}], nextCursor\|null}` (HEAD history) |
+| `POST /v1/git/plan` `{operation: switch\|reset, branch, commit?}` | `{operation, branch, commit, branchHead, beforeHead, beforeBranch, dirty, requiresRestart, mutationEnabled: false, changedFileCount, planDigest}` |
+| `POST /v1/git/apply` | `403 git_mutation_disabled` |
+
+- A switch sends no commit; a reset sends a full 40-character SHA that must
+  be in the chosen origin branch's history. Short SHAs and out-of-range
+  pages are refused in the app before sending.
+- Errors: `400 invalid_git_request`, `503 git_busy` (one inspection at a time;
+  the app reads status, branches and log one after another),
+  `503 git_unavailable`, `403 local_client_required`. Each is one plain line on
+  screen; the gateway's message is never shown.
+- Every switch/reset is a preview. 적용 is drawn but off with its reason
+  ("콤마에서 아직 바꾸기를 허용하지 않아요."); the app never sends
+  `/v1/git/apply` (`KovaGitClient.apply` exists only for the 403 test).
+
+### Loopback-only gateway (`403 local_client_required`)
+
+The gateway binds `127.0.0.1:8082` and refuses any request whose peer is not
+loopback, that carries an `Origin` header, or whose `Host` is not
+`localhost`/`127.0.0.1`/`[::1]`. A phone on Wi-Fi therefore cannot use it
+yet. When some proxy or a future LAN bind still answers with this 403, the
+app says "콤마를 찾았지만 아직 휴대폰 연결을 허용하지 않아요" — in 자동 연결
+(`ProbeOutcome.localOnly`, never "콤마가 아니에요"), the settings client and
+the version screen. Authenticated LAN access is a later gateway step.
+
+### End-to-end test
+
+`test/kovapilot_git_e2e_test.dart` runs kovapilot's own `create_app` and
+`GitRepository` (no kovapilot change) in the dev container through
+`tool/e2e/kovapilot_git_gateway_hook.sh` and
+`tool/e2e/git_gateway_fixture.py`, against a throwaway repository (4 origin
+branches, 25 commits; dirty, updater text, hidden checkout and slow-git
+switches). Skipped unless `KOVA_E2E_GIT_HOOK` is set.

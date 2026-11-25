@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/features/kovapilot_git/kovapilot_version_screen.dart';
 import 'package:kovalink/src/features/road_view/render_quality.dart';
 import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
@@ -145,6 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               address: _settingsAddress,
               now: widget.now,
             ),
+            KovapilotVersionEntry(endpoint: _kova.endpoint ?? _settingsAddress),
           ] else if (_tab == SettingsTab.session)
             _SessionSection(
               controller: controller,
