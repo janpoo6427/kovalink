@@ -30,13 +30,23 @@ class ThermionWidget extends StatefulWidget {
     Key? key,
     required ThermionViewerFactory viewerFactory,
     Widget initial = const SizedBox.shrink(),
-  }) : this._(key: key, viewerFactory: viewerFactory, initial: initial);
+    VoidCallback? onTextureReady,
+    void Function(Object error)? onError,
+  }) : this._(
+         key: key,
+         viewerFactory: viewerFactory,
+         initial: initial,
+         onTextureReady: onTextureReady,
+         onError: onError,
+       );
 
   const ThermionWidget._({
     super.key,
     this.viewer,
     this.viewerFactory,
     this.initial = const SizedBox.shrink(),
+    this.onTextureReady,
+    this.onError,
   });
 
   /// The viewer whose content will be rendered, when supplied by the caller.
@@ -47,6 +57,15 @@ class ThermionWidget extends StatefulWidget {
 
   /// Displayed until a viewer returned by [viewerFactory] is ready.
   final Widget initial;
+
+  /// KovaLink: called after a platform texture was allocated, bound and a
+  /// first frame submitted into it (once per allocation).
+  final VoidCallback? onTextureReady;
+
+  /// KovaLink: called with errors that are otherwise only reported to
+  /// [FlutterError] (viewer creation, texture allocation/binding), so the
+  /// caller can switch to another renderer instead of showing nothing.
+  final void Function(Object error)? onError;
 
   @override
   State<ThermionWidget> createState() => _ThermionWidgetState();
@@ -77,6 +96,7 @@ class _ThermionWidgetState extends State<ThermionWidget> {
     unawaited(
       _initializeViewer().catchError((Object error, StackTrace stack) {
         if (_disposing) return;
+        widget.onError?.call(error);
         FlutterError.reportError(
           FlutterErrorDetails(
             exception: error,
@@ -152,6 +172,8 @@ class _ThermionWidgetState extends State<ThermionWidget> {
             surfaceWidgetBuilder: surfaceWidgetBuilder,
             onTexturePreparing: (descriptor) =>
                 _prepareTexture(viewer, descriptor),
+            onTextureReady: widget.onTextureReady,
+            onError: widget.onError,
           );
     if (!_requiresContextBootstrap) return child;
     return ThermionTextureBootstrap(
@@ -191,11 +213,19 @@ class ThermionWidgetInternal extends StatefulWidget {
   final Future<void> Function(PlatformTextureDescriptor descriptor)?
   onTexturePreparing;
 
+  /// KovaLink: see [ThermionWidget.onTextureReady].
+  final VoidCallback? onTextureReady;
+
+  /// KovaLink: see [ThermionWidget.onError].
+  final void Function(Object error)? onError;
+
   const ThermionWidgetInternal({
     super.key,
     required this.view,
     required this.surfaceWidgetBuilder,
     this.onTexturePreparing,
+    this.onTextureReady,
+    this.onError,
   });
 
   @override
@@ -403,6 +433,7 @@ class _ThermionWidgetInternalState extends State<ThermionWidgetInternal> {
       _currentWidth = width;
       _currentHeight = height;
     });
+    widget.onTextureReady?.call();
 
     if (staged && !identical(previousTexture, texture)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -424,6 +455,7 @@ class _ThermionWidgetInternalState extends State<ThermionWidgetInternal> {
       try {
         await operation();
       } catch (exception, stack) {
+        if (!_disposing) widget.onError?.call(exception);
         FlutterError.reportError(
           FlutterErrorDetails(
             exception: exception,

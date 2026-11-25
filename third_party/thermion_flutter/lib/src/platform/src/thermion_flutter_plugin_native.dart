@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 // ignore: implementation_imports
 import 'package:thermion_dart/src/filament/src/implementation/ffi_filament_app.dart';
 
+import 'frame_scheduler.dart';
 import 'native_rendering_lifecycle_controller.dart';
 import 'native_texture_surface_manager.dart';
 import 'platform_texture_descriptor.dart';
@@ -160,6 +161,9 @@ class ThermionFlutterPluginImpl extends ThermionFlutterPlugin {
   void resumeFrameScheduler() {
     _lifecycle.resumeExplicitly();
   }
+
+  @override
+  int get renderedFrameCount => FrameScheduler.instance.dispatchedFrameCount;
 
   @internal
   @override

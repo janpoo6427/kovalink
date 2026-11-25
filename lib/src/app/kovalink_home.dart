@@ -21,6 +21,7 @@ class KovaLinkHome extends StatefulWidget {
     this.library,
     this.modelPicker = pickModelFileWithSystemPicker,
     this.gpuSurfaceBuilder,
+    this.gpuViewHost,
     this.director,
     this.kovaParams,
     super.key,
@@ -37,6 +38,7 @@ class KovaLinkHome extends StatefulWidget {
 
   /// Capture/test hooks forwarded to [RoadViewScreen].
   final GpuSurfaceBuilder? gpuSurfaceBuilder;
+  final GpuViewHost? gpuViewHost;
   final SceneDirector? director;
 
   @override
@@ -129,6 +131,7 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
         controller: widget.controller,
         vehicleModel: widget.vehicleModel,
         gpuSurfaceBuilder: widget.gpuSurfaceBuilder,
+        gpuViewHost: widget.gpuViewHost,
         director: widget.director,
       );
     }
@@ -150,6 +153,7 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
               nativeVehicleOverlay: value.nativeVehicleOverlay,
               renderQuality: value.renderQuality,
               gpuSurfaceBuilder: widget.gpuSurfaceBuilder,
+              gpuViewHost: widget.gpuViewHost,
               director: widget.director,
             ),
             if (value.brightness < 1)
