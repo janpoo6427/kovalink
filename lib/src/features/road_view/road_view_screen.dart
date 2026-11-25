@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -99,6 +101,12 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
         return LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 680;
+            final notice = HudLayout(
+              constraints.biggest,
+              compact: compact,
+              showNumbers: widget.showHud,
+              bottomInset: MediaQuery.paddingOf(context).bottom,
+            ).noticeArea;
             final frame = _director.update(
               scene,
               constraints.biggest,
@@ -108,7 +116,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
             return Stack(
               fit: StackFit.expand,
               children: [
-                _buildRoadSurface(scene, frame),
+                _buildRoadSurface(scene, frame, notice),
                 DriveHud(
                   scene: scene,
                   compact: compact,
@@ -138,7 +146,11 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
   VehicleModelLoadResult get _vehicleModel =>
       widget.vehicleModel?.value ?? VehicleModelLoadResult.bundledDefault;
 
-  Widget _buildRoadSurface(RoadScene scene, DirectorFrame frame) {
+  Widget _buildRoadSurface(
+    RoadScene scene,
+    DirectorFrame frame,
+    NoticeArea notice,
+  ) {
     if (mode == RoadViewMode.scene) {
       final vehicleModel = _vehicleModel;
       final glbAssetPath = vehicleModel.glbAssetPath;
@@ -237,6 +249,7 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
       return _CameraPlaceholder(
         status: stream.status,
         errorMessage: stream.errorMessage,
+        notice: notice,
       );
     }
 
@@ -259,11 +272,10 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
             ),
           ),
         if (mode == RoadViewMode.overlay && scene.cameraProjection == null)
-          const Positioned(
-            left: 18,
-            right: 18,
-            top: 116,
-            child: _CalibrationWarning(),
+          _NoticeSlot(
+            notice: notice,
+            maxWidth: 360,
+            child: const _CalibrationWarning(),
           ),
       ],
     );
@@ -353,13 +365,18 @@ class _CalibrationWarning extends StatelessWidget {
 }
 
 class _CameraPlaceholder extends StatelessWidget {
-  const _CameraPlaceholder({required this.status, this.errorMessage});
+  const _CameraPlaceholder({
+    required this.status,
+    required this.notice,
+    this.errorMessage,
+  });
   final RoadStreamStatus status;
+  final NoticeArea notice;
   final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -367,29 +384,127 @@ class _CameraPlaceholder extends StatelessWidget {
           colors: [Color(0xFF1B2939), Color(0xFF070B11)],
         ),
       ),
-      child: Center(
-        child: LiquidGlass(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.videocam_off_outlined, size: 44),
-              const SizedBox(height: 12),
-              Text(
-                status == RoadStreamStatus.connecting
-                    ? '카메라 연결 중'
-                    : '카메라가 연결되지 않았어요',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                errorMessage ?? '연결 화면에서 카메라를 켜 주세요.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFB5C0CB), fontSize: 12),
-              ),
-            ],
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _NoticeSlot(
+            notice: notice,
+            maxWidth: 380,
+            child: _CameraNotice(
+              title: status == RoadStreamStatus.connecting
+                  ? '카메라 연결 중'
+                  : '카메라가 연결되지 않았어요',
+              detail: errorMessage ?? '연결 화면에서 카메라를 켜 주세요.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Puts a notice in the room the HUD leaves free (see
+/// [HudLayout.noticeArea]): never under the HUD parts, the bottom buttons
+/// or a navigation app's overlay on the right. Scales down instead of
+/// overflowing when the room is tight.
+class _NoticeSlot extends StatelessWidget {
+  const _NoticeSlot({
+    required this.notice,
+    required this.maxWidth,
+    required this.child,
+  });
+
+  final NoticeArea notice;
+  final double maxWidth;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Positioned.fromRect(
+    rect: notice.area,
+    child: LayoutBuilder(
+      builder: (context, box) => Align(
+        alignment: notice.alignment,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: notice.alignment,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.max(120, math.min(maxWidth, box.maxWidth)),
+            ),
+            child: child,
           ),
         ),
       ),
+    ),
+  );
+}
+
+/// Lets Korean text wrap only between words: Flutter otherwise breaks
+/// lines between any two syllables ("연결되 / 지"). Word joiners (U+2060,
+/// invisible) go between the letters of each word.
+String _keepWords(String text) =>
+    text.split(' ').map((word) => word.characters.join('\u2060')).join(' ');
+
+/// Camera state card: icon beside the text when there is room for one
+/// row, icon above it on narrow spots.
+class _CameraNotice extends StatelessWidget {
+  const _CameraNotice({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final wide = box.maxWidth >= 300;
+        final titleText = Text(
+          _keepWords(title),
+          textAlign: wide ? TextAlign.start : TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        );
+        final detailText = Text(
+          _keepWords(detail),
+          textAlign: wide ? TextAlign.start : TextAlign.center,
+          style: const TextStyle(color: Color(0xFFB5C0CB), fontSize: 12),
+        );
+        const icon = Icon(Icons.videocam_off_outlined, size: 32);
+        return LiquidGlass(
+          key: const ValueKey('camera-notice'),
+          padding: wide
+              ? const EdgeInsets.fromLTRB(16, 12, 20, 12)
+              : const EdgeInsets.all(12),
+          child: wide
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    icon,
+                    const SizedBox(width: 14),
+                    Flexible(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          titleText,
+                          const SizedBox(height: 4),
+                          detailText,
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    icon,
+                    const SizedBox(height: 8),
+                    titleText,
+                    const SizedBox(height: 4),
+                    detailText,
+                  ],
+                ),
+        );
+      },
     );
   }
 }
