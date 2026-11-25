@@ -461,8 +461,8 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
     if (control == KovaParamControl.toggle) {
       trailing = Switch(
         key: ValueKey('kova-toggle-${s.key}'),
-        value: shown == true,
-        onChanged: editable ? (v) => _change(v) : null,
+        value: s.isToggleOn(shown),
+        onChanged: editable ? (v) => _change(s.toggleValue(v)) : null,
       );
     } else if (control != KovaParamControl.slider) {
       trailing = Text(

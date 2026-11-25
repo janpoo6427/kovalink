@@ -172,6 +172,36 @@ void main() {
     expect(find.text('활발하게'), findsWidgets);
   });
 
+  testWidgets('numeric switch sends integer values in both directions', (
+    tester,
+  ) async {
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((setting) => setting['key'] == 'steering.always_on');
+    setting
+      ..['type'] = 'enum'
+      ..['control'] = 'switch'
+      ..['options'] = [0, 1]
+      ..['defaultValue'] = 0
+      ..['optionTitles'] = {
+        '0': {'ko': '끔', 'en': 'Off'},
+        '1': {'ko': '켬', 'en': 'On'},
+      };
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    final toggle = find.byKey(const ValueKey('kova-toggle-steering.always_on'));
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    for (final value in [1, 0]) {
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('kova-confirm-change')));
+      await tester.pumpAndSettle();
+      expect(gateway.posts.last['value'], isA<int>());
+      expect(gateway.posts.last['value'], value);
+      expect(tester.widget<Switch>(toggle).value, value == 1);
+    }
+  });
+
   testWidgets('number input rejects out-of-range text locally', (tester) async {
     await kova.connect('http://127.0.0.1:18082');
     await _pumpPanel(tester, kova);

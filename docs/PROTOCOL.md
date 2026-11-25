@@ -207,7 +207,8 @@ KovaLink refuses a gateway whose `schemaVersion` major is not 1.
   "settings": [
     {
       "key": "steering.always_on", "groupId": "steering", "order": 100,
-      "type": "boolean", "defaultValue": false, "value": true,
+      "type": "enum", "control": "switch", "options": [0, 1],
+      "defaultValue": 0, "value": 1,
       "title": {"ko": "항시 조향", "en": "Always-on steering"},
       "description": {"ko": "…", "en": "…"},
       "access": "readWrite", "risk": "control", "applyPolicy": "offroad",
@@ -222,6 +223,8 @@ KovaLink refuses a gateway whose `schemaVersion` major is not 1.
 - `integer`/`number` may add `minimum`, `maximum`, `step` and a localized
   `unit`. `enum` has `options` (strings or integers, matched with the exact
   JSON type) and may add localized `optionTitles` keyed by the option text.
+  The bundled settings use numeric values. A numeric switch declares
+  `"control": "switch"` with enum options `[0, 1]`, for off and on.
 - `access`: `readOnly` | `readWrite`. `applyPolicy`: `immediate` (used right
   away), `offroad` (may only change while the device is offroad), `parked`
   (may change offroad or in P with the vehicle stationary and disengaged), or `restart`
@@ -242,7 +245,7 @@ KovaLink parsing rules:
 - Unknown fields are ignored. A minor version (`"1.4"`) is accepted; any
   other major `schemaVersion` closes the document (nothing is drawn).
 - Text is shown in Korean, then English, then `defaultLocale`.
-- Widgets: `boolean` → switch; ranged `integer`/`number` → slider plus number
+- Widgets: numeric switch or legacy `boolean` → switch; ranged `integer`/`number` → slider plus number
   input; unranged numbers → number input; `enum` → pick sheet; `string`,
   `readOnly`, an unknown `type`/`access`/`applyPolicy`, or a current value that
   does not fit its type → read-only. `hidden: true` or `visibility: "hidden"`
@@ -255,7 +258,7 @@ KovaLink parsing rules:
 Request body has exactly these fields:
 
 ```json
-{"key": "steering.always_on", "value": true, "expectedRevision": 3}
+{"key": "steering.always_on", "value": 1, "expectedRevision": 3}
 ```
 
 | Status | `error.code` | Meaning | KovaLink |

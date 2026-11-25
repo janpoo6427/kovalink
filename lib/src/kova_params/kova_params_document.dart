@@ -139,6 +139,7 @@ class KovaParamSetting {
     this.step,
     this.unit,
     this.options = const [],
+    this.numericSwitch = false,
     this.hidden = false,
     this.requiredCapabilities = const [],
   });
@@ -164,6 +165,7 @@ class KovaParamSetting {
   final num? step;
   final LocalizedText? unit;
   final List<KovaParamOption> options;
+  final bool numericSwitch;
   final bool hidden;
   final List<String> requiredCapabilities;
 
@@ -234,6 +236,12 @@ class KovaParamSetting {
       step: _finite(json['step']),
       unit: LocalizedText.tryParse(json['unit']),
       options: options,
+      numericSwitch:
+          type == KovaParamType.choice &&
+          json['control'] == 'switch' &&
+          options.length == 2 &&
+          options.any((option) => option.matches(0)) &&
+          options.any((option) => option.matches(1)),
       hidden: json['hidden'] == true || json['visibility'] == 'hidden',
       requiredCapabilities: [
         if (capabilities is List)
@@ -284,13 +292,22 @@ class KovaParamSetting {
       KovaParamType.integer || KovaParamType.number =>
         hasRange ? KovaParamControl.slider : KovaParamControl.numberField,
       KovaParamType.choice =>
-        options.isEmpty ? KovaParamControl.readOnly : KovaParamControl.choice,
+        numericSwitch
+            ? KovaParamControl.toggle
+            : options.isEmpty
+            ? KovaParamControl.readOnly
+            : KovaParamControl.choice,
       // The contract has no string constraints yet, so strings are shown
       // but not edited.
       KovaParamType.string ||
       KovaParamType.unknown => KovaParamControl.readOnly,
     };
   }
+
+  Object toggleValue(bool enabled) =>
+      numericSwitch ? (enabled ? 1 : 0) : enabled;
+
+  bool isToggleOn(Object? value) => numericSwitch ? value == 1 : value == true;
 
   String formatNumber(num? v) {
     if (v == null) return '';
