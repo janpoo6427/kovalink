@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:kovalink/src/models/display_units.dart';
 import 'package:kovalink/src/models/road_scene.dart';
@@ -40,8 +42,8 @@ class DriveHud extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tbt = scene.tbt;
-    final city = scene.roadType == RoadType.city;
     final showTurnSign =
+        scene.roadType == RoadType.city &&
         tbt != null &&
         tbt.maneuver != TbtManeuver.straight &&
         tbt.maneuver != TbtManeuver.unknown &&
@@ -49,30 +51,21 @@ class DriveHud extends StatelessWidget {
     // Bottom parts stay above the home indicator / navigation bar.
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return LayoutBuilder(
-      builder: (context, box) {
-        // Landscape phone (car mount): too short for the right-hand column
-        // above the buttons, so the turn sign moves under the speed and the
-        // signal pill sits between the speed and the limit sign.
-        final short = box.maxHeight < 520 && box.maxWidth > box.maxHeight;
-        return _buildStack(
-          tbt: tbt,
-          city: city,
-          showTurnSign: showTurnSign,
-          short: short,
+      builder: (context, box) => _buildStack(
+        HudLayout(
+          box.biggest,
+          compact: compact,
+          showNumbers: showNumbers,
           bottomInset: bottomInset,
-        );
-      },
+        ),
+        turnSign: showTurnSign ? tbt : null,
+      ),
     );
   }
 
-  Widget _buildStack({
-    required TbtInstruction? tbt,
-    required bool city,
-    required bool showTurnSign,
-    required bool short,
-    required double bottomInset,
-  }) {
-    final small = compact || short;
+  Widget _buildStack(HudLayout layout, {required TbtInstruction? turnSign}) {
+    final short = layout.short;
+    final small = layout.small;
     return DefaultTextStyle.merge(
       style: const TextStyle(color: HudColors.ink),
       child: Stack(
@@ -80,66 +73,65 @@ class DriveHud extends StatelessWidget {
         children: [
           if (showNumbers)
             Positioned(
-              left: 18,
-              top: 14,
-              child: short && showTurnSign && city
+              left: HudLayout.margin,
+              top: HudLayout.speedTop,
+              child: short && turnSign != null
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SpeedCluster(scene: scene, unit: unit, compact: true),
                         const SizedBox(height: 14),
                         SizedBox(
-                          width: 180,
-                          child: TurnSign(instruction: tbt!),
+                          width: layout.turnSignWidth,
+                          child: TurnSign(
+                            instruction: turnSign,
+                            showNext: !layout.tight,
+                          ),
                         ),
                       ],
                     )
                   : SpeedCluster(scene: scene, unit: unit, compact: small),
             ),
-          Positioned(
-            top: short ? 16 : (compact ? (showNumbers ? 146 : 16) : 16),
-            left: short && showNumbers ? 200 : 0,
-            right: short && showNumbers ? 100 : 0,
-            child: Center(
-              child: SignalPill(scene: scene, compact: small),
-            ),
+          Positioned.fromRect(
+            rect: layout.signalRow,
+            child: SignalPill(scene: scene, compact: small),
           ),
           if (showNumbers)
             Positioned(
-              right: 18,
-              top: 14,
+              right: HudLayout.margin,
+              top: HudLayout.speedTop,
               child: SpeedLimitSign(limitKph: scene.speedLimitKph, unit: unit),
             ),
           if (showNumbers)
             Positioned(
-              right: 18,
-              top: short ? 108 : (compact ? 204 : 108),
-              width: short ? 260 : (compact ? 250 : 300),
+              right: HudLayout.margin,
+              top: layout.routeCardTop,
+              width: layout.routeCardWidth,
               child: RouteInfoCard(scene: scene, unit: unit, compact: small),
             ),
-          if (showTurnSign && city && short && !showNumbers)
+          if (turnSign != null && short && !showNumbers)
             Positioned(
-              left: 18,
+              left: HudLayout.margin,
               top: 16,
-              width: 180,
-              child: TurnSign(instruction: tbt!),
+              width: layout.turnSignWidth,
+              child: TurnSign(instruction: turnSign),
             )
-          else if (showTurnSign && city && !short)
+          else if (turnSign != null && !short)
             Positioned(
-              right: 18,
-              top: compact ? 336 : 252,
-              width: compact ? 180 : 210,
-              child: TurnSign(instruction: tbt!),
+              right: HudLayout.margin,
+              top: layout.turnSignTop,
+              width: layout.turnSignWidth,
+              child: TurnSign(instruction: turnSign),
             ),
           if (scene.laneGuidance.isNotEmpty)
             Positioned(
               left: 0,
               right: 0,
-              bottom: (compact && !short ? 84 : 26) + bottomInset,
+              bottom: layout.laneBottom,
               child: Center(
                 child: LaneGuidancePill(
                   lanes: scene.laneGuidance,
-                  distanceMeters: tbt?.distanceMeters,
+                  distanceMeters: scene.tbt?.distanceMeters,
                 ),
               ),
             ),
@@ -147,6 +139,165 @@ class DriveHud extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Room for a road view notice and where in it the notice sits.
+typedef NoticeArea = ({Rect area, Alignment alignment});
+
+/// Where the HUD puts its parts on a road view of [size]. Every spot is
+/// fixed for a screen shape, so nothing moves when a part comes or goes
+/// (a traffic light, the turn sign). The road view uses it too, to keep
+/// its own notices clear of the HUD and of [navOverlayZone].
+class HudLayout {
+  HudLayout(
+    this.size, {
+    required this.compact,
+    required this.showNumbers,
+    this.bottomInset = 0,
+  }) : short = size.height < 520 && size.width > size.height;
+
+  final Size size;
+
+  /// Narrow road view (phones, small tablets in portrait).
+  final bool compact;
+  final bool showNumbers;
+
+  /// Home indicator / navigation bar under the road view.
+  final double bottomInset;
+
+  /// Landscape phone (car mount): too short for the right-hand column
+  /// above the buttons, so the turn sign moves under the speed and the
+  /// signal row sits between the speed and the limit sign.
+  final bool short;
+
+  static const margin = 18.0;
+  static const gap = 12.0;
+  static const speedTop = 14.0;
+
+  /// Speed number and pills in their small size.
+  static const smallSpeedHeight = 112.0;
+
+  /// Room kept for the turn sign (its rows follow the text size).
+  static const turnSignHeight = 120.0;
+
+  /// Room kept for the lane guidance pill.
+  static const laneHeight = 50.0;
+
+  /// Smallest room for a notice card on one row (icon beside the text).
+  static const minNoticeHeight = 76.0;
+
+  /// Left edge the signal row keeps clear of on wide screens: a 3-digit
+  /// speed in the large type with the unit and gear column.
+  static const largeSpeedClear = 264.0;
+
+  /// Right edge the signal row keeps clear of: the limit sign.
+  static const limitClear = margin + 64 + gap;
+
+  bool get small => compact || short;
+
+  /// Landscape screens too low for the full turn sign under the speed
+  /// (Fold cover screen on a mount): the sign drops its second row.
+  bool get tight => short && size.height - bottomInset < 330;
+
+  double get signalTop =>
+      short ? 16 : (compact ? (showNumbers ? 146 : 16) : 16);
+
+  /// The blinker row: same place and size with or without a traffic
+  /// light.
+  Rect get signalRow {
+    final left = short && showNumbers ? 200.0 : 0.0;
+    final right = size.width - (short && showNumbers ? 100.0 : 0.0);
+    final width = math.min(SignalPill.width, math.max(0.0, right - left));
+    var x = (left + right - width) / 2;
+    if (showNumbers && !small) {
+      // Same row as the large speed and the limit sign: centered when it
+      // clears both, else nudged right of the speed.
+      final max = size.width - limitClear - width;
+      if (max >= largeSpeedClear) x = x.clamp(largeSpeedClear, max);
+    }
+    return Rect.fromLTWH(x, signalTop, width, SignalPill.height);
+  }
+
+  double get routeCardTop => short ? 108 : (compact ? 204 : 108);
+  double get routeCardWidth => short ? 260 : (compact ? 250 : 300);
+
+  /// Room kept for the route card (its height follows the rows).
+  double get routeCardHeight => small ? 100 : 116;
+
+  double get turnSignTop => compact ? 336 : 252;
+
+  /// A bit narrower on the narrowest phones, so a notice fits beside it.
+  double get turnSignWidth =>
+      compact || short ? (size.width < 380 ? 160 : 180) : 210;
+
+  /// Lane guidance pill, from the bottom of the road view.
+  double get laneBottom => (compact && !short ? 84 : 26) + bottomInset;
+
+  /// Right middle of the screen: navigation apps (T map and the like)
+  /// float their own turn overlay there, over other apps. KovaLink does
+  /// not draw it; its notices just stay out of the way.
+  Rect get navOverlayZone => Rect.fromLTRB(
+    size.width * 0.6,
+    size.height * 0.35,
+    size.width,
+    size.height * 0.65,
+  );
+
+  /// Free room for the road view's own notices (camera not connected,
+  /// calibration): clear of every HUD part (also the ones not showing
+  /// right now), the bottom buttons and [navOverlayZone], plus where in
+  /// it the notice sits.
+  NoticeArea get noticeArea {
+    final bottom = size.height - laneBottom - laneHeight - gap;
+    final zone = navOverlayZone;
+    if (short) {
+      // Between the speed / turn sign column and the route card.
+      final top =
+          math.max(
+            signalRow.bottom,
+            showNumbers ? speedTop + smallSpeedHeight : 0,
+          ) +
+          gap;
+      final right =
+          math.min(
+            showNumbers
+                ? size.width - margin - routeCardWidth
+                : size.width - margin,
+            zone.left,
+          ) -
+          gap;
+      return (
+        area: _rect(margin + turnSignWidth + gap, top, right, bottom),
+        alignment: Alignment.center,
+      );
+    }
+    // Under the right column (route card, turn sign), above the lane
+    // guidance: the notice sits low, below the navigation overlay.
+    final under =
+        math.max(
+          math.max(turnSignTop + turnSignHeight, signalRow.bottom),
+          zone.bottom,
+        ) +
+        gap;
+    if (bottom - under >= minNoticeHeight) {
+      return (
+        area: _rect(margin, under, size.width - margin, bottom),
+        alignment: Alignment.bottomCenter,
+      );
+    }
+    // Short screens: left of the turn sign, under the route card.
+    final top =
+        (showNumbers ? routeCardTop + routeCardHeight : signalRow.bottom) + gap;
+    final right =
+        math.min(size.width - margin - turnSignWidth, zone.left) - gap;
+    return (
+      area: _rect(margin, top, right, bottom),
+      alignment: Alignment.center,
+    );
+  }
+
+  static Rect _rect(double left, double top, double right, double bottom) =>
+      Rect.fromLTRB(left, top, math.max(left, right), math.max(top, bottom));
 }
 
 class SpeedCluster extends StatelessWidget {
@@ -303,11 +454,19 @@ class GearRow extends StatelessWidget {
 }
 
 /// Turn signals and the next traffic light (남은 초·거리).
+///
+/// The two blinker arrows sit at fixed spots at the ends of the row and
+/// the traffic light has its own slot between them, so a light coming
+/// up, going away or counting down never moves the arrows.
 class SignalPill extends StatelessWidget {
   const SignalPill({required this.scene, required this.compact, super.key});
 
   final RoadScene scene;
   final bool compact;
+
+  /// The whole row, blinkers included; narrower only if the screen is.
+  static const width = 300.0;
+  static const height = 44.0;
 
   @override
   Widget build(BuildContext context) {
@@ -317,60 +476,110 @@ class SignalPill extends StatelessWidget {
     final signal = scene.trafficSignal;
     final distance = signal?.distanceMeters;
     final showSignal = signal != null && (distance == null || distance >= 0);
-    return _Pill(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      radius: 22,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.arrow_back_rounded,
-            key: const ValueKey('blinker-left'),
-            color: arrow(scene.leftBlinker),
-            size: 24,
-          ),
-          SizedBox(width: showSignal ? 14 : (compact ? 44 : 70)),
-          if (showSignal) ...[
-            TrafficLightGlyph(signal: signal),
-            const SizedBox(width: 10),
-            if (signal.remainingSeconds != null)
-              Text(
-                '${signal.remainingSeconds}초',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: switch (signal.state) {
-                    TrafficSignalState.red => HudColors.signalRed,
-                    TrafficSignalState.yellow => HudColors.signalYellow,
-                    _ => HudColors.signalGreen,
-                  },
-                ),
+    return LayoutBuilder(
+      builder: (context, box) => SizedBox(
+        width: math.min(width, box.maxWidth),
+        height: math.min(height, box.maxHeight),
+        child: Row(
+          children: [
+            _BlinkerBubble(
+              child: Icon(
+                Icons.arrow_back_rounded,
+                key: const ValueKey('blinker-left'),
+                color: arrow(scene.leftBlinker),
+                size: 24,
               ),
-            if (distance != null) ...[
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  '신호등 ${formatDistance(distance)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: HudColors.muted,
-                  ),
-                ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: showSignal
+                  ? _Pill(
+                      key: const ValueKey('traffic-light-slot'),
+                      radius: height / 2,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: SizedBox.expand(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: _TrafficLightRow(signal: signal),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            const SizedBox(width: 6),
+            _BlinkerBubble(
+              child: Icon(
+                Icons.arrow_forward_rounded,
+                key: const ValueKey('blinker-right'),
+                color: arrow(scene.rightBlinker),
+                size: 24,
               ),
-            ],
-            const SizedBox(width: 14),
+            ),
           ],
-          Icon(
-            Icons.arrow_forward_rounded,
-            key: const ValueKey('blinker-right'),
-            color: arrow(scene.rightBlinker),
-            size: 24,
+        ),
+      ),
+    );
+  }
+}
+
+class _BlinkerBubble extends StatelessWidget {
+  const _BlinkerBubble({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => _Pill(
+    radius: SignalPill.height / 2,
+    padding: EdgeInsets.zero,
+    child: SizedBox.square(
+      dimension: SignalPill.height,
+      child: Center(child: child),
+    ),
+  );
+}
+
+/// Light, seconds left and distance, on one line.
+class _TrafficLightRow extends StatelessWidget {
+  const _TrafficLightRow({required this.signal});
+
+  final TrafficSignal signal;
+
+  @override
+  Widget build(BuildContext context) {
+    final distance = signal.distanceMeters;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TrafficLightGlyph(signal: signal),
+        if (signal.remainingSeconds != null) ...[
+          const SizedBox(width: 10),
+          Text(
+            '${signal.remainingSeconds}초',
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: switch (signal.state) {
+                TrafficSignalState.red => HudColors.signalRed,
+                TrafficSignalState.yellow => HudColors.signalYellow,
+                _ => HudColors.signalGreen,
+              },
+            ),
           ),
         ],
-      ),
+        if (distance != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            '신호등 ${formatDistance(distance)}',
+            maxLines: 1,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: HudColors.muted,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -640,13 +849,16 @@ class _InfoRow extends StatelessWidget {
 
 /// Green Korean-style turn sign: next maneuver large, the one after small.
 class TurnSign extends StatelessWidget {
-  const TurnSign({required this.instruction, super.key});
+  const TurnSign({required this.instruction, this.showNext = true, super.key});
 
   final TbtInstruction instruction;
 
+  /// The smaller row for the turn after this one.
+  final bool showNext;
+
   @override
   Widget build(BuildContext context) {
-    final next = instruction.nextManeuver;
+    final next = showNext ? instruction.nextManeuver : null;
     final nextDistance = instruction.nextDistanceMeters;
     return Container(
       decoration: BoxDecoration(
@@ -785,6 +997,7 @@ class LaneGuidancePill extends StatelessWidget {
 class _Pill extends StatelessWidget {
   const _Pill({
     required this.child,
+    super.key,
     this.tint = HudColors.glass,
     this.radius = 20,
     this.padding = const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
