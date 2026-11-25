@@ -48,7 +48,7 @@ class KovaParamsPanel extends StatelessWidget {
                 key: ValueKey('kova-empty'),
                 child: ListTile(
                   leading: Icon(Icons.tune_outlined),
-                  title: Text('연결하면 kovapilot 설정이 여기에 나와요.'),
+                  title: Text('연결하면 설정이 여기에 나와요.'),
                 ),
               )
             else ...[
