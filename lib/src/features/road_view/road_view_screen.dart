@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:kovalink/src/features/road_view/drive_bottom_bar.dart';
 import 'package:kovalink/src/features/road_view/gpu_road_surface.dart';
 import 'package:kovalink/src/features/road_view/hud/drive_hud.dart';
 import 'package:kovalink/src/features/road_view/render_quality.dart';
@@ -40,6 +41,7 @@ class RoadViewScreen extends StatefulWidget {
     this.gpuViewHost,
     this.gpuRetry,
     this.director,
+    this.bottomBarRise = 0,
     super.key,
   });
   final GatewayController controller;
@@ -79,6 +81,11 @@ class RoadViewScreen extends StatefulWidget {
 
   /// Camera operator shared with a capture tool; null = own instance.
   final SceneDirector? director;
+
+  /// How much higher than one row the drive screen's bottom bar reaches
+  /// ([DriveBarLayout.noticeRise]: the 자동 연결 chip on a row of its own).
+  /// Notices stay above it.
+  final double bottomBarRise;
 
   @override
   State<RoadViewScreen> createState() => _RoadViewScreenState();
@@ -220,7 +227,8 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
               constraints.biggest,
               compact: compact,
               showNumbers: widget.showHud,
-              bottomInset: MediaQuery.paddingOf(context).bottom,
+              bottomInset:
+                  MediaQuery.paddingOf(context).bottom + widget.bottomBarRise,
             ).noticeArea;
             final frame = _director.update(
               scene,
@@ -238,9 +246,11 @@ class _RoadViewScreenState extends State<RoadViewScreen> {
                   unit: widget.speedUnit,
                   showNumbers: widget.showHud,
                 ),
+                // Same row as the home screen's round buttons (DriveBar).
                 Positioned(
-                  left: 18,
-                  bottom: 22 + MediaQuery.paddingOf(context).bottom,
+                  left: DriveBar.margin,
+                  bottom:
+                      DriveBar.bottom + MediaQuery.paddingOf(context).bottom,
                   child: _ModeButton(
                     mode: mode,
                     onPressed: () => setState(() {

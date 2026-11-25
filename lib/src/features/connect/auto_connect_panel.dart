@@ -23,6 +23,9 @@ IconData _networkIcon(NetworkKind kind) => switch (kind) {
 };
 
 /// Small status chip on the road view: 찾는 중 · n번째 / 연결됨 / 없음.
+/// As tall as the round buttons beside it (48 dp touch target); one line,
+/// cut with an ellipsis only when the room the drive screen gives it
+/// ([longestSize]) is too small.
 class AutoConnectStatusChip extends StatelessWidget {
   const AutoConnectStatusChip({
     required this.controller,
@@ -33,6 +36,64 @@ class AutoConnectStatusChip extends StatelessWidget {
   final AutoConnectController controller;
   final VoidCallback? onTap;
 
+  static const _labelStyle = TextStyle(
+    color: Color(0xFF15191E),
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
+  );
+  static const _padX = 14.0;
+  static const _padY = 6.0;
+  static const _dot = 8.0;
+  static const _dotGap = 8.0;
+  static const _minHeight = 48.0;
+
+  /// Every wording [AutoConnectController.statusLabel] has, numbers at
+  /// their widest: the drive screen keeps room for the longest so the chip
+  /// never moves as the state changes.
+  static const labelSamples = [
+    '자동 연결 꺼짐',
+    '자동 연결 멈춤',
+    '콤마 찾는 중 · 888번째',
+    '콤마 찾음 · 휴대폰 연결 아직 허용 안 됨',
+    '콤마 없음 · 88초 뒤 다시',
+    '콤마 88대 찾음',
+    '콤마 연결됨',
+  ];
+
+  /// Size of the chip showing [label] on one line, with the text style and
+  /// size it gets under [context].
+  static Size sizeFor(BuildContext context, String label) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: DefaultTextStyle.of(context).style.merge(_labelStyle),
+      ),
+      textDirection: Directionality.maybeOf(context) ?? TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = 2 * _padY + painter.height.ceilToDouble();
+    final size = Size(
+      2 * _padX + _dot + _dotGap + painter.width.ceilToDouble(),
+      height < _minHeight ? _minHeight : height,
+    );
+    painter.dispose();
+    return size;
+  }
+
+  /// Room the chip needs for its longest wording ([labelSamples]).
+  static Size longestSize(BuildContext context) {
+    var width = 0.0;
+    var height = 0.0;
+    for (final label in labelSamples) {
+      final size = sizeFor(context, label);
+      if (size.width > width) width = size.width;
+      if (size.height > height) height = size.height;
+    }
+    return Size(width, height);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -40,6 +101,7 @@ class AutoConnectStatusChip extends StatelessWidget {
       builder: (context, _) {
         final color = autoConnectColor(controller.phase);
         return Semantics(
+          container: true,
           button: onTap != null,
           label: controller.statusLabel,
           child: GestureDetector(
@@ -49,29 +111,39 @@ class AutoConnectStatusChip extends StatelessWidget {
               radius: 24,
               blur: 18,
               tint: const Color(0x8CFFFFFF),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0x6615191E)),
-                    ),
+              padding: const EdgeInsets.symmetric(horizontal: _padX),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: _minHeight),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: _padY),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: _dot,
+                        height: _dot,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0x6615191E)),
+                        ),
+                      ),
+                      const SizedBox(width: _dotGap),
+                      // Read out once, from the label above.
+                      Flexible(
+                        child: ExcludeSemantics(
+                          child: Text(
+                            controller.statusLabel,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: _labelStyle,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    controller.statusLabel,
-                    style: const TextStyle(
-                      color: Color(0xFF15191E),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),

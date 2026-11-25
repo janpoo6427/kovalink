@@ -110,6 +110,7 @@ List<(String, Rect)> driveScreenParts(WidgetTester tester) {
   add('모델 가져오기 버튼', find.byTooltip('차량 모델 가져오기'));
   add('연결 버튼', find.byTooltip('장치 연결'));
   add('설정 버튼', find.byTooltip('설정'));
+  add('연결 상태 칩', find.byKey(const ValueKey('auto-connect-chip')));
   for (final tip in ['카메라 화면으로 바꾸기', '카메라에 도로 겹쳐 보기', '3D 화면으로 바꾸기']) {
     add('화면 전환 버튼', find.byTooltip(tip));
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:kovalink/src/app/kova_routes.dart';
 import 'package:kovalink/src/app/kovalink_pages.dart';
 import 'package:kovalink/src/features/connect/auto_connect_panel.dart';
+import 'package:kovalink/src/features/road_view/drive_bottom_bar.dart';
 import 'package:kovalink/src/features/road_view/gpu_road_surface.dart';
 import 'package:kovalink/src/features/road_view/road_view_screen.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_director.dart';
@@ -65,63 +66,95 @@ class KovaLinkHome extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = this.settings;
     final library = this.library;
+    final auto = autoConnect;
     void openConnect() => KovaRoutes.open(context, _pages.connectPage());
     // The road view runs under the bottom inset (home indicator, gesture
-    // or button nav bar); the buttons stay above it.
+    // or button nav bar); the bottom bar stays above it.
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final buttons = <Widget>[
+      if (settings != null && library != null)
+        GlassNavButton(
+          tooltip: '차량 모델 가져오기',
+          icon: Icons.file_download_outlined,
+          onPressed: () => VehicleModelImportFlow.run(
+            context,
+            library: library,
+            settings: settings,
+            picker: modelPicker,
+          ),
+        ),
+      GlassNavButton(
+        tooltip: '장치 연결',
+        icon: Icons.link_rounded,
+        onPressed: openConnect,
+      ),
+      GlassNavButton(
+        tooltip: '설정',
+        icon: Icons.settings_outlined,
+        onPressed: () =>
+            KovaRoutes.open(context, _pages.settingsPage(SettingsTab.app)),
+      ),
+    ];
+    final chip = auto == null
+        ? null
+        : AutoConnectStatusChip(controller: auto, onTap: openConnect);
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _roadView(),
-            Positioned(
-              right: 16,
-              bottom: 18 + bottomInset,
-              child: Row(
-                children: [
-                  if (autoConnect case final auto?) ...[
-                    AutoConnectStatusChip(controller: auto, onTap: openConnect),
-                    const SizedBox(width: 10),
-                  ],
-                  if (settings != null && library != null) ...[
-                    GlassNavButton(
-                      tooltip: '차량 모델 가져오기',
-                      icon: Icons.file_download_outlined,
-                      onPressed: () => VehicleModelImportFlow.run(
-                        context,
-                        library: library,
-                        settings: settings,
-                        picker: modelPicker,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                  GlassNavButton(
-                    tooltip: '장치 연결',
-                    icon: Icons.link_rounded,
-                    onPressed: openConnect,
-                  ),
-                  const SizedBox(width: 10),
-                  GlassNavButton(
-                    tooltip: '설정',
-                    icon: Icons.settings_outlined,
-                    onPressed: () => KovaRoutes.open(
-                      context,
-                      _pages.settingsPage(SettingsTab.app),
+        child: LayoutBuilder(
+          builder: (context, box) {
+            // Beside the buttons when the chip's longest wording fits
+            // there, else on a row of its own above them (see DriveBar).
+            final bar = DriveBarLayout(
+              width: box.maxWidth,
+              buttons: buttons.length,
+              chip: chip == null
+                  ? null
+                  : AutoConnectStatusChip.longestSize(context),
+            );
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                _roadView(bar.noticeRise),
+                if (chip != null && !bar.chipInline)
+                  Positioned(
+                    right: DriveBar.margin,
+                    bottom: bottomInset + bar.chipRowBottom,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: bar.chipMaxWidth),
+                      child: chip,
                     ),
                   ),
-                ],
-              ),
-            ),
-          ],
+                Positioned(
+                  left: DriveBar.modeClear,
+                  right: DriveBar.margin,
+                  bottom: bottomInset + DriveBar.bottom,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (chip != null && bar.chipInline) ...[
+                        Flexible(child: chip),
+                        const SizedBox(width: DriveBar.gap),
+                      ],
+                      for (final (i, button) in buttons.indexed) ...[
+                        if (i > 0) const SizedBox(width: DriveBar.gap),
+                        button,
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _roadView() {
+  /// [noticeRise]: how much higher than one row the bottom bar reaches;
+  /// the road view keeps its notices above it.
+  Widget _roadView(double noticeRise) {
     final settings = this.settings;
     if (settings == null) {
       return RoadViewScreen(
@@ -130,6 +163,7 @@ class KovaLinkHome extends StatelessWidget {
         gpuSurfaceBuilder: gpuSurfaceBuilder,
         gpuViewHost: gpuViewHost,
         director: director,
+        bottomBarRise: noticeRise,
       );
     }
     return AnimatedBuilder(
@@ -152,6 +186,7 @@ class KovaLinkHome extends StatelessWidget {
               gpuSurfaceBuilder: gpuSurfaceBuilder,
               gpuViewHost: gpuViewHost,
               director: director,
+              bottomBarRise: noticeRise,
             ),
             if (value.brightness < 1)
               IgnorePointer(
