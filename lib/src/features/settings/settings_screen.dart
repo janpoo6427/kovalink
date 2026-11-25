@@ -91,9 +91,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  String get _settingsAddress =>
-      widget.settings?.value.settingsEndpoint ??
-      AppSettings.defaultSettingsEndpoint;
+  /// The found comma's settings address; null before one is found.
+  String? get _settingsAddress => widget.settings?.value.settingsEndpoint;
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +145,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               address: _settingsAddress,
               now: widget.now,
             ),
-            KovapilotVersionEntry(endpoint: _kova.endpoint ?? _settingsAddress),
+            KovapilotVersionEntry(
+              endpoint: _kova.endpoint ?? _settingsAddress,
+              sessionFor: _kova.sessionFor,
+            ),
           ] else if (_tab == SettingsTab.session)
             _SessionSection(
               controller: controller,
@@ -203,6 +205,8 @@ class _TabLabel extends StatelessWidget {
   );
 }
 
+const _noComma = '아직 찾은 콤마가 없어요';
+
 /// Current gateway session facts. Nothing here is stored on the car.
 class _SessionSection extends StatelessWidget {
   const _SessionSection({
@@ -245,16 +249,14 @@ class _SessionSection extends StatelessWidget {
                 address:
                     controller.connectedEndpoint ??
                     settings?.value.telemetryEndpoint ??
-                    AppSettings.defaultTelemetryEndpoint,
+                    _noComma,
               ),
               const Divider(height: 1, indent: 56),
               _StatusTile(
                 icon: Icons.videocam_outlined,
                 title: '카메라',
                 status: '볼 때만 연결돼요',
-                address:
-                    settings?.value.signalingEndpoint ??
-                    AppSettings.defaultSignalingEndpoint,
+                address: settings?.value.signalingEndpoint ?? _noComma,
               ),
               const Divider(height: 1, indent: 56),
               _StatusTile(
@@ -264,15 +266,21 @@ class _SessionSection extends StatelessWidget {
                 address:
                     kova.endpoint ??
                     settings?.value.settingsEndpoint ??
-                    AppSettings.defaultSettingsEndpoint,
+                    _noComma,
               ),
               const Divider(height: 1, indent: 56),
               _StatusTile(
-                icon: controller.gatewayAuthenticated
+                icon:
+                    controller.gatewayAuthenticated ||
+                        settings?.value.registeredComma != null
                     ? Icons.verified_user_outlined
                     : Icons.no_encryption_gmailerrorred_outlined,
                 title: '기기 등록',
-                status: controller.gatewayAuthenticated ? '등록됨' : '아직 등록 전이에요',
+                status: controller.gatewayAuthenticated
+                    ? '등록됨 · 연결 토큰 확인됨'
+                    : settings?.value.registeredComma != null
+                    ? '등록됨'
+                    : '아직 등록 전이에요',
               ),
             ],
           ),

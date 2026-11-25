@@ -20,8 +20,9 @@ class KovaParamsPanel extends StatelessWidget {
 
   final KovaParamsController controller;
 
-  /// kovapilot settings address of the comma 자동 연결 found (not editable).
-  final String address;
+  /// kovapilot settings address of the comma found or entered (not
+  /// editable); null before there is one.
+  final String? address;
 
   /// Clock for "n초 전" (tests/captures).
   final DateTime Function()? now;
@@ -87,7 +88,9 @@ class KovaConnectionCard extends StatelessWidget {
   });
 
   final KovaParamsController controller;
-  final String address;
+
+  /// The found comma's settings address; null before one is found.
+  final String? address;
   final DateTime Function()? now;
 
   @override
@@ -103,7 +106,7 @@ class KovaConnectionCard extends StatelessWidget {
     final lock = controller.writeLock;
     final health = controller.health;
     final clock = now ?? DateTime.now;
-    final shownAddress = controller.endpoint ?? address;
+    final shownAddress = controller.endpoint ?? address ?? '아직 찾은 콤마가 없어요';
     return Card(
       key: const ValueKey('kova-connection-card'),
       child: Padding(
@@ -192,7 +195,9 @@ class KovaConnectionCard extends StatelessWidget {
                 if (status == KovaLinkStatus.disconnected)
                   FilledButton.icon(
                     key: const ValueKey('kova-connect'),
-                    onPressed: () => controller.connect(address),
+                    onPressed: address == null
+                        ? null
+                        : () => controller.connect(address!),
                     icon: const Icon(Icons.link, size: 18),
                     label: const Text('연결'),
                   )

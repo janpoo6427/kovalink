@@ -2,11 +2,18 @@
 // network. Only addresses the local-only endpoint policy accepts are ever
 // probed, and only on Wi-Fi, hotspot, USB or wired interfaces: mobile data
 // (cellular) and VPN interfaces are never scanned.
+//
+// On Wi-Fi a comma answers only over TLS and only with its token, so the
+// Finder ([GatewayDeviceProbe]) asks `/v1/health` without one: kovapilot's
+// 401 Bearer challenge marks a comma, and the pin of the certificate it
+// presented is recorded. The token is never sent by the Finder.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:kovalink/src/kova_params/kova_params_document.dart';
+import 'package:kovalink/src/network/gateway_pin.dart';
+import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 
 /// kovapilot gateway default port (`openpilot/kovapilot/gateway`).
@@ -218,7 +225,7 @@ bool _sameSubnet(String a, String b) {
   return x != null && y != null && x[0] == y[0] && x[1] == y[1] && x[2] == y[2];
 }
 
-enum CandidateSource { last, known, router, subnet }
+enum CandidateSource { last, known, advertised, router, subnet }
 
 class ProbeTarget {
   const ProbeTarget(this.host, this.port, this.source);
@@ -256,10 +263,13 @@ class DiscoveryPlan {
   /// cellular/VPN networks are left out. An IP address is tried only when it
   /// lies inside a scannable network (so nothing is sent over mobile data);
   /// `.local`/`localhost` names only when a scannable network exists.
+  /// [advertised] are addresses a local service announcement named; they
+  /// are checked like any other address.
   static DiscoveryPlan build({
     required List<LocalNetwork> networks,
     String? lastEndpoint,
     List<String> knownEndpoints = const [],
+    List<({String host, int port})> advertised = const [],
     List<int> ports = const [kovaGatewayDefaultPort],
     bool scanSubnets = true,
   }) {
@@ -303,6 +313,12 @@ class DiscoveryPlan {
         add(priority, t);
       }
     }
+    for (final address in advertised) {
+      add(
+        priority,
+        ProbeTarget(address.host, address.port, CandidateSource.advertised),
+      );
+    }
     for (final network in scannable) {
       final octets = parseIPv4(network.address)!;
       for (final port in portList) {
@@ -336,6 +352,8 @@ class KovaDevice {
     required this.port,
     this.schemaVersion = supportedKovaParamsSchema,
     this.bindScope,
+    this.secure = false,
+    this.pin,
   });
 
   final String host;
@@ -343,21 +361,32 @@ class KovaDevice {
   final int schemaVersion;
   final String? bindScope;
 
+  /// Reached over TLS: a comma on Wi-Fi, which needs its token. A plain
+  /// device is a loopback development gateway.
+  final bool secure;
+
+  /// Pin of the certificate the comma presented (TLS only).
+  final GatewayPin? pin;
+
   String get label => '${_uriHost(host)}:$port';
 
   /// On screen: the address alone on the usual port, address:port otherwise.
   String get displayName => _display(host, port);
 
-  /// Settings HTTP origin, e.g. `http://192.168.0.40:8082`.
+  /// Settings HTTP origin, e.g. `https://192.168.43.20:8082` on Wi-Fi.
   String get settingsEndpoint =>
-      Uri(scheme: 'http', host: host, port: port).toString();
+      Uri(scheme: secure ? 'https' : 'http', host: host, port: port).toString();
 
   @override
   bool operator ==(Object other) =>
-      other is KovaDevice && other.host == host && other.port == port;
+      other is KovaDevice &&
+      other.host == host &&
+      other.port == port &&
+      other.secure == secure &&
+      other.pin == pin;
 
   @override
-  int get hashCode => Object.hash(host, port);
+  int get hashCode => Object.hash(host, port, secure, pin);
 
   @override
   String toString() => 'KovaDevice($label)';
@@ -378,6 +407,10 @@ enum ProbeOutcome {
   /// now (loopback-only development bind). Not usable, and not "not a
   /// comma" either.
   localOnly,
+
+  /// A comma on Wi-Fi that refuses this phone (403 `wifi_client_required`:
+  /// another network, or the request did not use the comma's own IP).
+  refused,
 }
 
 /// What KovaLink says when a comma refuses phones for now.
@@ -387,21 +420,40 @@ class ProbeResult {
   const ProbeResult.noAnswer()
     : outcome = ProbeOutcome.noAnswer,
       device = null,
+      refusing = null,
       detail = null;
   const ProbeResult.notKova(this.detail)
     : outcome = ProbeOutcome.notKova,
-      device = null;
+      device = null,
+      refusing = null;
   const ProbeResult.kova(KovaDevice this.device)
     : outcome = ProbeOutcome.kova,
+      refusing = null,
       detail = null;
   const ProbeResult.localOnly()
     : outcome = ProbeOutcome.localOnly,
       device = null,
+      refusing = null,
       detail = null;
+  const ProbeResult.refused(KovaDevice this.refusing, [this.detail])
+    : outcome = ProbeOutcome.refused,
+      device = null;
+
+  /// [ProbeOutcome.notKova] detail when the port accepted the connection
+  /// but nothing answered in time.
+  static const silentDetail = '연결은 되는데 답이 없어요';
 
   final ProbeOutcome outcome;
+
+  /// Set for [ProbeOutcome.kova] only.
   final KovaDevice? device;
+
+  /// The comma that refused, for [ProbeOutcome.refused].
+  final KovaDevice? refusing;
   final String? detail;
+
+  /// True when something accepted the connection but did not answer.
+  bool get silent => outcome == ProbeOutcome.notKova && detail == silentDetail;
 }
 
 /// Checks one host:port. Tests replace it with a fake.
@@ -515,7 +567,7 @@ class HttpDeviceProbe implements DeviceProbe {
     } on TimeoutException {
       request?.abort();
       return connected
-          ? const ProbeResult.notKova('연결은 되는데 답이 없어요')
+          ? const ProbeResult.notKova(ProbeResult.silentDetail)
           : const ProbeResult.noAnswer();
     } on SocketException {
       return const ProbeResult.noAnswer();
@@ -532,4 +584,162 @@ class HttpDeviceProbe implements DeviceProbe {
 
   @override
   void close() => _client.close(force: true);
+}
+
+/// Reads a TLS `/v1/health` answer given without a token. kovapilot on
+/// Wi-Fi answers 401 `authentication_required` with a Bearer challenge:
+/// that is a comma (its certificate [pin] is kept). 403
+/// `wifi_client_required` is a comma refusing this phone. Anything else,
+/// including a 200 without a token, is not a comma.
+ProbeResult judgeGatewayChallenge(
+  String host,
+  int port,
+  int statusCode,
+  List<String> challenges,
+  String body,
+  GatewayPin? pin,
+) {
+  if (pin == null) return const ProbeResult.notKova(null);
+  String? code;
+  try {
+    final json = jsonDecode(body);
+    if (json is Map && json['error'] is Map) {
+      final value = (json['error'] as Map)['code'];
+      if (value is String) code = value;
+    }
+  } on FormatException {
+    code = null;
+  }
+  final bearer = challenges.any((value) {
+    final scheme = value.trim().split(RegExp(r'\s+')).first.toLowerCase();
+    return scheme == 'bearer';
+  });
+  final device = KovaDevice(
+    host: host,
+    port: port,
+    bindScope: 'wifi',
+    secure: true,
+    pin: pin,
+  );
+  if (statusCode == 401 && code == 'authentication_required' && bearer) {
+    return ProbeResult.kova(device);
+  }
+  if (statusCode == 403 && code == 'wifi_client_required') {
+    return ProbeResult.refused(device, '이 휴대폰의 연결을 받지 않아요');
+  }
+  return const ProbeResult.notKova(null);
+}
+
+/// The Finder's probe: TLS `GET /v1/health` without any token on Wi-Fi
+/// addresses, plain HTTP only for a loopback development gateway. Short
+/// timeouts, no proxy, no redirects, small body cap, and no certificate
+/// store: the presented certificate is only recorded (its pin decides
+/// later, when the token is about to be sent).
+class GatewayDeviceProbe implements DeviceProbe {
+  GatewayDeviceProbe({
+    this.connectTimeout = const Duration(milliseconds: 450),
+    this.responseTimeout = const Duration(milliseconds: 1500),
+    this.context,
+    DeviceProbe? loopback,
+  }) : _loopback =
+           loopback ??
+           HttpDeviceProbe(
+             connectTimeout: connectTimeout,
+             responseTimeout: responseTimeout,
+           );
+
+  static const maxBodyBytes = 8 * 1024;
+  final Duration connectTimeout;
+  final Duration responseTimeout;
+  final SecurityContext Function()? context;
+  final DeviceProbe _loopback;
+  final Set<HttpClient> _open = {};
+  bool _closed = false;
+
+  @override
+  Future<ProbeResult> probe(String host, int port) async {
+    if (_closed || !isPolicyTarget(host, port)) {
+      return const ProbeResult.noAnswer();
+    }
+    if (LocalEndpointPolicy.isLoopbackHost(host)) {
+      return _loopback.probe(host, port);
+    }
+    var reached = false;
+    final client = gatewayTlsClient(
+      host: host,
+      port: port,
+      accept: (_) => true,
+      onConnected: () => reached = true,
+      connectTimeout: connectTimeout,
+      handshakeTimeout: responseTimeout,
+      context: context,
+    )..idleTimeout = const Duration(seconds: 1);
+    _open.add(client);
+    final uri = Uri(
+      scheme: 'https',
+      host: host,
+      port: port,
+      path: '/v1/health',
+    );
+    HttpClientRequest? request;
+    Future<ProbeResult> run() async {
+      request = await client.getUrl(uri);
+      request!.followRedirects = false;
+      request!.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      assert(request!.headers.value(HttpHeaders.authorizationHeader) == null);
+      final response = await request!.close();
+      final chunks = <int>[];
+      await for (final chunk in response) {
+        chunks.addAll(chunk);
+        if (chunks.length > maxBodyBytes) {
+          return const ProbeResult.notKova(null);
+        }
+      }
+      return judgeGatewayChallenge(
+        host,
+        port,
+        response.statusCode,
+        response.headers[HttpHeaders.wwwAuthenticateHeader] ?? const [],
+        utf8.decode(chunks, allowMalformed: true),
+        GatewayPin.ofCertificate(response.certificate),
+      );
+    }
+
+    try {
+      return await run().timeout(
+        connectTimeout + responseTimeout + responseTimeout,
+      );
+    } on TimeoutException {
+      request?.abort();
+      return reached
+          ? const ProbeResult.notKova(ProbeResult.silentDetail)
+          : const ProbeResult.noAnswer();
+    } on SocketException {
+      return reached
+          ? const ProbeResult.notKova(null)
+          : const ProbeResult.noAnswer();
+    } on TlsException {
+      // Something listens there, but not over TLS: not a comma on Wi-Fi.
+      return const ProbeResult.notKova(null);
+    } on HttpException {
+      return reached
+          ? const ProbeResult.notKova(null)
+          : const ProbeResult.noAnswer();
+    } on Object {
+      return const ProbeResult.noAnswer();
+    } finally {
+      _open.remove(client);
+      client.close(force: true);
+    }
+  }
+
+  @override
+  void close() {
+    _closed = true;
+    for (final client in _open.toList()) {
+      client.close(force: true);
+    }
+    _open.clear();
+    _loopback.close();
+  }
 }

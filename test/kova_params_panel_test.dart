@@ -288,7 +288,8 @@ void main() {
         find.byKey(const ValueKey('kova-connection-card')),
         findsOneWidget,
       );
-      expect(find.text(AppSettings.defaultSettingsEndpoint), findsOneWidget);
+      // No comma found yet: no address (there is no comma.local default).
+      expect(find.text('아직 찾은 콤마가 없어요'), findsWidgets);
       expect(find.text('시점'), findsNothing);
     });
   });

@@ -8,6 +8,7 @@ import 'package:kovalink/src/features/road_view/scene3d/road_world_painter.dart'
 import 'package:kovalink/src/features/road_view/scene3d/scene_camera.dart';
 import 'package:kovalink/src/features/road_view/scene3d/scene_palette.dart';
 import 'package:kovalink/src/models/display_units.dart';
+import 'package:kovalink/src/network/comma_registry.dart';
 import 'package:kovalink/src/network/kovapilot_endpoints.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 import 'package:kovalink/src/services/demo_drive_scenario.dart';
@@ -39,16 +40,10 @@ class AppSettings {
     this.renderQuality = RenderQuality.auto,
     this.autoConnect = true,
     this.lastDeviceEndpoint,
+    this.registeredComma,
   });
 
   static const schemaVersion = 1;
-
-  /// Addresses before a comma is found (`comma.local`, kovapilot's port).
-  static const defaultTelemetryEndpoint = 'ws://comma.local:8082/v1/telemetry';
-  static const defaultSignalingEndpoint = 'http://comma.local:8082/v1/stream';
-
-  /// kovapilot settings HTTP origin (`/v1/kova-params` is appended).
-  static const defaultSettingsEndpoint = 'http://comma.local:8082';
 
   /// Address fields older versions saved. They are ignored when read and
   /// dropped from the file ([SettingsController.load] writes it again).
@@ -74,13 +69,13 @@ class AppSettings {
   final bool demoMode;
   final DemoRoute demoRoute;
 
-  /// Every kovapilot address, from the comma 자동 연결 found last
-  /// ([lastDeviceEndpoint]) or `comma.local`. Not editable.
-  KovapilotEndpoints get endpoints =>
+  /// Every kovapilot address, from the comma found or entered last
+  /// ([lastDeviceEndpoint]); null until there is one. Not editable.
+  KovapilotEndpoints? get endpoints =>
       KovapilotEndpoints.fromOrigin(lastDeviceEndpoint);
-  String get telemetryEndpoint => endpoints.telemetry;
-  String get signalingEndpoint => endpoints.signaling;
-  String get settingsEndpoint => endpoints.settings;
+  String? get telemetryEndpoint => endpoints?.telemetry;
+  String? get signalingEndpoint => endpoints?.signaling;
+  String? get settingsEndpoint => endpoints?.settings;
 
   /// Selected vehicle model pack id; null = default built-in.
   final String? vehicleModelId;
@@ -95,10 +90,14 @@ class AppSettings {
   /// hotspot until it answers (on by default).
   final bool autoConnect;
 
-  /// Settings origin of the last device found by auto-connect (tried first
-  /// next time; every address follows it). Only 자동 연결 sets it, under
-  /// the local-only policy.
+  /// Settings origin of the last device connected (tried first next time;
+  /// every address follows it): `https://<IP>:8082` for a comma on Wi-Fi.
+  /// Only the app sets it, under the local-only policy.
   final String? lastDeviceEndpoint;
+
+  /// The comma registered on this phone: certificate pin and last address.
+  /// Its token is in the phone's secure storage, never here.
+  final RegisteredComma? registeredComma;
 
   SceneLayers get layers => SceneLayers(
     lanes: showLanes,
@@ -126,6 +125,8 @@ class AppSettings {
     RenderQuality? renderQuality,
     bool? autoConnect,
     String? lastDeviceEndpoint,
+    RegisteredComma? registeredComma,
+    bool clearRegisteredComma = false,
   }) => AppSettings(
     speedUnit: speedUnit ?? this.speedUnit,
     viewpoint: viewpoint ?? this.viewpoint,
@@ -146,6 +147,9 @@ class AppSettings {
     renderQuality: renderQuality ?? this.renderQuality,
     autoConnect: autoConnect ?? this.autoConnect,
     lastDeviceEndpoint: lastDeviceEndpoint ?? this.lastDeviceEndpoint,
+    registeredComma: clearRegisteredComma
+        ? null
+        : registeredComma ?? this.registeredComma,
   );
 
   Map<String, dynamic> toJson() => {
@@ -167,6 +171,7 @@ class AppSettings {
     'renderQuality': renderQuality.name,
     'autoConnect': autoConnect,
     'lastDeviceEndpoint': ?lastDeviceEndpoint,
+    'registeredComma': ?registeredComma?.toJson(),
   };
 
   /// Tolerant parser: each unknown or invalid field falls back to its
@@ -224,6 +229,7 @@ class AppSettings {
               LocalEndpointPolicy.validateSettings(lastDevice) == null
           ? lastDevice.trim()
           : null,
+      registeredComma: RegisteredComma.fromJson(json['registeredComma']),
     );
   }
 
@@ -348,12 +354,16 @@ class SettingsController extends ChangeNotifier {
     return _pending;
   }
 
-  /// Auto-connect found a device at [host]:[port]: remember it. The
-  /// settings, telemetry and camera addresses all follow it
-  /// ([AppSettings.endpoints]). Refused unless the local-only policy
-  /// accepts the origin.
-  String? rememberDevice(String host, int port) {
-    final origin = Uri(scheme: 'http', host: host, port: port).toString();
+  /// A device at [host]:[port] was connected: remember it. The settings,
+  /// telemetry and camera addresses all follow it ([AppSettings.endpoints]);
+  /// [secure] for a comma on Wi-Fi (HTTPS/WSS). Refused unless the
+  /// local-only policy accepts the origin.
+  String? rememberDevice(String host, int port, {bool secure = false}) {
+    final origin = Uri(
+      scheme: secure ? 'https' : 'http',
+      host: host,
+      port: port,
+    ).toString();
     final error = LocalEndpointPolicy.validateSettings(origin);
     if (error != null) return error;
     update((s) => s.copyWith(lastDeviceEndpoint: origin));

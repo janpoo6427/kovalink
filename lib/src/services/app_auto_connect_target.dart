@@ -1,37 +1,72 @@
 import 'dart:async';
 
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
+import 'package:kovalink/src/network/comma_link_text.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
+import 'package:kovalink/src/network/gateway_session.dart';
+import 'package:kovalink/src/network/kovapilot_endpoints.dart';
 import 'package:kovalink/src/services/auto_connect_controller.dart';
+import 'package:kovalink/src/services/comma_link.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
 
-/// What the app does once auto-connect confirms a device: remember its
-/// address, open the kovapilot settings connection, and try the telemetry
-/// socket without stopping the demo when telemetry is not offered.
+/// What the app does once auto-connect confirms a device: for a comma on
+/// Wi-Fi, open the session to the registered comma first (certificate pin,
+/// then token); then remember its address, open the kovapilot settings
+/// connection, and try the telemetry socket without stopping the demo when
+/// telemetry is not offered. All of it goes through the one session.
 class AppAutoConnectTarget implements AutoConnectTarget {
   AppAutoConnectTarget({
     required this.controller,
     required this.settings,
     required this.kovaParams,
+    this.link,
   });
 
   final GatewayController controller;
   final SettingsController settings;
   final KovaParamsController kovaParams;
 
+  /// Registered comma and its session; null = loopback development only.
+  final CommaLink? link;
+
+  /// Told when a comma answered but could not be used (wrong token, other
+  /// certificate, refused, other version). The app wires it to
+  /// [AutoConnectController.hold].
+  void Function(KovaDevice device, KovaLinkProblem problem)? onProblem;
+
+  GatewaySession? _settingsSession;
+
   @override
   bool get isTelemetryLive => controller.mode == GatewayMode.live;
 
+  GatewaySession? get _session => link?.session;
+
   @override
   Future<void> attach(KovaDevice device, {bool openTelemetry = true}) async {
-    settings.rememberDevice(device.host, device.port);
+    if (link case final link?) {
+      final problem = await link.open(device);
+      if (problem != null) {
+        onProblem?.call(device, problem);
+        return;
+      }
+    } else if (device.secure) {
+      // No way to hold a token here: never open a comma on Wi-Fi.
+      onProblem?.call(device, KovaLinkProblem.needsRegistration);
+      return;
+    }
+    settings.rememberDevice(device.host, device.port, secure: device.secure);
     _openSettings(
       device,
-      force: kovaParams.endpoint != device.settingsEndpoint,
+      force:
+          kovaParams.endpoint != device.settingsEndpoint ||
+          !identical(_settingsSession, _session),
     );
     if (openTelemetry) {
-      await controller.connectInBackground(settings.value.telemetryEndpoint);
+      await controller.connectInBackground(
+        _endpoints(device).telemetry,
+        session: _session,
+      );
     }
   }
 
@@ -39,14 +74,32 @@ class AppAutoConnectTarget implements AutoConnectTarget {
   Future<void> keepAlive(KovaDevice device, {bool openTelemetry = true}) async {
     _openSettings(device);
     if (openTelemetry && controller.mode != GatewayMode.live) {
-      await controller.connectInBackground(settings.value.telemetryEndpoint);
+      await controller.connectInBackground(
+        _endpoints(device).telemetry,
+        session: _session,
+      );
     }
   }
+
+  static KovapilotEndpoints _endpoints(KovaDevice device) => KovapilotEndpoints(
+    host: device.host,
+    port: device.port,
+    secure: device.secure,
+  );
 
   void _openSettings(KovaDevice device, {bool force = false}) {
     final status = kovaParams.status;
     if (force || status == KovaLinkStatus.disconnected) {
-      unawaited(kovaParams.connect(device.settingsEndpoint));
+      final session = _session;
+      _settingsSession = session;
+      unawaited(
+        kovaParams.connect(
+          device.settingsEndpoint,
+          session: session != null && session.endpoints == _endpoints(device)
+              ? session
+              : null,
+        ),
+      );
     }
   }
 

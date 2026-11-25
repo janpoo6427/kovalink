@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 
 enum RoadStreamStatus { idle, connecting, streaming, error }
@@ -20,6 +21,47 @@ Map<String, dynamic> buildKovapilotStreamRequest({
   'raw': false,
 };
 
+/// POSTs a receive-only [sdp] offer to kovapilot's `/v1/stream` and returns
+/// the answer. A comma on Wi-Fi goes through [session]: its pinned client
+/// and token (the same as settings and telemetry).
+Future<({String sdp, String type})> postKovapilotOffer(
+  Uri endpoint, {
+  required String sdp,
+  required String camera,
+  GatewaySession? session,
+  Duration timeout = const Duration(seconds: 12),
+}) async {
+  final client =
+      session?.client ??
+      (HttpClient()..connectionTimeout = const Duration(seconds: 5));
+  try {
+    final request = await client.postUrl(endpoint);
+    session?.authorize(request);
+    request.headers.contentType = ContentType.json;
+    request.write(
+      jsonEncode(buildKovapilotStreamRequest(sdp: sdp, camera: camera)),
+    );
+    final response = await request.close().timeout(timeout);
+    final body = await utf8.decodeStream(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException(
+        'signaling HTTP ${response.statusCode}: $body',
+        uri: endpoint,
+      );
+    }
+    final json = jsonDecode(body);
+    if (json is! Map<String, dynamic> ||
+        json['sdp'] is! String ||
+        json['type'] is! String) {
+      throw const FormatException('잘못된 WebRTC answer입니다.');
+    }
+    return (sdp: json['sdp'] as String, type: json['type'] as String);
+  } finally {
+    // The session's client is shared with settings and telemetry.
+    if (session == null) client.close(force: true);
+  }
+}
+
 class WebRtcRoadStream extends ChangeNotifier {
   final RTCVideoRenderer renderer = RTCVideoRenderer();
 
@@ -34,9 +76,13 @@ class WebRtcRoadStream extends ChangeNotifier {
   bool get hasVideo =>
       status == RoadStreamStatus.streaming && renderer.srcObject != null;
 
+  /// Starts the road camera. A comma on Wi-Fi signals through [session]
+  /// (its pinned client and token); without one only a loopback
+  /// development gateway is reached.
   Future<String?> connect({
     required String signalingEndpoint,
     String camera = 'road',
+    GatewaySession? session,
   }) async {
     final validationError = LocalEndpointPolicy.validateSignaling(
       signalingEndpoint,
@@ -44,6 +90,16 @@ class WebRtcRoadStream extends ChangeNotifier {
     if (validationError != null) {
       _setError(validationError);
       return validationError;
+    }
+    final target = Uri.parse(signalingEndpoint.trim());
+    final usable =
+        session != null && !session.isClosed && session.covers(target);
+    if (!usable &&
+        target.scheme == 'https' &&
+        !LocalEndpointPolicy.isLoopbackHost(target.host)) {
+      const message = '먼저 콤마를 연결해 주세요.';
+      _setError(message);
+      return message;
     }
     if (camera != 'road' && camera != 'wideRoad') {
       const message = '지원하지 않는 카메라예요.';
@@ -111,9 +167,11 @@ class WebRtcRoadStream extends ChangeNotifier {
         throw const FormatException('WebRTC offer를 만들 수 없습니다.');
       }
 
-      final answer = await _postOffer(
-        Uri.parse(signalingEndpoint.trim()),
-        localDescription!.sdp!,
+      final answer = await postKovapilotOffer(
+        target,
+        sdp: localDescription!.sdp!,
+        camera: camera,
+        session: usable ? session : null,
       );
       await peerConnection.setRemoteDescription(
         RTCSessionDescription(answer.sdp, answer.type),
@@ -124,39 +182,6 @@ class WebRtcRoadStream extends ChangeNotifier {
       await _closePeer();
       _setError(message);
       return message;
-    }
-  }
-
-  Future<_SessionAnswer> _postOffer(Uri endpoint, String sdp) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
-    try {
-      final request = await client.postUrl(endpoint);
-      request.headers.contentType = ContentType.json;
-      request.write(
-        jsonEncode(buildKovapilotStreamRequest(sdp: sdp, camera: camera)),
-      );
-      final response = await request.close().timeout(
-        const Duration(seconds: 12),
-      );
-      final body = await utf8.decodeStream(response);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
-          'signaling HTTP ${response.statusCode}: $body',
-          uri: endpoint,
-        );
-      }
-      final json = jsonDecode(body);
-      if (json is! Map<String, dynamic> ||
-          json['sdp'] is! String ||
-          json['type'] is! String) {
-        throw const FormatException('잘못된 WebRTC answer입니다.');
-      }
-      return _SessionAnswer(
-        sdp: json['sdp'] as String,
-        type: json['type'] as String,
-      );
-    } finally {
-      client.close(force: true);
     }
   }
 
@@ -190,10 +215,4 @@ class WebRtcRoadStream extends ChangeNotifier {
     if (_rendererInitialized) renderer.dispose();
     super.dispose();
   }
-}
-
-class _SessionAnswer {
-  const _SessionAnswer({required this.sdp, required this.type});
-  final String sdp;
-  final String type;
 }

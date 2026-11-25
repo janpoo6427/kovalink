@@ -5,6 +5,7 @@
 //
 //   /                          drive screen (always at the bottom)
 //   /connect                   장치 연결                      pushed
+//   /connect/register          콤마 등록 (from 장치 연결)     pushed
 //   /settings/app              설정, 앱 탭                    pushed
 //   /settings/session          설정, 연결 상태 탭             replaces the tab shown
 //   /settings/kovapilot        설정, kovapilot 탭             replaces the tab shown

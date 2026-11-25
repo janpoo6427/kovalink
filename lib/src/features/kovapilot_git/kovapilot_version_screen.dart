@@ -10,6 +10,7 @@ import 'package:kovalink/src/app/kova_routes.dart';
 import 'package:kovalink/src/kovapilot_git/git_client.dart';
 import 'package:kovalink/src/kovapilot_git/git_controller.dart';
 import 'package:kovalink/src/kovapilot_git/git_models.dart';
+import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/widgets/page_header.dart';
 import 'package:kovalink/src/widgets/readable_width.dart';
 
@@ -66,6 +67,7 @@ class KovapilotVersionScreen extends StatefulWidget {
     required this.endpoint,
     this.controller,
     this.now,
+    this.sessionFor,
     super.key,
   });
 
@@ -79,14 +81,23 @@ class KovapilotVersionScreen extends StatefulWidget {
   /// Clock for the commit times (captures).
   final DateTime? now;
 
+  /// The open session to the comma at an address: a comma on Wi-Fi is read
+  /// through it (same certificate check and token as settings).
+  final GatewaySession? Function(String address)? sessionFor;
+
   static Route<void> route({
     required String? endpoint,
     KovaGitController? controller,
+    GatewaySession? Function(String address)? sessionFor,
   }) => KovaPageRoute(
     name: KovaRoutes.kovapilotVersion,
     builder: (context) => KovaPage(
       backTooltip: KovaRoutes.backToSettings,
-      child: KovapilotVersionScreen(endpoint: endpoint, controller: controller),
+      child: KovapilotVersionScreen(
+        endpoint: endpoint,
+        controller: controller,
+        sessionFor: sessionFor,
+      ),
     ),
   );
 
@@ -95,7 +106,14 @@ class KovapilotVersionScreen extends StatefulWidget {
 }
 
 class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
-  late final KovaGitController _git = widget.controller ?? KovaGitController();
+  late final KovaGitController _git =
+      widget.controller ??
+      KovaGitController(
+        clientFactory: (endpoint) => KovaGitClient.tryCreate(
+          endpoint,
+          transport: widget.sessionFor?.call(endpoint)?.transport,
+        ),
+      );
   final _search = TextEditingController();
 
   @override
@@ -1111,10 +1129,17 @@ class _PlanFacts extends StatelessWidget {
 
 /// 설정 → kovapilot tab: the way into [KovapilotVersionScreen].
 class KovapilotVersionEntry extends StatelessWidget {
-  const KovapilotVersionEntry({required this.endpoint, super.key});
+  const KovapilotVersionEntry({
+    required this.endpoint,
+    this.sessionFor,
+    super.key,
+  });
 
   /// The comma's gateway origin the screen will read from.
   final String? endpoint;
+
+  /// See [KovapilotVersionScreen.sessionFor].
+  final GatewaySession? Function(String address)? sessionFor;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -1130,7 +1155,10 @@ class KovapilotVersionEntry extends StatelessWidget {
           trailing: const Icon(Icons.chevron_right_rounded),
           onTap: () => KovaRoutes.open(
             context,
-            KovapilotVersionScreen.route(endpoint: endpoint),
+            KovapilotVersionScreen.route(
+              endpoint: endpoint,
+              sessionFor: sessionFor,
+            ),
           ),
         ),
       ),

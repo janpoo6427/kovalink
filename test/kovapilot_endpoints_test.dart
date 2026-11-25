@@ -1,7 +1,7 @@
 // KovaLink only talks to kovapilot: every address comes from the comma
-// 자동 연결 found (comma.local until then) and nothing on screen lets the
-// user type one. Addresses saved by older versions are ignored and taken
-// out of the settings file.
+// found on the network or entered by IP (no address before that) and no
+// address field is on the screen itself. Addresses saved by older versions
+// are ignored and taken out of the settings file.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kovalink/src/features/connect/auto_connect_panel.dart';
@@ -17,15 +17,12 @@ import 'support/fake_auto_connect.dart';
 
 void main() {
   group('addresses', () {
-    test('before a comma is found: comma.local on kovapilot\'s port', () {
+    test('before a comma is found: no address at all', () {
       const settings = AppSettings();
-      expect(settings.endpoints, const KovapilotEndpoints());
-      expect(settings.settingsEndpoint, 'http://comma.local:8082');
-      expect(settings.telemetryEndpoint, 'ws://comma.local:8082/v1/telemetry');
-      expect(settings.signalingEndpoint, 'http://comma.local:8082/v1/stream');
-      expect(settings.settingsEndpoint, AppSettings.defaultSettingsEndpoint);
-      expect(settings.telemetryEndpoint, AppSettings.defaultTelemetryEndpoint);
-      expect(settings.signalingEndpoint, AppSettings.defaultSignalingEndpoint);
+      expect(settings.endpoints, isNull);
+      expect(settings.settingsEndpoint, isNull);
+      expect(settings.telemetryEndpoint, isNull);
+      expect(settings.signalingEndpoint, isNull);
     });
 
     test('all three follow the comma 자동 연결 found', () {
@@ -44,13 +41,9 @@ void main() {
       expect(v6.signalingEndpoint, 'http://[fd00::5]:8082/v1/stream');
     });
 
-    test('a refused device address falls back to comma.local', () {
+    test('a refused device address gives no address', () {
       for (final bad in ['http://203.0.113.9:8082', 'http://example.com']) {
-        expect(
-          KovapilotEndpoints.fromOrigin(bad),
-          const KovapilotEndpoints(),
-          reason: bad,
-        );
+        expect(KovapilotEndpoints.fromOrigin(bad), isNull, reason: bad);
       }
     });
 
@@ -82,18 +75,9 @@ void main() {
       final controller = SettingsController(store: store);
       await controller.load();
       expect(controller.value.speedUnit.name, 'mph');
-      expect(
-        controller.value.telemetryEndpoint,
-        AppSettings.defaultTelemetryEndpoint,
-      );
-      expect(
-        controller.value.signalingEndpoint,
-        AppSettings.defaultSignalingEndpoint,
-      );
-      expect(
-        controller.value.settingsEndpoint,
-        AppSettings.defaultSettingsEndpoint,
-      );
+      expect(controller.value.telemetryEndpoint, isNull);
+      expect(controller.value.signalingEndpoint, isNull);
+      expect(controller.value.settingsEndpoint, isNull);
       await Future<void>.delayed(Duration.zero);
       expect(store.writes, 1);
       for (final key in AppSettings.legacyEndpointKeys) {

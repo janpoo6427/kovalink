@@ -8,6 +8,7 @@ import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/services/auto_connect_controller.dart';
+import 'package:kovalink/src/services/comma_link.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
@@ -27,6 +28,7 @@ class KovaLinkPages {
     this.modelPicker = pickModelFileWithSystemPicker,
     this.kovaParams,
     this.autoConnect,
+    this.link,
     this.drive,
   });
 
@@ -37,6 +39,9 @@ class KovaLinkPages {
   final ModelFilePicker modelPicker;
   final KovaParamsController? kovaParams;
   final AutoConnectController? autoConnect;
+
+  /// Registered comma and its session (connect screen, registration).
+  final CommaLink? link;
 
   /// The drive screen for [KovaRoutes.drive]; only the app sets it.
   final WidgetBuilder? drive;
@@ -71,6 +76,7 @@ class KovaLinkPages {
       KovaRoutes.diagnostics => RendererDiagnosticsPage.route(),
       KovaRoutes.kovapilotVersion => KovapilotVersionScreen.route(
         endpoint: kovaParams?.endpoint ?? settings?.value.settingsEndpoint,
+        sessionFor: link?.sessionFor ?? kovaParams?.sessionFor,
       ),
       _ => null,
     };
@@ -83,6 +89,7 @@ class KovaLinkPages {
         controller: controller,
         settings: settings,
         autoConnect: autoConnect,
+        link: link,
       ),
     ),
   );
