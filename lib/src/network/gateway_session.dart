@@ -210,13 +210,22 @@ class GatewaySession {
         uri.port == endpoints.port;
   }
 
+  /// How often the telemetry socket is pinged. A socket whose pong does not
+  /// come back within this time is closed, so a comma that moved to another
+  /// IP or left the hotspot is noticed (TCP alone can wait for minutes).
+  static const telemetryPing = Duration(seconds: 5);
+
   /// Telemetry WebSocket through [client].
-  Future<WebSocket> openWebSocket(String url) {
+  Future<WebSocket> openWebSocket(String url) async {
     final uri = Uri.parse(url);
-    if (!covers(uri)) {
-      return Future.error(GatewayOriginRefused(uri));
-    }
-    return WebSocket.connect(url, headers: authorization, customClient: client);
+    if (!covers(uri)) throw GatewayOriginRefused(uri);
+    final socket = await WebSocket.connect(
+      url,
+      headers: authorization,
+      customClient: client,
+    );
+    if (endpoints.secure) socket.pingInterval = telemetryPing;
+    return socket;
   }
 
   KovaParamsTransport? _transport;

@@ -109,11 +109,20 @@ class GatewayController extends ChangeNotifier {
   /// Auto-connect: tries [endpoint] without touching the current state (the
   /// demo keeps playing, no error is shown) and switches to live only when
   /// the socket opens. Returns true when live.
+  ///
+  /// With a [session] (the registered comma on Wi-Fi) a live socket to
+  /// another address is replaced once the new one is open: the comma got a
+  /// new IP, and its old socket can stay half-open for a long time after
+  /// the old address is gone.
   Future<bool> connectInBackground(
     String endpoint, {
     GatewaySession? session,
   }) async {
-    if (mode == GatewayMode.live) return true;
+    final moved =
+        mode == GatewayMode.live &&
+        session != null &&
+        connectedEndpoint != endpoint.trim();
+    if (mode == GatewayMode.live && !moved) return true;
     if (mode == GatewayMode.connecting || _backgroundAttempt) return false;
     if (LocalEndpointPolicy.validate(endpoint) != null) return false;
     _backgroundAttempt = true;
@@ -122,7 +131,8 @@ class GatewayController extends ChangeNotifier {
         endpoint.trim(),
         session,
       ).timeout(const Duration(seconds: 5));
-      if (mode == GatewayMode.live || mode == GatewayMode.connecting) {
+      if (mode == GatewayMode.connecting ||
+          (mode == GatewayMode.live && !moved)) {
         // A manual connection started meanwhile; keep that one.
         unawaited(socket.close());
         return mode == GatewayMode.live;
