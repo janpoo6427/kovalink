@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/features/connect/auto_connect_panel.dart';
 import 'package:kovalink/src/features/connect/connect_screen.dart';
 import 'package:kovalink/src/features/road_view/gpu_road_surface.dart';
 import 'package:kovalink/src/features/road_view/road_view_screen.dart';
@@ -7,6 +8,7 @@ import 'package:kovalink/src/features/road_view/scene3d/scene_director.dart';
 import 'package:kovalink/src/features/settings/settings_screen.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
+import 'package:kovalink/src/services/auto_connect_controller.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
@@ -24,6 +26,7 @@ class KovaLinkHome extends StatefulWidget {
     this.gpuViewHost,
     this.director,
     this.kovaParams,
+    this.autoConnect,
     super.key,
   });
 
@@ -35,6 +38,9 @@ class KovaLinkHome extends StatefulWidget {
 
   /// kovapilot settings connection shown in the settings tab.
   final KovaParamsController? kovaParams;
+
+  /// 자동 연결; shown as a small chip on the road view.
+  final AutoConnectController? autoConnect;
 
   /// Capture/test hooks forwarded to [RoadViewScreen].
   final GpuSurfaceBuilder? gpuSurfaceBuilder;
@@ -64,6 +70,7 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
                 ConnectScreen(
                   controller: widget.controller,
                   settings: settings,
+                  autoConnect: widget.autoConnect,
                 ),
                 SettingsScreen(
                   controller: widget.controller,
@@ -81,6 +88,13 @@ class _KovaLinkHomeState extends State<KovaLinkHome> {
                 bottom: 18,
                 child: Row(
                   children: [
+                    if (widget.autoConnect case final auto?) ...[
+                      AutoConnectStatusChip(
+                        controller: auto,
+                        onTap: () => setState(() => selectedIndex = 1),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
                     if (settings != null && widget.library != null) ...[
                       _GlassNavButton(
                         tooltip: '차량 모델 가져오기',

@@ -36,7 +36,7 @@
 		<string>_kovalink._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>KovaLink가 로컬 네트워크의 comma gateway를 찾고 연결하는 데 사용합니다.</string>
+	<string>같은 와이파이나 핫스팟에 있는 콤마를 찾아서 연결할 때 써요.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

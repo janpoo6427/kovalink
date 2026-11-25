@@ -149,6 +149,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _DisplaySection(settings: settings),
             _LayerSection(settings: settings),
             _DemoSection(settings: settings, controller: controller),
+            _AutoConnectSection(settings: settings),
             _EndpointSection(settings: settings),
             if (widget.library != null)
               _VehicleModelSection(
@@ -640,6 +641,32 @@ class _DemoSection extends StatelessWidget {
               ),
               const SizedBox(height: 8),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AutoConnectSection extends StatelessWidget {
+  const _AutoConnectSection({required this.settings});
+
+  final SettingsController settings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle('자동 연결'),
+        Card(
+          child: SwitchListTile(
+            key: const ValueKey('setting-auto-connect'),
+            title: const Text('콤마 자동으로 찾기'),
+            subtitle: const Text('같은 와이파이나 핫스팟에 있는 콤마를 찾아서 연결해요.'),
+            value: settings.value.autoConnect,
+            onChanged: (on) =>
+                settings.update((s) => s.copyWith(autoConnect: on)),
           ),
         ),
       ],

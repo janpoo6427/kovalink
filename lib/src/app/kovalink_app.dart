@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:kovalink/src/app/kovalink_home.dart';
 import 'package:kovalink/src/features/settings/vehicle_model_import.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
+import 'package:kovalink/src/network/device_discovery.dart';
+import 'package:kovalink/src/services/app_auto_connect_target.dart';
+import 'package:kovalink/src/services/auto_connect_controller.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
@@ -18,6 +21,7 @@ class KovaLinkApp extends StatefulWidget {
     this.settingsStore,
     this.storageRoot,
     this.modelPicker = pickModelFileWithSystemPicker,
+    this.autoConnectBuilder,
   });
 
   /// Asset bundle for the vehicle model pack; null uses rootBundle.
@@ -30,16 +34,30 @@ class KovaLinkApp extends StatefulWidget {
   final Future<Directory> Function()? storageRoot;
   final ModelFilePicker modelPicker;
 
+  /// Builds the 자동 연결 controller. Null uses the real network search,
+  /// except under `flutter test` (FLUTTER_TEST), where no real interface is
+  /// listed or scanned unless a test passes its own builder.
+  final AutoConnectController Function(
+    AutoConnectTarget target,
+    SettingsController settings,
+  )?
+  autoConnectBuilder;
+
+  static bool get _underFlutterTest =>
+      Platform.environment.containsKey('FLUTTER_TEST');
+
   @override
   State<KovaLinkApp> createState() => _KovaLinkAppState();
 }
 
-class _KovaLinkAppState extends State<KovaLinkApp> {
+class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
   late final GatewayController controller;
   late final SettingsController settings;
   late final VehicleModelLibrary library;
-  // kovapilot settings over HTTP. No request is made until the user taps
-  // 연결 in the kovapilot tab.
+  AutoConnectController? autoConnect;
+  TelemetryWatch? _telemetryWatch;
+  // kovapilot settings over HTTP. Opened by 자동 연결 once the comma answers,
+  // or when the user taps 연결 in the kovapilot tab.
   final kovaParams = KovaParamsController();
   final vehicleModel = ValueNotifier<VehicleModelLoadResult>(
     VehicleModelLoadResult.bundledDefault,
@@ -60,8 +78,53 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
     )..addListener(_applySettings);
     controller = GatewayController()
       ..startDemo(route: settings.value.demoRoute);
+    final target = AppAutoConnectTarget(
+      controller: controller,
+      settings: settings,
+      kovaParams: kovaParams,
+    );
+    autoConnect =
+        widget.autoConnectBuilder?.call(target, settings) ??
+        (KovaLinkApp._underFlutterTest
+            ? null
+            : AutoConnectController(
+                target: target,
+                lastEndpoint: () => settings.value.lastDeviceEndpoint,
+                knownEndpoints: () => [settings.value.settingsEndpoint],
+                portsProvider: () => _ports(settings),
+              ));
+    if (autoConnect case final auto?) {
+      _telemetryWatch = TelemetryWatch(
+        controller: controller,
+        autoConnect: auto,
+      );
+    }
+    WidgetsBinding.instance.addObserver(this);
     _loadVehicleModel();
     settings.load();
+  }
+
+  /// The gateway default port, plus the saved settings port if different.
+  static List<int> _ports(SettingsController settings) {
+    final ports = {kovaGatewayDefaultPort};
+    final saved = settings.value.settingsEndpoint;
+    final uri = Uri.tryParse(saved);
+    if (uri != null && uri.hasPort) ports.add(uri.port);
+    return ports.toList();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        autoConnect?.setForeground(true);
+      case AppLifecycleState.paused ||
+          AppLifecycleState.hidden ||
+          AppLifecycleState.detached:
+        autoConnect?.setForeground(false);
+      case AppLifecycleState.inactive:
+        break;
+    }
   }
 
   /// Keeps the demo, model and theme in sync with saved settings. A live
@@ -83,6 +146,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
     if (!_modelLoaded || value.vehicleModelId != _loadedModelId) {
       _loadVehicleModel();
     }
+    if (settings.loaded) autoConnect?.setEnabled(value.autoConnect);
     setState(() {});
   }
 
@@ -105,6 +169,9 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _telemetryWatch?.dispose();
+    autoConnect?.dispose();
     settings.removeListener(_applySettings);
     controller.dispose();
     kovaParams.dispose();
@@ -133,6 +200,7 @@ class _KovaLinkAppState extends State<KovaLinkApp> {
         library: library,
         modelPicker: widget.modelPicker,
         kovaParams: kovaParams,
+        autoConnect: autoConnect,
       ),
     );
   }
