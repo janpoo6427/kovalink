@@ -169,3 +169,129 @@ vehicle-side livestream processes to idle.
   jitter does not make the indicator animation irregular.
 - Omit unavailable fields instead of inventing a value. The UI renders a safe
   unknown/standby state.
+
+## Settings HTTP (kovapilot `kova_params`)
+
+KovaLink reads and changes kovapilot user settings through the gateway's JSON
+HTTP API on the same local origin as telemetry. The app stores only the
+origin (`settingsEndpoint`, default `http://comma.local:8082`); a path, query,
+fragment or user-info in that address is refused. The same local-only host
+policy applies.
+
+The setting list, groups, order, translations, constraints and apply policy
+all come from the document. The app does not hard-code any of them.
+
+### `GET /v1/health`
+
+```json
+{"status": "ok", "schemaVersion": 1, "bindScope": "loopback", "authentication": "localProcessOnly"}
+```
+
+KovaLink refuses a gateway whose `schemaVersion` major is not 1.
+
+### `GET /v1/kova-params`
+
+`200` returns the catalog merged with the current state:
+
+```json
+{
+  "schemaVersion": 1,
+  "defaultLocale": "ko",
+  "locales": ["ko", "en"],
+  "revision": 3,
+  "device": {"offroad": true},
+  "groups": [
+    {"id": "steering", "order": 100,
+     "title": {"ko": "조향", "en": "Steering"},
+     "description": {"ko": "…", "en": "…"}}
+  ],
+  "settings": [
+    {
+      "key": "steering.always_on", "groupId": "steering", "order": 100,
+      "type": "boolean", "defaultValue": false, "value": true,
+      "title": {"ko": "항시 조향", "en": "Always-on steering"},
+      "description": {"ko": "…", "en": "…"},
+      "access": "readWrite", "risk": "control", "applyPolicy": "offroad",
+      "availability": "pendingConsumer", "applyStatus": "pendingConsumer",
+      "requiredCapabilities": ["alwaysSteering"]
+    }
+  ]
+}
+```
+
+- `type`: `boolean`, `integer`, `number`, `string`, `enum`.
+- `integer`/`number` may add `minimum`, `maximum`, `step` and a localized
+  `unit`. `enum` has `options` (strings or integers, matched with the exact
+  JSON type) and may add localized `optionTitles` keyed by the option text.
+- `access`: `readOnly` | `readWrite`. `applyPolicy`: `immediate` (used right
+  away), `offroad` (may only change while the device is offroad) or `restart`
+  (used after openpilot restarts). `availability`/`applyStatus`: `available`,
+  `pendingConsumer` (value is stored but nothing uses it yet), `unsupported`.
+- `device.offroad` is read by the gateway from the device's own `IsOffroad`.
+  It is informational; the gateway enforces the policy on update.
+- `503 kova_params_unavailable`: stored state failed validation.
+
+KovaLink parsing rules:
+
+- Unknown fields are ignored. A minor version (`"1.4"`) is accepted; any
+  other major `schemaVersion` closes the document (nothing is drawn).
+- Text is shown in Korean, then English, then `defaultLocale`.
+- Widgets: `boolean` → switch; ranged `integer`/`number` → slider plus number
+  input; unranged numbers → number input; `enum` → pick sheet; `string`,
+  `readOnly`, an unknown `type`/`access`/`applyPolicy`, or a current value that
+  does not fit its type → read-only. `hidden: true` or `visibility: "hidden"`
+  settings are not drawn (forward-compatible; the gateway does not emit these
+  yet).
+- Settings whose `groupId` is unknown are drawn in a trailing "기타" group.
+
+### `POST /v1/kova-params/update`
+
+Request body has exactly these fields:
+
+```json
+{"key": "steering.always_on", "value": true, "expectedRevision": 3}
+```
+
+| Status | `error.code` | Meaning | KovaLink |
+|---|---|---|---|
+| 200 | — | stored; body is the new document (`revision` + 1) | value confirmed |
+| 400 | `invalid_request` | wrong field set or field types | "요청 형식" reason |
+| 400 | `invalid_json` | body is not JSON | "요청 형식" reason |
+| 400 | `invalid_value` | unknown key, wrong type or out of range | reason by message |
+| 403 | `update_forbidden` | read-only, or `offroad` setting while onroad | reason by message |
+| 409 | `revision_conflict` | `expectedRevision` is stale | re-read, show current value, ask again |
+| 413 | — | body over 16 KiB (plain text) | failure |
+
+Errors are `{"error": {"code": "…", "message": "…"}}`. KovaLink shows a
+short Korean reason derived from the code (and, for `update_forbidden` /
+`invalid_value`, from the message keywords `offroad`, `read-only`,
+`unknown setting`, `out of range`); it never shows the raw message.
+
+KovaLink write rules:
+
+- A change is drawn as "보내는 중" and the confirmed value is replaced only by
+  a `200` document. A timeout or transport failure is never a success: the
+  app re-reads the document and shows whatever the device holds (the device
+  may have stored the value after the app gave up).
+- While the document says `device.offroad == false`, `offroad` and `restart`
+  settings are locked in the app. (The gateway itself rejects only `offroad`
+  settings onroad.)
+- `risk: control` settings ask for confirmation first.
+- Writes are locked while the connection is stale (last read failed or older
+  than 45 s).
+
+### Write lock before pairing (decision pending)
+
+The gateway has no pairing, TLS or credential yet and binds to `127.0.0.1`
+only. Until pairing exists KovaLink sends writes only when the settings
+address is loopback (`127.0.0.1`, `::1`, `localhost`), i.e. a development
+connection on the same machine. Every LAN address (`.local`, private IPv4,
+link-local/ULA IPv6) is read-only. A future paired session may unlock LAN
+writes; `GatewayController.gatewayAuthenticated` and `canEditSettings`
+(telemetry socket) are unchanged and do not affect this lock.
+
+### End-to-end test
+
+`test/kovapilot_gateway_e2e_test.dart` drives a real gateway process through
+`tool/e2e/kovapilot_gateway_hook.sh` (container with `--network host`, an
+isolated `PARAMS_ROOT`). It is skipped unless `KOVA_E2E_GATEWAY_HOOK` is set.
