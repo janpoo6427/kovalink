@@ -511,8 +511,11 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: _badges()),
           if (controller.status == KovaLinkStatus.connected &&
-              s.applyPolicy == KovaApplyPolicy.parked &&
-              s.applyState == 'pendingParked' &&
+              const {
+                'pendingParked',
+                'pendingRestart',
+                'applying',
+              }.contains(s.applyState) &&
               s.appliedValue != null)
             _Line(
               color: _muted,
@@ -548,8 +551,8 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
                       '${dependency.title.resolve(defaultLocale: _locale)} · '
                       '${switch (dependency.state) {
                         'unmet' => '조건 필요',
-                        'pendingRestart' => '다음 시작 때 적용',
-                        'pendingConsumer' => '연동 준비 중',
+                        'pendingRestart' => '다음 시동부터 적용',
+                        'pendingConsumer' => '아직 차에서 동작 안 함',
                         'unsupported' => '이 차량에서 미지원',
                         _ => '확인 대기',
                       }}',
@@ -597,7 +600,9 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
                 KovaNoticeKind.rejected => _danger,
                 _ => _warn,
               },
-              text: notice.message,
+              text: notice.kind == KovaNoticeKind.rejected
+                  ? '저장 안 됨 · ${notice.message}'
+                  : notice.message,
             ),
         ],
       ),
@@ -610,40 +615,54 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
   /// dialog.
   List<Widget> _badges() {
     if (s.status == KovaAvailability.unsupported) return [];
-    final currentState = widget.controller.status == KovaLinkStatus.connected
-        ? s.applyState == 'applied' &&
-                  s.dependencies.any((dependency) => dependency.state != 'met')
-              ? null
-              : s.applyState
-        : null;
-    final policy = switch ((s.applyPolicy, currentState)) {
-      (KovaApplyPolicy.parked, 'pendingParked') => ('저장됨 · P 정차 시 적용', _warn),
-      (KovaApplyPolicy.parked, 'awaitingLongitudinal') => (
-        '종방향 제어 적용 대기',
-        _warn,
-      ),
-      (KovaApplyPolicy.parked, 'awaitingStart') => ('플래너 시작 대기', _muted),
-      (KovaApplyPolicy.parked, 'applied') => ('적용됨', _accent),
-      (KovaApplyPolicy.restart, 'pendingRestart') => (
-        '저장됨 · 다음 시작 때 적용',
-        _warn,
-      ),
-      (KovaApplyPolicy.restart, 'awaitingStart') => ('다음 시작 때 확인', _muted),
-      (KovaApplyPolicy.restart, 'applied') => ('적용됨', _accent),
-      (KovaApplyPolicy.offroad, _) when !s.saveAnytime => ('시동을 끈 뒤 변경', _warn),
-      (KovaApplyPolicy.parked, _) => (
-        s.saveAnytime ? 'P 정차 중 적용' : 'P 정차 중 변경',
-        _warn,
-      ),
-      (KovaApplyPolicy.restart, _) => ('재시작 후 적용', const Color(0xFF72A7FF)),
-      _ => null,
-    };
+    // One badge: is the saved value what the car runs now, or when will it be?
+    if (s.status == KovaAvailability.pendingConsumer) {
+      return [
+        _Badge(
+          '아직 차에서 동작 안 함',
+          _muted,
+          key: ValueKey('kova-badge-pending-${s.key}'),
+        ),
+      ];
+    }
+    final connected = widget.controller.status == KovaLinkStatus.connected;
+    final currentState = connected ? s.applyState : null;
+    final needsCondition =
+        connected &&
+        s.value != s.defaultValue &&
+        s.dependencies.any((dependency) => dependency.state != 'met');
+    const later = Color(0xFF72A7FF);
+    final policy = needsCondition
+        ? ('저장됨 · 아래 조건이 맞아야 동작', _warn)
+        : switch ((s.applyPolicy, currentState)) {
+            (KovaApplyPolicy.immediate, 'applied') => ('바로 적용됨', _accent),
+            (_, 'applied') => ('적용됨', _accent),
+            (_, 'applying') => ('저장됨 · 적용 중', _muted),
+            (_, 'pendingRestart') => ('저장됨 · 다음 시동부터 적용', _warn),
+            (_, 'pendingParked') => ('저장됨 · P 정차 시 적용', _warn),
+            (_, 'awaitingLongitudinal') => ('종방향 제어 적용 대기', _warn),
+            (_, 'awaitingStart') => ('저장됨 · 다음 시동부터 적용', later),
+            (KovaApplyPolicy.immediate, _) when connected => (
+              '바로 적용됨',
+              _accent,
+            ),
+            (KovaApplyPolicy.offroad, _) when !s.saveAnytime => (
+              '시동을 끈 뒤 변경',
+              _warn,
+            ),
+            (KovaApplyPolicy.parked, _) => (
+              s.saveAnytime ? 'P 정차 시 적용' : 'P 정차 중 변경',
+              _warn,
+            ),
+            (KovaApplyPolicy.offroad || KovaApplyPolicy.restart, _) => (
+              '다음 시동부터 적용',
+              later,
+            ),
+            _ => null,
+          };
     return [
       if (policy case (final text, final color))
         _Badge(text, color, key: ValueKey('kova-badge-policy-${s.key}')),
-      if (s.saveParkedOnly) _Badge('P 정차 중 저장', _warn),
-      if (s.status == KovaAvailability.pendingConsumer)
-        _Badge('준비 중', _muted, key: ValueKey('kova-badge-pending-${s.key}')),
     ];
   }
 
@@ -750,13 +769,13 @@ class _Details extends StatelessWidget {
         KovaApplyPolicy.immediate => '바로 적용돼요.',
         KovaApplyPolicy.offroad => s.saveAnytime ? '언제든 값을 저장할 수 있어요.' : '시동을 끈 뒤 바꿀 수 있어요.',
         KovaApplyPolicy.parked => s.saveAnytime ? '값은 언제든 저장할 수 있고, P에 두고 완전히 정차하면 반영돼요.' : 'P에 두고 완전히 정차했을 때 바꿀 수 있어요.',
-        KovaApplyPolicy.restart => s.saveAnytime ? '언제든 저장하고, 담당 프로세스가 다음에 시작할 때 반영해요.' : 'kovapilot을 다시 시작하면 적용돼요. 주행 중에는 바꿀 수 없어요.',
+        KovaApplyPolicy.restart => s.saveAnytime ? '언제든 저장할 수 있고, 다음 시동부터 적용돼요.' : '다음 시동부터 적용돼요. 주행 중에는 바꿀 수 없어요.',
         KovaApplyPolicy.unknown => '언제 적용되는지 알 수 없어 앱에서는 바꿀 수 없어요.',
       }}',
       if (s.applyState == 'pendingRestart' && s.appliedValue != null)
         '현재 적용값: ${s.describe(s.appliedValue, defaultLocale: locale)}',
       if (s.status == KovaAvailability.pendingConsumer)
-        '상태: 준비 중이에요. 값은 저장되지만 차 동작은 아직 바뀌지 않아요.',
+        '상태: 아직 차에서 동작하지 않는 기능이에요. 값은 저장되지만 차 동작은 바뀌지 않아요.',
       if (s.requiredCapabilities.isNotEmpty)
         '필요 기능: ${s.requiredCapabilities.join(', ')}',
       '항목 키: ${s.key}',

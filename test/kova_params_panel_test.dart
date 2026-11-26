@@ -100,7 +100,7 @@ void main() {
     ];
     await kova.connect('http://127.0.0.1:18082');
     await _pumpPanel(tester, kova);
-    expect(find.text('openpilot 종방향 제어 · 다음 시작 때 적용'), findsOneWidget);
+    expect(find.text('openpilot 종방향 제어 · 다음 시동부터 적용'), findsOneWidget);
     expect(find.textContaining('충족된 조건'), findsNothing);
     expect(
       find.byKey(const ValueKey('kova-toggle-steering.always_on')),
@@ -135,9 +135,10 @@ void main() {
       find.byKey(const ValueKey('kova-lock-e2e.build_label')),
       findsOneWidget,
     );
-    expect(find.text('시동을 끈 뒤 변경'), findsOneWidget);
-    expect(find.text('재시작 후 적용'), findsOneWidget);
-    expect(find.text('준비 중'), findsOneWidget);
+    expect(find.text('시동을 끈 뒤 변경'), findsNothing);
+    expect(find.text('다음 시동부터 적용'), findsOneWidget);
+    expect(find.text('아직 차에서 동작 안 함'), findsOneWidget);
+    expect(find.text('준비 중'), findsNothing);
     expect(find.textContaining('개발용 연결'), findsOneWidget);
 
     // A renamed catalog title shows up without any app change.
@@ -372,7 +373,8 @@ void main() {
             .onChanged,
         isNotNull,
       );
-      expect(find.text('저장됨 · 다음 시작 때 적용'), findsOneWidget);
+      expect(find.text('저장됨 · 다음 시동부터 적용'), findsOneWidget);
+      expect(find.text('저장값 3 단계 · 현재 적용값 4 단계'), findsOneWidget);
       setting['applyState'] = 'applied';
       await kova.refresh();
       await tester.pump();
@@ -524,6 +526,87 @@ void main() {
       // No comma found yet: no address (there is no comma.local default).
       expect(find.text('아직 찾은 콤마가 없어요'), findsWidgets);
       expect(find.text('시점'), findsNothing);
+    });
+  });
+
+  group('applied state (janpoo 11/27)', () {
+    Map<String, dynamic> level() => (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((setting) => setting['key'] == 'e2e.level');
+
+    testWidgets('never shows the old ambiguous save/restart badges', (
+      tester,
+    ) async {
+      gateway.offroad = false;
+      for (final setting
+          in (gateway.catalog['settings'] as List)
+              .cast<Map<String, dynamic>>()) {
+        setting['savePolicy'] = 'parked';
+        setting['applyState'] = 'awaitingStart';
+      }
+      await kova.connect('http://127.0.0.1:18082');
+      await _pumpPanel(tester, kova);
+      expect(find.text('P 정차 중 저장'), findsNothing);
+      expect(find.text('다음 시작 때 확인'), findsNothing);
+      expect(find.text('재시작 후 적용'), findsNothing);
+      expect(find.text('저장됨 · 다음 시동부터 적용'), findsWidgets);
+    });
+
+    testWidgets('live value says applied now, then applying while it lands', (
+      tester,
+    ) async {
+      gateway.offroad = false;
+      level()
+        ..['applyPolicy'] = 'immediate'
+        ..['savePolicy'] = 'anytime'
+        ..['applyState'] = 'applied';
+      await kova.connect('http://127.0.0.1:18082');
+      await _pumpPanel(tester, kova);
+      expect(
+        find.byKey(const ValueKey('kova-badge-policy-e2e.level')),
+        findsOneWidget,
+      );
+      expect(find.text('바로 적용됨'), findsWidgets);
+      level()
+        ..['applyState'] = 'applying'
+        ..['appliedValue'] = 4;
+      await kova.refresh();
+      await tester.pump();
+      expect(find.text('저장됨 · 적용 중'), findsOneWidget);
+      expect(find.text('저장값 3 단계 · 현재 적용값 4 단계'), findsOneWidget);
+    });
+
+    testWidgets('a saved value that cannot run says so instead of applied', (
+      tester,
+    ) async {
+      level()
+        ..['applyPolicy'] = 'immediate'
+        ..['savePolicy'] = 'anytime'
+        ..['applyState'] = 'applied'
+        ..['dependencies'] = [
+          {
+            'title': {'ko': 'openpilot 종방향 제어 적용'},
+            'state': 'unsupported',
+          },
+        ];
+      gateway.values['e2e.level'] = 7;
+      await kova.connect('http://127.0.0.1:18082');
+      await _pumpPanel(tester, kova);
+      expect(find.text('저장됨 · 아래 조건이 맞아야 동작'), findsOneWidget);
+      expect(find.text('openpilot 종방향 제어 적용 · 이 차량에서 미지원'), findsOneWidget);
+    });
+
+    testWidgets('a refused save starts with 저장 안 됨', (tester) async {
+      gateway.offroad = false;
+      level()['applyPolicy'] = 'parked';
+      gateway.parked = true;
+      await kova.connect('http://127.0.0.1:18082');
+      await _pumpPanel(tester, kova);
+      gateway.parked = false;
+      await kova.setValue('e2e.level', 8);
+      await tester.pump();
+      expect(find.textContaining('저장 안 됨 · '), findsOneWidget);
+      expect(gateway.posts, isEmpty);
     });
   });
 }
