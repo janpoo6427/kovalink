@@ -8,7 +8,6 @@ import 'package:kovalink/src/services/comma_link.dart';
 import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
-import 'package:kovalink/src/widgets/page_header.dart';
 import 'package:kovalink/src/widgets/readable_width.dart';
 import 'package:kovalink/src/widgets/status_pill.dart';
 
@@ -80,8 +79,6 @@ class ConnectScreen extends StatelessWidget {
       ]),
       builder: (context, _) => ReadableListView(
         children: [
-          const PageHeader(title: '장치 연결'),
-          const SizedBox(height: 22),
           if (autoConnect case final auto?) ...[
             AutoConnectPanel(
               controller: auto,

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kovalink/src/app/kova_routes.dart';
 import 'package:kovalink/src/features/road_view/renderer_diagnostics.dart';
-import 'package:kovalink/src/widgets/page_header.dart';
 import 'package:kovalink/src/widgets/readable_width.dart';
 
 /// 설정 → 앱 → 진단 entry: the one-sentence state of the road view; tap
@@ -55,6 +54,7 @@ class RendererDiagnosticsPage extends StatelessWidget {
   static Route<void> route({RendererDiagnostics? diagnostics}) => KovaPageRoute(
     name: KovaRoutes.diagnostics,
     builder: (context) => KovaPage(
+      title: "진단",
       backTooltip: KovaRoutes.backToSettings,
       child: RendererDiagnosticsPage(diagnostics: diagnostics),
     ),
@@ -63,8 +63,6 @@ class RendererDiagnosticsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ReadableListView(
     children: [
-      const PageHeader(title: '진단'),
-      const SizedBox(height: 4),
       RendererDiagnosticsCard(diagnostics: diagnostics, showTitle: false),
     ],
   );

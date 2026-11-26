@@ -15,7 +15,6 @@ import 'package:kovalink/src/kovapilot_git/git_client.dart';
 import 'package:kovalink/src/kovapilot_git/git_controller.dart';
 import 'package:kovalink/src/kovapilot_git/git_models.dart';
 import 'package:kovalink/src/network/gateway_session.dart';
-import 'package:kovalink/src/widgets/page_header.dart';
 import 'package:kovalink/src/widgets/readable_width.dart';
 
 const _muted = Color(0xFF8E9DA9);
@@ -96,6 +95,10 @@ class KovapilotVersionScreen extends StatefulWidget {
   }) => KovaPageRoute(
     name: KovaRoutes.kovapilotVersion,
     builder: (context) => KovaPage(
+      title: "kovapilot 버전",
+      subtitle: endpoint == null
+          ? "설치된 브랜치와 커밋"
+          : "${_KovapilotVersionScreenState._hostLabel(endpoint)} · 브랜치와 커밋",
       backTooltip: KovaRoutes.backToSettings,
       child: KovapilotVersionScreen(
         endpoint: endpoint,
@@ -183,7 +186,7 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
     final position = scrollable.position;
     final top = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
     await position.animateTo(
-      (position.pixels + top - 56).clamp(
+      (position.pixels + top - 8).clamp(
         position.minScrollExtent,
         position.maxScrollExtent,
       ),
@@ -197,17 +200,9 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
     animation: _git,
     builder: (context, _) => LayoutBuilder(
       builder: (context, box) {
-        final header = PageHeader(
-          title: 'kovapilot 버전',
-          subtitle: widget.endpoint == null
-              ? '콤마에 설치된 kovapilot의 브랜치와 커밋을 봐요.'
-              : '콤마 ${_hostLabel(widget.endpoint!)}에 설치된 kovapilot의 브랜치와 커밋을 봐요.',
-        );
         final body = _body();
         if (body != null) {
-          return ReadableListView(
-            children: [header, const SizedBox(height: 18), body],
-          );
+          return ReadableListView(children: [body]);
         }
         final status = _StatusCard(
           status: _git.status!,
@@ -233,14 +228,7 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
         );
         if (box.maxWidth < kovapilotVersionWideWidth) {
           return ReadableListView(
-            children: [
-              header,
-              const SizedBox(height: 16),
-              notice,
-              status,
-              branches,
-              history,
-            ],
+            children: [notice, status, branches, history],
           );
         }
         // Tablets and phones on their side: status and branches on the
@@ -256,21 +244,15 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
                 Expanded(
                   child: ListView(
                     key: const ValueKey('git-left-column'),
-                    padding: EdgeInsets.fromLTRB(0, 64, 0, bottom),
-                    children: [
-                      header,
-                      const SizedBox(height: 16),
-                      notice,
-                      status,
-                      branches,
-                    ],
+                    padding: EdgeInsets.fromLTRB(0, 8, 0, bottom),
+                    children: [notice, status, branches],
                   ),
                 ),
                 const SizedBox(width: 20),
                 Expanded(
                   child: ListView(
                     key: const ValueKey('git-right-column'),
-                    padding: EdgeInsets.fromLTRB(0, 64, 0, bottom),
+                    padding: EdgeInsets.fromLTRB(0, 8, 0, bottom),
                     children: [const SizedBox(height: 2), history],
                   ),
                 ),

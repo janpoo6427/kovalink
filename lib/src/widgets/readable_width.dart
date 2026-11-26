@@ -21,7 +21,7 @@ class ReadableListView extends StatelessWidget {
       return ListView(
         padding: EdgeInsets.fromLTRB(
           side,
-          64,
+          8,
           side,
           32 + MediaQuery.paddingOf(context).bottom,
         ),

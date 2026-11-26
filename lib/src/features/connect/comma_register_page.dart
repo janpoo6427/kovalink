@@ -12,7 +12,6 @@ import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/kovapilot_endpoints.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
 import 'package:kovalink/src/services/comma_link.dart';
-import 'package:kovalink/src/widgets/page_header.dart';
 import 'package:kovalink/src/widgets/readable_width.dart';
 
 /// Reads a picked server.pem (tests pass a fake).
@@ -55,6 +54,8 @@ class CommaRegisterPage extends StatefulWidget {
   }) => KovaPageRoute<KovaDevice>(
     name: routeName,
     builder: (context) => KovaPage(
+      title: "콤마 등록",
+      subtitle: "연결 정보를 확인해요",
       backTooltip: '장치 연결로 돌아가기',
       child: CommaRegisterPage(
         link: link,
@@ -189,11 +190,9 @@ class _CommaRegisterPageState extends State<CommaRegisterPage> {
     final seen = widget.device?.pin;
     return ReadableListView(
       children: [
-        const PageHeader(
-          title: '콤마 등록',
-          subtitle:
-              '관리자에게 받은 연결 토큰과 콤마의 인증서 정보를 넣어 주세요. '
-              '처음 보는 콤마를 그냥 믿지 않아요.',
+        const Text(
+          '관리자에게 받은 연결 토큰과 콤마의 인증서 정보를 넣어 주세요. '
+          '처음 보는 콤마를 그냥 믿지 않아요.',
         ),
         const SizedBox(height: 20),
         Card(

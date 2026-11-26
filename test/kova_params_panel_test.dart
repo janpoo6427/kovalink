@@ -39,6 +39,14 @@ Future<void> _pumpPanel(WidgetTester tester, KovaParamsController kova) async {
       ),
     ),
   );
+  if (kova.document != null) await _openGroups(tester);
+}
+
+Future<void> _openGroups(WidgetTester tester) async {
+  for (final id in ["steering", "e2e"]) {
+    await tester.tap(find.byKey(PageStorageKey("kova-group-panel-$id")));
+    await tester.pumpAndSettle();
+  }
 }
 
 void main() {
@@ -63,7 +71,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('kova-connect')));
     await tester.pump();
     expect(find.text('연결됨'), findsOneWidget);
-    expect(find.text('조향'), findsOneWidget);
+    expect(find.text("항시 조향"), findsNothing);
+    await _openGroups(tester);
+    expect(find.text("조향"), findsOneWidget);
     expect(find.text('통신 시험용'), findsOneWidget);
     expect(find.text('항시 조향'), findsOneWidget);
     expect(find.text('숨긴 시험 항목'), findsNothing);

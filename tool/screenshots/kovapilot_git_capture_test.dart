@@ -81,6 +81,7 @@ Future<void> _capture(
         debugShowCheckedModeBanner: false,
         theme: KovaLinkApp.theme(Brightness.dark),
         home: KovaPage(
+          title: "kovapilot 버전",
           backTooltip: KovaRoutes.backToSettings,
           child: KovapilotVersionScreen(
             endpoint: _endpoint,

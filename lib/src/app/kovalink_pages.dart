@@ -85,6 +85,7 @@ class KovaLinkPages {
   Route<void> connectPage() => KovaPageRoute(
     name: KovaRoutes.connect,
     builder: (context) => KovaPage(
+      title: "장치 연결",
       child: ConnectScreen(
         controller: controller,
         settings: settings,
@@ -99,6 +100,7 @@ class KovaLinkPages {
         name: settingsRoute(tab),
         instant: instant,
         builder: (context) => KovaPage(
+          title: "설정",
           child: SettingsScreen(
             controller: controller,
             vehicleModel: vehicleModel,
