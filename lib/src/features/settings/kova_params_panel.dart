@@ -520,6 +520,22 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
           if (_expanded) _Details(setting: s, locale: _locale),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: _badges()),
+          if (controller.status == KovaLinkStatus.connected)
+            for (final dependency in s.dependencies)
+              if (dependency.state != 'met')
+                _Line(
+                  icon: Icons.info_outline,
+                  color: _warn,
+                  text:
+                      '${dependency.title.resolve(defaultLocale: _locale)} · '
+                      '${switch (dependency.state) {
+                        'unmet' => '조건 필요',
+                        'pendingRestart' => '다음 시작 때 적용',
+                        'pendingConsumer' => '연동 준비 중',
+                        'unsupported' => '이 차량에서 미지원',
+                        _ => '확인 대기',
+                      }}',
+                ),
           if (control == KovaParamControl.slider) _slider(shown, editable),
           if (control == KovaParamControl.numberField) _numberField(editable),
           if (control == KovaParamControl.choice)
@@ -577,7 +593,10 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
   List<Widget> _badges() {
     if (s.status == KovaAvailability.unsupported) return [];
     final currentState = widget.controller.status == KovaLinkStatus.connected
-        ? s.applyState
+        ? s.applyState == 'applied' &&
+                  s.dependencies.any((dependency) => dependency.state != 'met')
+              ? null
+              : s.applyState
         : null;
     final policy = switch ((s.applyPolicy, currentState)) {
       (KovaApplyPolicy.parked, 'pendingParked') => ('저장됨 · P 정차 시 적용', _warn),

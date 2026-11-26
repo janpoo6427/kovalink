@@ -116,6 +116,24 @@ class KovaParamOption {
       title?.resolve(defaultLocale: defaultLocale) ?? '$value';
 }
 
+class KovaParamDependency {
+  const KovaParamDependency({required this.title, required this.state});
+
+  final LocalizedText title;
+  final String state;
+
+  static KovaParamDependency? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final title = LocalizedText.tryParse(json['title']);
+    if (title == null) return null;
+    final state = json['state'];
+    return KovaParamDependency(
+      title: title,
+      state: state is String ? state : 'unknown',
+    );
+  }
+}
+
 class KovaParamSetting {
   const KovaParamSetting({
     required this.key,
@@ -143,6 +161,7 @@ class KovaParamSetting {
     this.numericSwitch = false,
     this.hidden = false,
     this.requiredCapabilities = const [],
+    this.dependencies = const [],
   });
 
   final String key;
@@ -170,6 +189,7 @@ class KovaParamSetting {
   final bool numericSwitch;
   final bool hidden;
   final List<String> requiredCapabilities;
+  final List<KovaParamDependency> dependencies;
 
   static KovaParamSetting parse(Map<dynamic, dynamic> json) {
     final key = json['key'];
@@ -200,6 +220,7 @@ class KovaParamSetting {
     }
     final order = json['order'];
     final capabilities = json['requiredCapabilities'];
+    final dependencies = json['dependencies'];
     return KovaParamSetting(
       key: key,
       groupId: groupId,
@@ -250,6 +271,10 @@ class KovaParamSetting {
         if (capabilities is List)
           for (final c in capabilities)
             if (c is String) c,
+      ],
+      dependencies: [
+        if (dependencies is List)
+          for (final raw in dependencies) ?KovaParamDependency.tryParse(raw),
       ],
     );
   }

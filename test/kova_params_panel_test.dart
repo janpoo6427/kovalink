@@ -52,6 +52,32 @@ void main() {
 
   tearDown(() => kova.dispose());
 
+  testWidgets('shows gateway dependency state alongside the saved setting', (
+    tester,
+  ) async {
+    final setting = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .first;
+    setting['dependencies'] = [
+      {
+        'title': {'ko': 'openpilot 종방향 제어'},
+        'state': 'pendingRestart',
+      },
+      {
+        'title': {'ko': '충족된 조건'},
+        'state': 'met',
+      },
+    ];
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    expect(find.text('openpilot 종방향 제어 · 다음 시작 때 적용'), findsOneWidget);
+    expect(find.textContaining('충족된 조건'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('kova-toggle-steering.always_on')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('draws groups and settings only from the document', (
     tester,
   ) async {
