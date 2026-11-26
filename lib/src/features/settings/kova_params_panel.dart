@@ -174,6 +174,7 @@ class KovaConnectionCard extends StatelessWidget {
                   document.deviceParked != true &&
                   document.settings.values.any(
                     (s) =>
+                        s.longitudinalBlock == null &&
                         !s.saveAnytime &&
                         s.access == KovaParamAccess.readWrite &&
                         (s.applyPolicy == KovaApplyPolicy.offroad ||
@@ -286,6 +287,13 @@ class _GroupCard extends StatelessWidget {
     final locale = document.defaultLocale;
     final title = group.title?.resolve(defaultLocale: locale) ?? '기타';
     final description = group.description?.resolve(defaultLocale: locale);
+    // Settings that need openpilot longitudinal control are replaced, at the
+    // first one's place, by a note naming them while it does not run.
+    final blocked = [
+      for (final setting in group.settings)
+        if (setting.longitudinalBlock != null) setting,
+    ];
+    final shown = group.settings.length - blocked.length;
     return Card(
       key: ValueKey('kova-group-${group.id}'),
       clipBehavior: Clip.antiAlias,
@@ -293,25 +301,75 @@ class _GroupCard extends StatelessWidget {
         key: PageStorageKey('kova-group-panel-${group.id}'),
         maintainState: true,
         title: Text(title),
-        subtitle: Text('${group.settings.length}개 항목'),
+        subtitle: Text(
+          blocked.isEmpty
+              ? '$shown개 항목'
+              : '$shown개 항목 · 종방향 제어 필요 ${blocked.length}개',
+        ),
         children: [
           if (description != null)
             Padding(
               padding: const EdgeInsets.all(12),
               child: Text(description),
             ),
-          for (final setting in group.settings) ...[
-            const Divider(height: 1),
-            KovaSettingTile(
-              setting: setting,
-              document: document,
-              controller: controller,
-            ),
-          ],
+          for (final setting in group.settings)
+            if (setting.longitudinalBlock == null) ...[
+              const Divider(height: 1),
+              KovaSettingTile(
+                setting: setting,
+                document: document,
+                controller: controller,
+              ),
+            ] else if (identical(setting, blocked.first)) ...[
+              const Divider(height: 1),
+              KovaLongitudinalOnlyNote(
+                groupId: group.id,
+                reason: setting.longitudinalBlock!,
+                features: [
+                  for (final s in blocked)
+                    s.title.resolve(defaultLocale: locale),
+                ],
+              ),
+            ],
         ],
       ),
     );
   }
+}
+
+/// Stands in for settings that need openpilot longitudinal control while it
+/// is off, saved for the next start, or unsupported on this vehicle.
+class KovaLongitudinalOnlyNote extends StatelessWidget {
+  KovaLongitudinalOnlyNote({
+    required this.groupId,
+    required this.reason,
+    required this.features,
+  }) : super(key: ValueKey('kova-long-only-$groupId'));
+
+  final String groupId;
+
+  /// [KovaParamSetting.longitudinalBlock] of the hidden settings.
+  final String reason;
+  final List<String> features;
+
+  static String message(String reason, List<String> features) {
+    final names = features.join(', ');
+    return switch (reason) {
+      'pendingRestart' => '종방향 제어가 저장됐어요 · 다음 시동부터 사용할 수 있는 기능: $names',
+      'unsupported' => '이 차량은 종방향 제어를 지원하지 않아요 · 사용할 수 없는 기능: $names',
+      _ => '종방향 제어를 켜면 사용할 수 있는 기능: $names',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+    child: _Banner(
+      color: reason == 'unsupported' ? _muted : _warn,
+      icon: reason == 'unsupported' ? Icons.block : Icons.speed,
+      text: message(reason, features),
+    ),
+  );
 }
 
 class KovaSettingTile extends StatefulWidget {

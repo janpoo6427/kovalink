@@ -117,19 +117,29 @@ class KovaParamOption {
 }
 
 class KovaParamDependency {
-  const KovaParamDependency({required this.title, required this.state});
+  const KovaParamDependency({
+    required this.title,
+    required this.state,
+    this.condition,
+  });
 
   final LocalizedText title;
   final String state;
+
+  /// Gateway vehicle condition id (e.g. `openpilotLongitudinalApplied`);
+  /// null for a dependency on another setting's value.
+  final String? condition;
 
   static KovaParamDependency? tryParse(Object? json) {
     if (json is! Map) return null;
     final title = LocalizedText.tryParse(json['title']);
     if (title == null) return null;
     final state = json['state'];
+    final condition = json['condition'];
     return KovaParamDependency(
       title: title,
       state: state is String ? state : 'unknown',
+      condition: condition is String ? condition : null,
     );
   }
 
@@ -285,6 +295,29 @@ class KovaParamSetting {
 
   bool get hasRange =>
       minimum != null && maximum != null && minimum! <= maximum!;
+
+  /// Gateway condition that openpilot longitudinal control runs now.
+  static const longitudinalCondition = 'openpilotLongitudinalApplied';
+
+  /// Why this setting is out of reach without openpilot longitudinal
+  /// control, from the gateway's evaluated condition: `unmet` (off),
+  /// `pendingRestart` (saved, runs from the next start) or `unsupported`
+  /// (this vehicle). Null when it does not need longitudinal control, when
+  /// longitudinal control runs, or while the vehicle is not known yet.
+  String? get longitudinalBlock {
+    for (final dependency in dependencies) {
+      if (dependency.condition == longitudinalCondition) {
+        return const {
+              'unmet',
+              'pendingRestart',
+              'unsupported',
+            }.contains(dependency.state)
+            ? dependency.state
+            : null;
+      }
+    }
+    return null;
+  }
 
   /// Effective availability: the gateway's `applyStatus` wins when known.
   KovaAvailability get status => applyStatus == null
