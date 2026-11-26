@@ -23,6 +23,27 @@ class _TailscaleVpnCardState extends State<TailscaleVpnCard> {
 
   TailscaleVpnClient get _client => TailscaleVpnClient(widget.link);
 
+  /// While the comma installs or starts Tailscale (or waits for the browser
+  /// login) its state is asked again after this; null stops asking.
+  static Duration? _pollDelay(Object? state) => switch (state) {
+    'authorizing' => const Duration(seconds: 2),
+    'installing' || 'starting' => const Duration(seconds: 3),
+    'installFailed' => const Duration(seconds: 15),
+    _ => null,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    // The owner sees where the comma's Tailscale is without pressing
+    // anything (the card is rebuilt when the phone becomes the owner).
+    if (_client.canManage) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _run(action: VpnAction.status);
+      });
+    }
+  }
+
   @override
   void dispose() {
     _poll?.cancel();
@@ -49,11 +70,9 @@ class _TailscaleVpnCardState extends State<TailscaleVpnCard> {
           _status = result;
         }
       });
-      if (action != null && result['state'] == 'authorizing') {
-        _poll = Timer(
-          const Duration(seconds: 2),
-          () => _run(action: VpnAction.status),
-        );
+      final delay = action == null ? null : _pollDelay(result['state']);
+      if (delay != null) {
+        _poll = Timer(delay, () => _run(action: VpnAction.status));
       }
     } on VpnException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -125,12 +144,18 @@ class _TailscaleVpnCardState extends State<TailscaleVpnCard> {
               'connected' => '콤마의 VPN이 연결됐어요.',
               'authorizing' when login != null => '브라우저에서 콤마 등록을 승인해 주세요.',
               'authorizing' => 'Tailscale 로그인 주소를 받는 중이에요.',
-              'notInstalled' => '콤마에 Tailscale 설치가 필요해요.',
+              'installing' =>
+                '콤마가 Tailscale을 받아 설치하고 있어요. 콤마가 인터넷에 연결돼 있어야 해요.',
+              'installFailed' =>
+                '콤마가 Tailscale을 받지 못했어요. 콤마의 인터넷 연결을 확인해 주세요. 콤마가 알아서 다시 받아요.',
+              'notInstalled' =>
+                '콤마에 Tailscale이 없어요. kovapilot을 업데이트하면 콤마가 알아서 설치해요.',
               'approvalRequired' => 'Tailscale 관리자 콘솔에서 이 콤마를 승인해 주세요.',
               'needsLogin' => 'Tailscale 로그인이 필요해요.',
               'starting' => '콤마의 Tailscale이 시작 중이에요.',
               'gatewayUnavailable' => 'tailnet의 MagicDNS와 HTTPS 설정을 확인해 주세요.',
               'daemonUnavailable' => '콤마에서 Tailscale을 시작할 수 없어요.',
+              null when canManage && _error == null => '콤마의 VPN 상태를 확인하고 있어요.',
               _ when host != null => '휴대폰에서 Tailscale을 켜고 콤마 상태를 확인하세요.',
               _ => '같은 Wi-Fi에서 소유자 등록을 한 뒤 VPN을 연결하세요.',
             }),
@@ -159,7 +184,7 @@ class _TailscaleVpnCardState extends State<TailscaleVpnCard> {
                         : () => _run(action: VpnAction.status),
                     child: const Text('VPN 상태 확인'),
                   ),
-                if (canManage && (status == null || status == 'needsLogin'))
+                if (canManage && status == 'needsLogin')
                   FilledButton(
                     onPressed: _busy
                         ? null

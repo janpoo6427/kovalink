@@ -114,7 +114,7 @@ class TailscaleVpnClient {
       throw VpnException(switch (response.statusCode) {
         403 => '이 장치의 소유자 연결을 확인해 주세요.',
         404 => '이 콤마의 Gateway에서는 VPN 기능을 사용할 수 없어요.',
-        409 => '시동을 끈 상태에서 VPN을 등록하거나 해제해 주세요.',
+        409 => 'P단에 세우거나 시동을 끈 상태에서 VPN을 등록하거나 해제해 주세요.',
         503 => '콤마의 Tailscale 서비스가 아직 준비되지 않았어요.',
         _ => '콤마의 VPN 응답을 확인할 수 없어요.',
       });

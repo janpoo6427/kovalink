@@ -114,6 +114,10 @@ class FakeWifiGateway {
   bool ownerPairingSupported = true;
   int pairRequests = 0;
 
+  /// What `GET /v1/vpn` reports to the owner, and how often it was asked.
+  String vpnState = 'needsLogin';
+  int vpnRequests = 0;
+
   int get port => _server.port;
   String get origin => 'https://$address:$port';
 
@@ -211,7 +215,8 @@ class FakeWifiGateway {
         });
       case ('GET', '/v1/vpn'):
         if (!owner) return _error(request, 403, 'forbidden');
-        return _json(request, 200, {'state': 'needsLogin'});
+        vpnRequests++;
+        return _json(request, 200, {'state': vpnState});
       case ('GET', '/v1/kova-params'):
         final r = await settings.get(request.uri, const Duration(seconds: 5));
         request.response.statusCode = r.statusCode;
