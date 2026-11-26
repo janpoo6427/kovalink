@@ -1,5 +1,6 @@
 # KovaLink 설치 파일
 
+- [1.0.8 VPN IP로 전체 기능](kovalink-1.0.8-1892849-arm64-v8a.apk) — `master@1892849`. 콤마 VPN이 켜지면 휴대폰 Tailscale만 켜 두면 같은 Wi-Fi가 아니어도 콤마의 VPN IP(100.x)로 알아서 연결돼 모든 기능을 써요(IP로 연결에 100.x도 돼요). VPN 칸에 켜기·끄기와 '부팅하면 켜지고, 콤마에서 Wi-Fi를 끊거나 여기서 끄면 다시 켤 때까지 꺼짐' 안내. 로그인하러 브라우저에 다녀와도 상태를 이어서 확인해요. kovapilot `master-jh@5d931dda8` 이상 필요. 1.0.7과 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
 - [1.0.7 Tailscale 자동 설치 표시](kovalink-1.0.7-bc9d9fc-arm64-v8a.apk) — `master@bc9d9fc`. 소유자 휴대폰이 장치 연결 화면에서 콤마의 Tailscale 설치 중·받기 실패·로그인 필요를 알아서 보여 주고, 준비되면 Tailscale 연결 버튼이 나와요. P단에서도 연결할 수 있어요. kovapilot `master-jh@2af2c4f88` 이상 필요. 1.0.6과 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
 - [1.0.6 소유자 등록](kovalink-1.0.6-2f4fcf9-arm64-v8a.apk) — `master@2f4fcf9`. 자동 Wi-Fi에서 장치 연결 → 소유자로 등록, 콤마 화면 알림의 6자리 코드를 넣으면 버전 바꾸기·다시 켜기·Tailscale을 쓸 수 있어요. kovapilot `master-jh@1684f602d` 이상 필요. 1.0.5와 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
 - [1.0.5 콤마 다시 켜기·Git 적용·VPN 연결](kovalink-1.0.5-73cfc14-arm64-v8a.apk) — `master@73cfc14`. 버전 화면에서 받아 둔 버전을 적용하고 콤마를 다시 켤 수 있어요. kovapilot `master@fe277e40b` 이상 필요. 1.0.4와 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
