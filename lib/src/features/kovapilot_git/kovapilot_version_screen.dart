@@ -4,7 +4,8 @@
 // that change to the comma's updater when the comma allows it (registered
 // phone, car off, updater idle); otherwise it stays off with its reason.
 // The comma downloads the change and moves to it on its next start; the
-// screen follows the download and says when to restart.
+// screen follows the download and says when to restart. 콤마 다시 켜기 asks
+// the comma to restart (car off) and follows it until it answers again.
 //
 // Branch first: the history is the current branch's, and a reset stays
 // inside it. A commit of another branch is reached by switching to that
@@ -68,6 +69,21 @@ String? kovaApplyBlockReason(KovaGitStatus? status, KovaGitPlan? plan) {
   if (!plan.dirtyKnown) return '콤마에서 직접 수정한 파일이 있는지 확인하지 못해서 바꿀 수 없어요.';
   if (plan.dirty) return '콤마에 수정된 파일이 있어서 바꿀 수 없어요.';
   return null;
+}
+
+/// Why 콤마 다시 켜기 is off, or null when it can be pressed.
+String? kovaRestartBlockReason(KovaGitStatus status) {
+  if (status.restartEnabled) return null;
+  if (status.maintenance?.phase == KovaGitMaintenancePhase.queued) {
+    return '새 버전을 다 받은 뒤 다시 켤 수 있어요.';
+  }
+  if (status.mutationBlock == 'authorization') {
+    return '등록한 휴대폰으로 연결해야 다시 켤 수 있어요.';
+  }
+  if ((status.updaterState ?? '').startsWith('finalizing')) {
+    return '콤마가 새 버전을 준비하는 동안은 다시 켤 수 없어요.';
+  }
+  return '시동을 끄면 다시 켤 수 있어요.';
 }
 
 /// Why the updater stopped, from the maintenance `reason`.
@@ -240,10 +256,17 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
         if (body != null) {
           return ReadableListView(children: [body]);
         }
+        final current = _git.status!;
+        final canRestart =
+            !_git.restartBusy && kovaRestartBlockReason(current) == null;
         final status = _StatusCard(
-          status: _git.status!,
+          status: current,
           onRefresh: _git.refresh,
-          refreshing: _git.load == KovaGitLoad.loading,
+          refreshing:
+              _git.load == KovaGitLoad.loading ||
+              _git.restartState == KovaGitRestart.restarting,
+          onRestart: canRestart ? _restart : null,
+          restarting: _git.restartBusy,
         );
         final branches = _BranchesCard(
           key: _branchesKey,
@@ -257,19 +280,36 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
           onPick: _previewReset,
           onShowBranches: _showBranches,
         );
-        final notice = _git.status!.applying
+        final restartCard = _git.restartState == KovaGitRestart.idle
             ? null
-            : _ApplyNotice(status: _git.status!);
-        final maintenance = _git.status!.maintenance;
+            : _RestartCard(
+                state: _git.restartState,
+                staged:
+                    current.maintenance?.phase ==
+                    KovaGitMaintenancePhase.staged,
+                onRefresh: _git.refresh,
+              );
+        final notice = current.applying || restartCard != null
+            ? null
+            : _ApplyNotice(status: current);
+        final maintenance = current.maintenance;
         final progress = maintenance == null
             ? null
             : _MaintenanceCard(
                 maintenance: maintenance,
-                updaterState: _git.status!.updaterState,
+                updaterState: current.updaterState,
+                onRestart: canRestart ? _restart : null,
               );
         if (box.maxWidth < kovapilotVersionWideWidth) {
           return ReadableListView(
-            children: [?notice, ?progress, status, branches, history],
+            children: [
+              ?restartCard,
+              ?notice,
+              ?progress,
+              status,
+              branches,
+              history,
+            ],
           );
         }
         // Tablets and phones on their side: status and branches on the
@@ -286,7 +326,13 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
                   child: ListView(
                     key: const ValueKey('git-left-column'),
                     padding: EdgeInsets.fromLTRB(0, 8, 0, bottom),
-                    children: [?notice, ?progress, status, branches],
+                    children: [
+                      ?restartCard,
+                      ?notice,
+                      ?progress,
+                      status,
+                      branches,
+                    ],
                   ),
                 ),
                 const SizedBox(width: 20),
@@ -304,6 +350,42 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
       },
     ),
   );
+
+  /// Asks first: the connection drops while the comma restarts.
+  Future<void> _restart() async {
+    final staged =
+        _git.status?.maintenance?.phase == KovaGitMaintenancePhase.staged;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const ValueKey('git-restart-dialog'),
+        title: const Text('콤마를 다시 켤까요?'),
+        content: Text(
+          staged
+              ? '받아 둔 새 버전으로 바뀌어요. 다시 켜는 1~2분 동안 연결이 끊겨요.'
+              : '다시 켜는 1~2분 동안 연결이 끊겨요.',
+          style: const TextStyle(height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            key: const ValueKey('git-restart-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('다시 켜기'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final failure = await _git.restartComma();
+    if (!mounted || failure == null) return;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(failure.message)));
+  }
 
   /// Loading, failure or not-connected content; null once loaded.
   Widget? _body() {
@@ -487,12 +569,83 @@ class _ApplyNotice extends StatelessWidget {
   }
 }
 
+/// A restart from this phone: sending, waiting, back, or not back.
+class _RestartCard extends StatelessWidget {
+  const _RestartCard({
+    required this.state,
+    required this.staged,
+    required this.onRefresh,
+  });
+
+  final KovaGitRestart state;
+  final bool staged;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final (
+      IconData? icon,
+      Color? tone,
+      String title,
+      String? detail,
+    ) = switch (state) {
+      KovaGitRestart.idle ||
+      KovaGitRestart.sending => (null, null, '콤마에 다시 켜기를 보내고 있어요.', null),
+      KovaGitRestart.restarting => (
+        null,
+        null,
+        '콤마를 다시 켜고 있어요.',
+        staged
+            ? '받아 둔 새 버전으로 바뀌어요. 1~2분 뒤 다시 연결되면 이 화면을 새로 읽어요.'
+            : '1~2분 뒤 다시 연결되면 이 화면을 새로 읽어요.',
+      ),
+      KovaGitRestart.back => (
+        Icons.check_circle_outline_rounded,
+        _accent,
+        '콤마가 다시 켜졌어요.',
+        null,
+      ),
+      KovaGitRestart.lost => (
+        Icons.portable_wifi_off_rounded,
+        _warn,
+        '콤마가 아직 다시 연결되지 않았어요.',
+        '콤마 화면이 켜졌는지 보고, 같은 와이파이나 핫스팟에 있으면 새로 읽어 주세요.',
+      ),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: _StateCard(
+        key: ValueKey('git-restart-${state.name}'),
+        icon: icon,
+        tone: tone,
+        title: title,
+        detail: detail,
+        action: state == KovaGitRestart.lost
+            ? OutlinedButton.icon(
+                key: const ValueKey('git-restart-refresh'),
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('새로 읽기'),
+              )
+            : null,
+      ),
+    );
+  }
+}
+
 /// How far the last 적용 got on the comma.
 class _MaintenanceCard extends StatelessWidget {
-  const _MaintenanceCard({required this.maintenance, this.updaterState});
+  const _MaintenanceCard({
+    required this.maintenance,
+    this.updaterState,
+    this.onRestart,
+  });
 
   final KovaGitMaintenance maintenance;
   final String? updaterState;
+
+  /// Restarts the comma now (staged only); null when it cannot.
+  final VoidCallback? onRestart;
 
   @override
   Widget build(BuildContext context) {
@@ -513,7 +666,9 @@ class _MaintenanceCard extends StatelessWidget {
         Icons.restart_alt_rounded,
         _accent,
         '$target을 받아 뒀어요.',
-        '콤마를 다시 켜면 바뀌어요. 콤마 화면의 업데이트 알림에서 바로 다시 시작할 수도 있어요.',
+        onRestart != null
+            ? '콤마를 다시 켜면 바뀌어요. 여기서 바로 다시 켤 수 있어요.'
+            : '콤마를 다시 켜면 바뀌어요. 콤마 화면의 업데이트 알림에서 바로 다시 시작할 수도 있어요.',
       ),
       KovaGitMaintenancePhase.installed => (
         Icons.check_circle_outline_rounded,
@@ -536,6 +691,16 @@ class _MaintenanceCard extends StatelessWidget {
         tone: tone,
         title: title,
         detail: detail,
+        action:
+            maintenance.phase == KovaGitMaintenancePhase.staged &&
+                onRestart != null
+            ? FilledButton.icon(
+                key: const ValueKey('git-restart-staged'),
+                onPressed: onRestart,
+                icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                label: const Text('지금 다시 켜기'),
+              )
+            : null,
       ),
     );
   }
@@ -649,11 +814,17 @@ class _StatusCard extends StatelessWidget {
     required this.status,
     required this.onRefresh,
     required this.refreshing,
+    this.onRestart,
+    this.restarting = false,
   });
 
   final KovaGitStatus status;
   final VoidCallback onRefresh;
   final bool refreshing;
+
+  /// Restarts the comma; null while it cannot.
+  final VoidCallback? onRestart;
+  final bool restarting;
 
   @override
   Widget build(BuildContext context) {
@@ -747,11 +918,45 @@ class _StatusCard extends StatelessWidget {
                     style: const TextStyle(height: 1.5),
                   ),
                 ),
+                if (status.restartSupported) _restartRow(),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+extension on _StatusCard {
+  Widget _restartRow() {
+    final reason = restarting ? null : kovaRestartBlockReason(status);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OutlinedButton.icon(
+            key: const ValueKey('git-restart'),
+            onPressed: onRestart,
+            icon: restarting
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.restart_alt_rounded, size: 18),
+            label: Text(restarting ? '콤마를 다시 켜고 있어요' : '콤마 다시 켜기'),
+          ),
+          if (reason != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              reason,
+              key: const ValueKey('git-restart-reason'),
+              style: const TextStyle(color: _muted, fontSize: 13, height: 1.4),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
