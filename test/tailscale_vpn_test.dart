@@ -24,19 +24,20 @@ void main() {
     }
   });
 
-  test('only valid node names are persisted with the registered comma', () {
+  test('only the comma VPN IP is persisted with the registered comma', () {
     final json = {'pin': 'a' * 64, 'host': '192.168.1.20', 'port': 8082};
     final comma = RegisteredComma.fromJson(json)!;
     expect(comma.vpnHost, isNull);
-    final registered = comma.withVpnHost('comma.tail-test.ts.net');
+    final registered = comma.withVpnHost('100.64.12.1');
     expect(RegisteredComma.fromJson(registered.toJson()), registered);
     expect(registered.at('192.168.1.21', 8082).vpnHost, registered.vpnHost);
     for (final invalid in [
       'evil.example',
-      '100.64.12.1',
-      'comma.tail-test.ts.net.evil.example',
-      'comma.tail-test.ts.net:443',
-      'comma.tail-test.ts.net/path',
+      'comma.tail-test.ts.net',
+      '100.128.0.1',
+      '192.168.1.20',
+      '100.64.12.1:8083',
+      '100.064.12.1',
     ]) {
       expect(
         RegisteredComma.fromJson({...json, 'vpnHost': invalid})!.vpnHost,

@@ -146,7 +146,9 @@ class KovapilotEndpoints {
   } else {
     host = value; // a name, IPv4, or bare IPv6 without a port
   }
-  var port = kovaGatewayDefaultPort;
+  var port = LocalEndpointPolicy.isTailnetAddress(host.toLowerCase())
+      ? kovaGatewayTailnetPort
+      : kovaGatewayDefaultPort;
   if (portText != null) {
     final parsed = RegExp(r'^[0-9]{1,5}$').hasMatch(portText)
         ? int.parse(portText)
@@ -169,7 +171,7 @@ abstract final class CommaAddressText {
   static const empty = '콤마의 IP를 넣어 주세요.';
   static const format = 'IP 모양이 아니에요. 예: 192.168.43.20';
   static const port = '포트는 1부터 65535 사이 숫자예요. 보통은 안 적어도 돼요.';
-  static const notLocal = '같은 와이파이나 핫스팟 안의 IP만 쓸 수 있어요.';
+  static const notLocal = '같은 와이파이나 핫스팟 안의 IP, 또는 콤마의 VPN IP(100.x)만 쓸 수 있어요.';
 
   /// Where the comma shows its IP (openpilot UI: 설정 → 네트워크 → 고급 →
   /// IP 주소; comma four: the Wi-Fi item under 네트워크).

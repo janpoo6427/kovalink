@@ -118,6 +118,16 @@ class FakeWifiGateway {
   String vpnState = 'needsLogin';
   int vpnRequests = 0;
 
+  /// Extra fields of the `GET /v1/vpn` answer (e.g. `host`).
+  Map<String, Object?> vpnExtra = {};
+
+  /// Last `POST /v1/vpn/<action>` and what the state becomes after it.
+  String? vpnPosted;
+
+  /// Drop `GET /v1/vpn` without an answer, as a phone that left the
+  /// network sees it.
+  bool vpnDrop = false;
+
   int get port => _server.port;
   String get origin => 'https://$address:$port';
 
@@ -216,6 +226,19 @@ class FakeWifiGateway {
       case ('GET', '/v1/vpn'):
         if (!owner) return _error(request, 403, 'forbidden');
         vpnRequests++;
+        if (vpnDrop) {
+          final socket = await request.response.detachSocket(
+            writeHeaders: false,
+          );
+          return socket.destroy();
+        }
+        return _json(request, 200, {'state': vpnState, ...vpnExtra});
+      case ('POST', '/v1/vpn/connect' || '/v1/vpn/stop'):
+        if (!owner) return _error(request, 403, 'forbidden');
+        await utf8.decodeStream(request);
+        vpnPosted = request.uri.path.split('/').last;
+        vpnState = vpnPosted == 'stop' ? 'stopped' : 'authorizing';
+        vpnExtra = {};
         return _json(request, 200, {'state': vpnState});
       case ('GET', '/v1/kova-params'):
         final r = await settings.get(request.uri, const Duration(seconds: 5));

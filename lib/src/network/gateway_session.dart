@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 import 'package:kovalink/src/kova_params/kova_params_client.dart';
 import 'package:kovalink/src/network/gateway_pin.dart';
 import 'package:kovalink/src/network/kovapilot_endpoints.dart';
+import 'package:kovalink/src/network/local_endpoint_policy.dart';
 
 /// TCP connected but the TLS handshake never finished: something holds the
 /// port without answering. A [SocketException] so every client treats it
@@ -193,6 +194,11 @@ class GatewaySession {
 
   /// True when requests carry the token (Wi-Fi with a registered comma).
   bool get sendsToken => endpoints.secure && credentials != null;
+
+  /// `/v1/health` bindScope this session expects: `tailnet` on the comma's
+  /// VPN IP, `wifi` otherwise.
+  String get expectedScope =>
+      LocalEndpointPolicy.isTailnetAddress(endpoints.host) ? 'tailnet' : 'wifi';
 
   /// The Gateway's access mode this session expects in `/v1/health`.
   String? get wifiAuthentication => !endpoints.secure

@@ -127,6 +127,11 @@ class _KovaLinkAppState extends State<KovaLinkApp> with WidgetsBindingObserver {
                 lastEndpoint: () =>
                     settings.value.registeredComma?.endpoints.origin ??
                     settings.value.lastDeviceEndpoint,
+                // Then the comma's VPN IP, tried only while this phone is on
+                // the tailnet (Wi-Fi first, so at home it stays on Wi-Fi).
+                knownEndpoints: () => [
+                  ?settings.value.registeredComma?.vpnEndpoint,
+                ],
                 canAttach: link.canAttach,
                 adverts: BonsoirCommaAdvertSource(),
               ));

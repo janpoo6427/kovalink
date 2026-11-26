@@ -6,7 +6,7 @@ import 'package:kovalink/src/kova_params/kova_params_client.dart';
 import 'package:kovalink/src/network/comma_registry.dart';
 import 'package:kovalink/src/services/comma_link.dart';
 
-enum VpnAction { status, connect, disconnect }
+enum VpnAction { status, connect, stop, disconnect }
 
 class TailscaleVpnClient {
   const TailscaleVpnClient(this.link);

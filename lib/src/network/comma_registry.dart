@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
 import 'package:kovalink/src/network/gateway_pin.dart';
 import 'package:kovalink/src/network/kovapilot_endpoints.dart';
+import 'package:kovalink/src/network/local_endpoint_policy.dart';
 
 @immutable
 class RegisteredComma {
@@ -25,9 +26,18 @@ class RegisteredComma {
   final int port;
   final String? vpnHost;
 
-  static bool isTailscaleHost(String host) => RegExp(
-    r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ts\.net$',
-  ).hasMatch(host);
+  /// The comma's VPN IP (no MagicDNS name).
+  static bool isTailscaleHost(String host) =>
+      LocalEndpointPolicy.isTailnetAddress(host);
+
+  /// The Gateway over the comma's VPN, when its VPN IP is known.
+  String? get vpnEndpoint => vpnHost == null
+      ? null
+      : KovapilotEndpoints(
+          host: vpnHost!,
+          port: kovaGatewayTailnetPort,
+          secure: true,
+        ).origin;
 
   KovapilotEndpoints get endpoints =>
       KovapilotEndpoints(host: host, port: port, secure: true);

@@ -17,6 +17,10 @@ import 'package:kovalink/src/network/local_endpoint_policy.dart';
 /// kovapilot gateway default port (`openpilot/kovapilot/gateway`).
 const int kovaGatewayDefaultPort = 8082;
 
+/// The Gateway on the comma's VPN IP (Tailscale 100.x): the comma's
+/// tailscaled hands 100.x:8083 to the Gateway's VPN listener.
+const int kovaGatewayTailnetPort = 8083;
+
 enum NetworkKind {
   wifi,
   hotspot,
@@ -126,7 +130,11 @@ class LocalNetwork {
 
   /// True when this network's /24 may be scanned: an allowed interface kind
   /// and an address the local-only policy accepts.
-  bool get scannable => kind.scannable && isPolicyAddress(address);
+  bool get scannable =>
+      kind.scannable &&
+      isPolicyAddress(address) &&
+      // The VPN IP range is reached only as the comma's known VPN IP.
+      !LocalEndpointPolicy.isTailnetAddress(address);
 
   /// `a.b.c.0/24`, or null for a non-IPv4 address.
   String? get subnetLabel {
@@ -278,8 +286,17 @@ class DiscoveryPlan {
     final scan = <ProbeTarget>[];
     final portList = ports.toSet().toList();
 
+    // The comma's VPN IP only while this phone is on the tailnet itself,
+    // so a carrier 100.x address is never tried over mobile data.
+    final onTailnet = networks.any(
+      (n) =>
+          n.kind == NetworkKind.vpn &&
+          LocalEndpointPolicy.isTailnetAddress(n.address),
+    );
+
     bool reachable(String host) {
       if (LocalEndpointPolicy.isLoopbackHost(host)) return true;
+      if (LocalEndpointPolicy.isTailnetAddress(host)) return onTailnet;
       if (parseIPv4(host) != null) {
         return scannable.any((n) => _sameSubnet(n.address, host));
       }
@@ -684,6 +701,14 @@ class GatewayDeviceProbe implements DeviceProbe {
       return _loopback.probe(host, port);
     }
     var reached = false;
+    // Over the VPN the comma may be relayed: give it longer than on Wi-Fi.
+    final vpn = LocalEndpointPolicy.isTailnetAddress(host);
+    final connectTimeout = vpn
+        ? const Duration(seconds: 4)
+        : this.connectTimeout;
+    final responseTimeout = vpn
+        ? const Duration(seconds: 4)
+        : this.responseTimeout;
     final client = gatewayTlsClient(
       host: host,
       port: port,

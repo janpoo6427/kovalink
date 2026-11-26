@@ -9,6 +9,7 @@ import 'package:kovalink/src/network/comma_link_text.dart';
 import 'package:kovalink/src/network/comma_registry.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
 import 'package:kovalink/src/network/gateway_pin.dart';
+import 'package:kovalink/src/network/local_endpoint_policy.dart';
 import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/kovapilot_endpoints.dart';
 import 'package:kovalink/src/network/owner_pairing.dart';
@@ -166,7 +167,9 @@ class CommaLink extends ChangeNotifier {
       candidate.close();
       return _fail(problem);
     }
-    if (comma.host != device.host || comma.port != device.port) {
+    // The VPN IP is kept apart; the Wi-Fi address stays the one to try.
+    if (!LocalEndpointPolicy.isTailnetAddress(device.host) &&
+        (comma.host != device.host || comma.port != device.port)) {
       unawaited(
         settings.update(
           (s) =>
@@ -187,7 +190,7 @@ class CommaLink extends ChangeNotifier {
     try {
       final health = await client.health();
       if (session.endpoints.secure &&
-          (health.bindScope != 'wifi' ||
+          (health.bindScope != session.expectedScope ||
               health.authentication != session.wifiAuthentication)) {
         return (problem: KovaLinkProblem.notKova, health: health);
       }

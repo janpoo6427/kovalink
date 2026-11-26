@@ -76,9 +76,17 @@ class LocalEndpointPolicy {
     return null;
   }
 
+  /// A Tailscale address (100.64.0.0/10, canonical IPv4): the comma's VPN
+  /// IP. The Gateway listens there on [kovaGatewayTailnetPort].
+  static bool isTailnetAddress(String host) {
+    final ipv4 = _parseCanonicalIPv4(host);
+    return ipv4 != null && ipv4[0] == 100 && ipv4[1] >= 64 && ipv4[1] <= 127;
+  }
+
   static bool _isLocalHost(String host) {
     final normalized = host.toLowerCase();
     if (normalized == 'localhost' || normalized.endsWith('.local')) return true;
+    if (isTailnetAddress(normalized)) return true;
 
     // A URI host contains ':' only when it came from a bracketed IPv6 literal.
     // IPv6 ranges must never be matched against plain hostnames.

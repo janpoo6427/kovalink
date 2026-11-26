@@ -234,7 +234,7 @@ class KovaParamsController extends ChangeNotifier {
       final authentication = _session?.wifiAuthentication;
       _sessionAuthenticated =
           authentication != null &&
-          health?.bindScope == 'wifi' &&
+          health?.bindScope == _session?.expectedScope &&
           health?.authentication == authentication;
       await _read(client);
       if (generation != _generation) return null;
