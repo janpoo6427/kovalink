@@ -66,12 +66,16 @@ class AutoConnectStatusChip extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    controller.statusLabel,
-                    style: const TextStyle(
-                      color: Color(0xFF15191E),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                  Flexible(
+                    child: Text(
+                      controller.statusLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF15191E),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],

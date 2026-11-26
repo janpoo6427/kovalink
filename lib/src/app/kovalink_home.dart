@@ -82,15 +82,24 @@ class KovaLinkHome extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             _roadView(),
+            if (autoConnect case final auto?)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 82 + bottomInset,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: AutoConnectStatusChip(
+                    controller: auto,
+                    onTap: openConnect,
+                  ),
+                ),
+              ),
             Positioned(
               right: 16,
               bottom: 18 + bottomInset,
               child: Row(
                 children: [
-                  if (autoConnect case final auto?) ...[
-                    AutoConnectStatusChip(controller: auto, onTap: openConnect),
-                    const SizedBox(width: 10),
-                  ],
                   if (settings != null && library != null) ...[
                     GlassNavButton(
                       tooltip: '차량 모델 가져오기',

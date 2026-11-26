@@ -300,6 +300,22 @@ void main() {
       await _settle(tester, const Duration(seconds: 6));
     });
 
+    testWidgets("재연결 안내는 작은 화면에서도 카메라 버튼을 가리지 않는다", (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(app(MemorySettingsStore()));
+      await _settle(tester);
+      expect(built!.phase, AutoConnectPhase.waiting);
+      final status = find.byKey(const ValueKey("auto-connect-chip"));
+      final camera = find.byTooltip("카메라 화면으로 바꾸기");
+      expect(tester.getRect(status).overlaps(tester.getRect(camera)), isFalse);
+      await tester.tap(camera);
+      await _settle(tester);
+      expect(find.byTooltip("카메라에 도로 겹쳐 보기"), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _settle(tester, const Duration(seconds: 6));
+    });
     testWidgets('stored 자동 연결 off: no probe is ever sent', (tester) async {
       probe.device('192.168.0.40');
       await tester.pumpWidget(app(MemorySettingsStore({'autoConnect': false})));

@@ -214,7 +214,7 @@ class DemoDriveScenario {
     final objects = <TrackedObject>[
       ..._leadVehicles(t, ego, bend),
       ..._blindSpotCar(t, ego, bend),
-      ..._backgroundTraffic(odometer, ego, _targetLaneAt(t), bend),
+      ..._backgroundTraffic(speed, odometer, ego, _targetLaneAt(t), bend),
       if (city) ..._cones(odometer, ego, bend),
       if (city) ..._pedestrians(t, odometer, ego, bend),
       if (city) ..._cyclist(t, odometer, ego, bend),
@@ -280,6 +280,9 @@ class DemoDriveScenario {
     );
   }
 
+  static double _laneAngle(double Function(double) bend, double x) =>
+      math.atan((bend(x + 1) - bend(x - 1)) / 2);
+
   Iterable<TrackedObject> _leadVehicles(
     double t,
     double ego,
@@ -301,6 +304,7 @@ class DemoDriveScenario {
       id: id,
       distanceMeters: gap + jitter,
       leftMeters: lane - ego + bend(gap),
+      demoYaw: _laneAngle(bend, gap),
       relativeSpeedMps: relative,
       brakeLights: brake,
       isLead: id == leadId,
@@ -347,6 +351,7 @@ class DemoDriveScenario {
   }
 
   Iterable<TrackedObject> _backgroundTraffic(
+    double egoSpeed,
     double odometer,
     double ego,
     double targetLane,
@@ -373,7 +378,8 @@ class DemoDriveScenario {
         id: car.id,
         distanceMeters: gap,
         leftMeters: car.lateral - ego + bend(gap.abs()),
-        relativeSpeedMps: car.speed,
+        demoYaw: _laneAngle(bend, gap) + (car.speed < 0 ? math.pi : 0),
+        relativeSpeedMps: car.speed - egoSpeed,
         kind: car.truck ? TrackedObjectKind.truck : TrackedObjectKind.vehicle,
       );
     }
@@ -399,7 +405,8 @@ class DemoDriveScenario {
     yield TrackedObject(
       id: 300,
       distanceMeters: gap,
-      leftMeters: lane - ego + bend(0),
+      leftMeters: lane - ego + bend(gap),
+      demoYaw: _laneAngle(bend, gap),
       relativeSpeedMps: t < t1 ? 2.5 : (t < t1 + 2 ? 0 : -4),
     );
   }

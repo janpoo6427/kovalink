@@ -806,7 +806,9 @@ class RoadWorldPainter extends CustomPainter {
                   length: length,
                   width: object.widthMeters ?? nw,
                   height: object.heightMeters ?? nh,
-                  yaw: _laneYaw(object.distanceMeters + length / 2),
+                  yaw:
+                      object.demoYaw ??
+                      _laneYaw(object.distanceMeters + length / 2),
                 ),
                 paintArgb: body.toARGB32(),
                 lamps: VehicleLamps(brake: object.brakeLights),

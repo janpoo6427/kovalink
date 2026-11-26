@@ -1,3 +1,4 @@
+import "dart:math" as angles;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/services/demo_drive_scenario.dart';
@@ -22,6 +23,35 @@ String _fingerprint(RoadScene scene) => [
 ].join('|');
 
 void main() {
+  test("맞은편은 앞면, 같은 방향은 뒷면이며 좌우 코너에서는 실제 차선 접선을 따른다", () {
+    var opposing = 0;
+    for (final route in DemoRoute.values) {
+      final demo = DemoDriveScenario(route: route);
+      for (final seconds in [0, 27, 55]) {
+        final scene = demo.sceneAt(Duration(seconds: seconds));
+        for (final car in scene.objects.where(
+          (o) =>
+              o.kind == TrackedObjectKind.vehicle ||
+              o.kind == TrackedObjectKind.truck,
+        )) {
+          final x = car.distanceMeters;
+          final curvature = demo.curvatureAt(seconds.toDouble());
+          final lane =
+              car.leftMeters +
+              demo.egoLateralAt(seconds.toDouble()) -
+              0.5 * curvature * x * x;
+          final opposite = route == DemoRoute.city && lane > 5.1;
+          if (opposite) opposing++;
+          final yaw = car.demoYaw!;
+          final sign = opposite ? -1 : 1;
+          expect(angles.cos(yaw) * sign, greaterThan(0));
+          expect(angles.tan(yaw), closeTo(curvature * x, 0.002));
+        }
+      }
+    }
+    expect(opposing, greaterThan(0));
+  });
+
   group('demo drive scenario', () {
     for (final route in DemoRoute.values) {
       test('$route is deterministic for a fixed seed', () {

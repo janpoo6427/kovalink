@@ -168,6 +168,7 @@ class TrackedObject {
     this.lengthMeters,
     this.widthMeters,
     this.heightMeters,
+    this.demoYaw,
     this.isLead = false,
     this.brakeLights = false,
   });
@@ -176,6 +177,9 @@ class TrackedObject {
   final double distanceMeters;
   final double leftMeters;
   final double relativeSpeedMps;
+
+  /// Scripted lane tangent in radians, including opposing traffic direction.
+  final double? demoYaw;
   final TrackedObjectKind kind;
   final int? id;
   final double? lengthMeters;

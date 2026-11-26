@@ -787,12 +787,13 @@ class GpuRoadRenderer {
           o.relativeSpeedMps < -scene.speedMps - 1 &&
           body != GpuBody.pedestrian &&
           body != GpuBody.cone;
+      final heading = o.demoYaw ?? (oncoming ? yaw + math.pi : yaw);
       final speed = (scene.speedMps + o.relativeSpeedMps).abs();
       await _place(
         slot,
-        rearX: oncoming ? o.distanceMeters + length : o.distanceMeters,
-        leftY: o.leftMeters,
-        yaw: oncoming ? yaw + math.pi : yaw,
+        rearX: o.distanceMeters + length / 2 * (1 - math.cos(heading)),
+        leftY: o.leftMeters - length / 2 * math.sin(heading),
+        yaw: heading,
         sx: length / layout.length,
         sy: (o.widthMeters ?? layout.width) / layout.width,
         sz: (o.heightMeters ?? layout.height) / layout.height,
