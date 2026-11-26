@@ -1,11 +1,15 @@
 // State for the kovapilot version screen: current checkout, fetched origin
-// branches, HEAD history pages and switch/reset previews. Read-only; the
-// apply step is never sent.
+// branches, HEAD history pages, switch/reset previews, and applying a
+// previewed change when the comma allows it. After an apply the status is
+// read again every few seconds while the comma downloads, until the change
+// is staged (moves on the next start) or fails.
 //
 // A reset only ever goes back inside the branch the comma is on: the
 // history the gateway gives is that branch's (HEAD), so a commit of another
 // branch is reached by switching to that branch first and picking from its
 // history after the next read.
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:kovalink/src/kovapilot_git/git_client.dart';
 import 'package:kovalink/src/kovapilot_git/git_models.dart';
@@ -66,11 +70,23 @@ class KovaGitPreview {
 }
 
 class KovaGitController extends ChangeNotifier {
-  KovaGitController({KovaGitClientFactory? clientFactory, this.pageSize = 20})
-    : _clientFactory = clientFactory ?? KovaGitClient.tryCreate;
+  KovaGitController({
+    KovaGitClientFactory? clientFactory,
+    this.pageSize = 20,
+    this.followInterval = const Duration(seconds: 3),
+  }) : _clientFactory = clientFactory ?? KovaGitClient.tryCreate;
 
   final KovaGitClientFactory _clientFactory;
   final int pageSize;
+
+  /// How often the status is read while the comma downloads an applied
+  /// change.
+  final Duration followInterval;
+  Timer? _follow;
+  bool _following = false;
+
+  /// An apply request is on its way to the comma.
+  bool sending = false;
 
   KovaGitClient? _client;
   String? _endpoint;
@@ -204,7 +220,81 @@ class KovaGitController extends ChangeNotifier {
       failure = error;
       load = KovaGitLoad.failed;
     }
+    _syncFollow();
     _notify();
+  }
+
+  /// True while the comma is downloading an applied change: worth reading
+  /// the status again soon.
+  bool get downloading =>
+      status?.maintenance?.phase == KovaGitMaintenancePhase.queued;
+
+  void _syncFollow() {
+    if (_disposed || !downloading) {
+      _follow?.cancel();
+      _follow = null;
+      return;
+    }
+    _follow ??= Timer.periodic(followInterval, (_) => _followOnce());
+  }
+
+  /// One status read while downloading. A failed read keeps the last status;
+  /// one that will not get better (not a timeout or a busy comma) stops.
+  Future<void> _followOnce() async {
+    final client = _client;
+    if (client == null || _following || _disposed) return;
+    final generation = _generation;
+    _following = true;
+    try {
+      final next = await client.status();
+      if (generation != _generation || _disposed) return;
+      final wasDownloading = downloading;
+      status = next;
+      if (wasDownloading && !downloading) {
+        // Staged, failed or already installed: read everything once more.
+        unawaited(refresh());
+        return;
+      }
+      _notify();
+    } on KovaGitException catch (error) {
+      if (!error.retryable) {
+        _follow?.cancel();
+        _follow = null;
+      }
+    } finally {
+      _following = false;
+    }
+  }
+
+  /// Applies [plan], the comma's preview of [request]. Null when the comma
+  /// took it (the status then follows the download), else why not. Only
+  /// one at a time.
+  Future<KovaGitException?> apply(
+    KovaGitPlanRequest request,
+    KovaGitPlan plan,
+  ) async {
+    final client = _client;
+    if (client == null) {
+      return const KovaGitException(
+        KovaGitFailure.transport,
+        KovaGitText.transport,
+      );
+    }
+    if (sending) {
+      return const KovaGitException(KovaGitFailure.busy, KovaGitText.busy);
+    }
+    sending = true;
+    _notify();
+    try {
+      await client.apply(plan.planDigest, request: request);
+    } on KovaGitException catch (error) {
+      return error;
+    } finally {
+      sending = false;
+      _notify();
+    }
+    if (!_disposed) await refresh();
+    return null;
   }
 
   Future<void> loadMore() async {
@@ -271,6 +361,8 @@ class KovaGitController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _follow?.cancel();
+    _follow = null;
     _generation++;
     _client?.close();
     _client = null;

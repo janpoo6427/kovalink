@@ -708,7 +708,14 @@ void main() {
       '2025년 3월 2일',
     );
     expect(kovaCommitTimeLabel(null), '');
-    expect(kovaApplyLockedReason(false), '콤마에서 아직 바꾸기를 허용하지 않아요.');
-    expect(kovaApplyLockedReason(true), '이 앱에서는 아직 바꾸기를 할 수 없어요.');
+    expect(kovaMutationBlockText(null), '콤마에서 아직 바꾸기를 허용하지 않아요.');
+    // Was '이 앱에서는 아직 바꾸기를 할 수 없어요.': the app applies now.
+    expect(
+      kovaApplyBlockReason(
+        KovaGitStatus(head: 'a' * 40, branch: 'master', mutationEnabled: true),
+        null,
+      ),
+      isNull,
+    );
   });
 }

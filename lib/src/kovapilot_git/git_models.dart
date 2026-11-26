@@ -1,9 +1,10 @@
 // Typed view of the kovapilot gateway Git maintenance API
-// (kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md`, contract at
-// `master-jh@7cc3b3280`). The gateway only inspects the device checkout and
-// previews a branch switch or a reset; `mutationEnabled` stays false and
-// `POST /v1/git/apply` answers 403 until authenticated updater integration
-// exists. Nothing here changes the device.
+// (kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md`; apply at
+// `master@bccedd3ab`). The gateway inspects the device checkout and
+// previews a branch switch or a reset. When it says `mutationEnabled`
+// (registered phone, comma offroad, updater idle), `POST /v1/git/apply`
+// hands the previewed change to the comma's updater, which downloads and
+// stages it; the comma moves to it on its next start.
 
 final RegExp _fullSha = RegExp(r'^[0-9a-f]{40}$');
 final RegExp _digest = RegExp(r'^[0-9a-f]{64}$');
@@ -63,6 +64,72 @@ bool _bool(Map<String, dynamic> json, String key, {bool? fallback}) {
   throw KovaGitFormatException('$key must be a boolean');
 }
 
+enum KovaGitMaintenancePhase {
+  /// The updater has the request and is downloading it.
+  queued,
+
+  /// Downloaded and ready; the comma moves to it on its next start.
+  staged,
+
+  /// The comma now runs the requested commit.
+  installed,
+
+  /// The updater stopped; [KovaGitMaintenance.reason] says where.
+  failed;
+
+  static KovaGitMaintenancePhase? fromWire(Object? value) {
+    for (final phase in values) {
+      if (phase.name == value) return phase;
+    }
+    return null;
+  }
+}
+
+/// The last change asked through `POST /v1/git/apply`, as the gateway
+/// describes it (`maintenance` in status and in the apply answer).
+class KovaGitMaintenance {
+  const KovaGitMaintenance({
+    required this.phase,
+    required this.branch,
+    this.commit,
+    this.reason,
+  });
+
+  factory KovaGitMaintenance.fromJson(Object? json) {
+    final map = _object(json, 'maintenance');
+    final phase = KovaGitMaintenancePhase.fromWire(map['phase']);
+    if (phase == null) {
+      throw const KovaGitFormatException('maintenance phase is unknown');
+    }
+    final commit = map['commit'];
+    return KovaGitMaintenance(
+      phase: phase,
+      branch: _string(map, 'branch'),
+      commit: isFullCommitSha(commit) ? commit as String : null,
+      reason: _optionalString(map, 'reason'),
+    );
+  }
+
+  final KovaGitMaintenancePhase phase;
+  final String branch;
+  final String? commit;
+
+  /// Why it failed (`checkoutChanged`, `stagingMissing`,
+  /// `workingTreeChanged`, `stagingFailed`), or null.
+  final String? reason;
+
+  /// Still with the updater: nothing else can be applied meanwhile.
+  bool get active =>
+      phase == KovaGitMaintenancePhase.queued ||
+      phase == KovaGitMaintenancePhase.staged;
+}
+
+/// `maintenance` of a `POST /v1/git/apply` answer.
+KovaGitMaintenance parseKovaGitApply(Object? json) {
+  final map = _object(json, 'apply response');
+  return KovaGitMaintenance.fromJson(map['maintenance']);
+}
+
 /// `GET /v1/git/status`.
 class KovaGitStatus {
   const KovaGitStatus({
@@ -73,6 +140,8 @@ class KovaGitStatus {
     this.dirtyKnown = true,
     this.updaterState,
     this.mutationEnabled = false,
+    this.mutationBlock,
+    this.maintenance,
   });
 
   factory KovaGitStatus.fromJson(Object? json) {
@@ -90,7 +159,22 @@ class KovaGitStatus {
           ? updater.trim()
           : null,
       mutationEnabled: _bool(map, 'mutationEnabled', fallback: false),
+      mutationBlock: map['mutationBlock'] is String
+          ? map['mutationBlock'] as String
+          : null,
+      // An entry this app cannot read is shown as none rather than failing
+      // the whole screen.
+      maintenance: _maintenanceOrNull(map['maintenance']),
     );
+  }
+
+  static KovaGitMaintenance? _maintenanceOrNull(Object? json) {
+    if (json == null) return null;
+    try {
+      return KovaGitMaintenance.fromJson(json);
+    } on KovaGitFormatException {
+      return null;
+    }
   }
 
   /// Current local branch, or null when HEAD is detached.
@@ -105,6 +189,17 @@ class KovaGitStatus {
   final bool dirtyKnown;
   final String? updaterState;
   final bool mutationEnabled;
+
+  /// Why apply is off: `authorization` (not the registered phone),
+  /// `offroadOrUpdaterBusy` (driving, updates off, or the updater busy), or
+  /// null (on, or a gateway without apply).
+  final String? mutationBlock;
+
+  /// The last apply request and how far it got, or null.
+  final KovaGitMaintenance? maintenance;
+
+  /// A change is with the updater right now.
+  bool get applying => maintenance?.active ?? false;
 
   bool get detached => branch == null;
 
@@ -256,7 +351,8 @@ class KovaGitPlanRequest {
   };
 }
 
-/// Answer of `POST /v1/git/plan`: what would change. Always a preview.
+/// Answer of `POST /v1/git/plan`: what would change. Its [planDigest] is
+/// what `POST /v1/git/apply` checks before anything changes.
 class KovaGitPlan {
   const KovaGitPlan({
     required this.operation,

@@ -1,6 +1,6 @@
-// HTTP client for the kovapilot gateway Git maintenance API (read-only
-// inspection and switch/reset previews). Errors become one plain Korean line;
-// the gateway's own message is never shown.
+// HTTP client for the kovapilot gateway Git maintenance API: inspection,
+// switch/reset previews and applying a previewed change. Errors become one
+// plain Korean line; the gateway's own message is never shown.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -32,8 +32,15 @@ enum KovaGitFailure {
   /// 400 `invalid_git_request`: unknown branch, bad or unreachable commit.
   invalidRequest,
 
-  /// 403 `git_mutation_disabled`: apply is not allowed yet.
+  /// 403 `git_mutation_disabled`: apply is not allowed right now.
   mutationDisabled,
+
+  /// 409 `git_plan_changed`: the comma's state moved since the preview.
+  planChanged,
+
+  /// 403 `git_apply_blocked`: the updater got busy or the checkout is not
+  /// known to be clean.
+  applyBlocked,
 
   /// 404/405: this kovapilot has no Git maintenance API.
   unsupported,
@@ -88,6 +95,8 @@ abstract final class KovaGitText {
   static const unavailable = '콤마에서 kovapilot 버전 정보를 읽지 못했어요. 잠시 뒤 다시 해 주세요.';
   static const invalidRequest = '콤마가 이 요청을 받지 않았어요. 브랜치나 커밋을 다시 골라 주세요.';
   static const mutationDisabled = '콤마에서 아직 바꾸기를 허용하지 않아요.';
+  static const planChanged = '미리 본 뒤에 콤마나 브랜치가 바뀌었어요. 다시 미리 보고 적용해 주세요.';
+  static const applyBlocked = '콤마가 다른 업데이트를 하고 있거나 수정된 파일이 있어서 바꾸지 못했어요.';
   static const unsupported = '콤마의 kovapilot이 아직 이 기능을 지원하지 않아요.';
   static const format = '콤마에서 받은 내용을 읽을 수 없어요.';
   static const http = '콤마에서 요청을 처리하지 못했어요. 잠시 뒤 다시 해 주세요.';
@@ -117,6 +126,18 @@ KovaGitException kovaGitError(int statusCode, String? code) =>
       (403, 'git_mutation_disabled') => KovaGitException(
         KovaGitFailure.mutationDisabled,
         KovaGitText.mutationDisabled,
+        statusCode: statusCode,
+        code: code,
+      ),
+      (409, 'git_plan_changed') => KovaGitException(
+        KovaGitFailure.planChanged,
+        KovaGitText.planChanged,
+        statusCode: statusCode,
+        code: code,
+      ),
+      (403, 'git_apply_blocked') => KovaGitException(
+        KovaGitFailure.applyBlocked,
+        KovaGitText.applyBlocked,
         statusCode: statusCode,
         code: code,
       ),
@@ -221,7 +242,8 @@ class KovaGitClient {
     } on FormatException {
       json = null;
     }
-    if (response.statusCode != 200) {
+    // 202: apply accepted (the updater does the rest).
+    if (response.statusCode != 200 && response.statusCode != 202) {
       String? code;
       if (json is Map && json['error'] is Map) {
         final value = (json['error'] as Map)['code'];
@@ -295,19 +317,22 @@ class KovaGitClient {
     );
   }
 
-  /// `POST /v1/git/apply`. The app never calls this: the gateway refuses it
-  /// with 403 `git_mutation_disabled` until authenticated updater
-  /// integration exists. Kept only so tests can pin that refusal. Any answer
-  /// other than an error is treated as unexpected and reported as a failure.
-  Future<Never> apply(String planDigest) async {
-    await _call(
-      () => transport.postJson(
-        _uri('/v1/git/apply'),
-        jsonEncode({'planDigest': planDigest}),
-        timeout,
+  /// `POST /v1/git/apply`: hands the previewed [request] to the comma's
+  /// updater. [planDigest] is the preview's; the comma previews again and
+  /// refuses (409) when anything moved since. The answer says the request
+  /// is queued; the download and the switch happen on the comma afterwards
+  /// (follow it with [status]).
+  Future<KovaGitMaintenance> apply(
+    String planDigest, {
+    KovaGitPlanRequest? request,
+  }) async {
+    final body = jsonEncode({...?request?.toJson(), 'planDigest': planDigest});
+    return _parse(
+      await _call(
+        () => transport.postJson(_uri('/v1/git/apply'), body, timeout),
       ),
+      parseKovaGitApply,
     );
-    throw const KovaGitException(KovaGitFailure.format, KovaGitText.format);
   }
 
   void close() => transport.close();

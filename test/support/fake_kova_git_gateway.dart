@@ -2,7 +2,9 @@
 // gateway's behaviour at kovapilot master-jh@7cc3b3280
 // (openpilot/kovapilot/gateway/{app.py,git_maintenance.py}): origin refs only,
 // HEAD history pages, switch/reset previews with reachability checks,
-// apply -> 403 git_mutation_disabled, and the loopback-only 403.
+// apply -> 403 git_mutation_disabled unless [FakeKovaGitGateway.applyEnabled]
+// (then the kovapilot master@bccedd3ab apply: same preview again, digest
+// check, 202 with the queued maintenance entry), and the loopback-only 403.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -182,6 +184,48 @@ class FakeKovaGitGateway implements KovaParamsTransport {
   int applyCalls = 0;
   bool closed = false;
 
+  /// The comma allows apply (registered phone, offroad, updater idle).
+  bool applyEnabled = false;
+
+  /// `mutationBlock` while [applyEnabled] is false (null like the older
+  /// gateway).
+  String? mutationBlock;
+
+  /// The last apply request as the gateway stores it (with `phase`).
+  Map<String, Object?>? maintenance;
+  final List<Map<String, dynamic>> applies = [];
+
+  bool get pending =>
+      maintenance != null &&
+      const {'queued', 'staged'}.contains(maintenance!['phase']);
+
+  bool get _mutationEnabled => applyEnabled && !pending;
+
+  Map<String, Object?>? _describe() {
+    final m = maintenance;
+    if (m == null) return null;
+    return {
+      for (final key in const ['phase', 'branch', 'commit', 'reason'])
+        if (m.containsKey(key)) key: m[key],
+    };
+  }
+
+  /// The updater finished downloading.
+  void stage() => maintenance = {...?maintenance, 'phase': 'staged'};
+
+  /// The updater stopped with [reason].
+  void failApply(String reason) =>
+      maintenance = {...?maintenance, 'phase': 'failed', 'reason': reason};
+
+  /// The comma started again on the staged commit.
+  void install() {
+    final m = maintenance!;
+    head = commits[m['commit']]!;
+    branch = m['branch'] as String;
+    upstream = 'origin/$branch';
+    maintenance = {...m, 'phase': 'installed'};
+  }
+
   FakeGitCommit commitOf(String branchName) => origin[branchName]!;
 
   /// What a branch switch on the comma leaves behind: HEAD at the head of
@@ -253,10 +297,13 @@ class FakeKovaGitGateway implements KovaParamsTransport {
     'branch': branch,
     'head': head.sha,
     'upstream': upstream,
-    'dirty': dirty,
-    if (!dirtyKnown) 'dirtyKnown': false,
+    'dirty': pending || dirty,
+    if (pending || !dirtyKnown) 'dirtyKnown': false,
     'updaterState': updaterState,
-    'mutationEnabled': false,
+    'mutationEnabled': _mutationEnabled,
+    if (!_mutationEnabled && (mutationBlock != null || applyEnabled))
+      'mutationBlock': mutationBlock ?? 'offroadOrUpdaterBusy',
+    'maintenance': ?_describe(),
   };
 
   @override
@@ -328,11 +375,14 @@ class FakeKovaGitGateway implements KovaParamsTransport {
     if (gated != null) return gated;
     if (uri.path == '/v1/git/apply') {
       applyCalls++;
-      return _error(
-        403,
-        'git_mutation_disabled',
-        'authenticated updater integration is unavailable',
-      );
+      if (!_mutationEnabled) {
+        return _error(
+          403,
+          'git_mutation_disabled',
+          'offroad maintenance requires authorized access and an idle updater',
+        );
+      }
+      return _apply(body);
     }
     final action = switch (uri.path) {
       '/v1/git/plan' => 'plan',
@@ -370,16 +420,87 @@ class FakeKovaGitGateway implements KovaParamsTransport {
         'invalid Git parameters or target',
       );
     }
-    final target = origin[json['branch']];
-    if (target == null) {
+    final plan = _plan(operation, json['branch'], json['commit']);
+    if (plan == null) {
       return _error(
         400,
         'invalid_git_request',
         'invalid Git parameters or target',
       );
     }
+    return _json(200, plan);
+  }
+
+  KovaHttpResponse _apply(String body) {
+    final Object? json;
+    try {
+      json = jsonDecode(body);
+    } on FormatException {
+      return _error(400, 'invalid_git_request', 'invalid Git parameters');
+    }
+    if (json is! Map<String, dynamic> ||
+        json.keys.any(
+          (k) => !const {
+            'operation',
+            'branch',
+            'commit',
+            'planDigest',
+          }.contains(k),
+        ) ||
+        json['planDigest'] is! String ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(json['planDigest'] as String)) {
+      return _error(400, 'invalid_git_request', 'invalid Git parameters');
+    }
+    applies.add(json);
+    final plan = _plan(json['operation'], json['branch'], json['commit']);
+    if (plan == null) {
+      return _error(400, 'invalid_git_request', 'invalid Git parameters');
+    }
+    if (plan['dirty'] == true || plan['dirtyKnown'] == false) {
+      return _error(
+        403,
+        'git_apply_blocked',
+        'the updater is busy or the working tree is not known and clean',
+      );
+    }
+    if (plan['planDigest'] != json['planDigest']) {
+      return _error(
+        409,
+        'git_plan_changed',
+        'refresh the preview before applying',
+      );
+    }
+    if (plan['operation'] == 'reset' && plan['branch'] != branch) {
+      return _error(
+        403,
+        'git_apply_blocked',
+        'reset must stay on the installed branch',
+      );
+    }
+    maintenance = {
+      for (final key in const [
+        'operation',
+        'branch',
+        'commit',
+        'branchHead',
+        'beforeHead',
+        'beforeBranch',
+      ])
+        key: plan[key],
+      'phase': 'queued',
+    };
+    return _json(202, {'maintenance': _describe()});
+  }
+
+  /// The gateway's preview, or null for a request it refuses with 400.
+  Map<String, Object?>? _plan(
+    Object? operation,
+    Object? branchName,
+    Object? requested,
+  ) {
+    final target = origin[branchName];
+    if (target == null) return null;
     FakeGitCommit commit;
-    final requested = json['commit'];
     if (operation == 'switch' && requested == null) {
       commit = target;
     } else if (operation == 'reset' &&
@@ -389,27 +510,23 @@ class FakeKovaGitGateway implements KovaParamsTransport {
         target.ancestry().any((c) => c.sha == requested)) {
       commit = commits[requested]!;
     } else {
-      return _error(
-        400,
-        'invalid_git_request',
-        'invalid Git parameters or target',
-      );
+      return null;
     }
     final plan = <String, Object?>{
       'operation': operation,
-      'branch': json['branch'],
+      'branch': branchName,
       'commit': commit.sha,
       'branchHead': target.sha,
       'beforeHead': head.sha,
       'beforeBranch': branch,
-      'dirty': dirty,
-      if (!dirtyKnown) 'dirtyKnown': false,
+      'dirty': pending || dirty,
+      if (pending || !dirtyKnown) 'dirtyKnown': false,
       'requiresRestart': true,
-      'mutationEnabled': false,
+      'mutationEnabled': _mutationEnabled,
       'changedFileCount': changedFiles(head, commit),
     };
     plan['planDigest'] = fakeSha(jsonEncode(plan), length: 64);
-    return _json(200, plan);
+    return plan;
   }
 
   @override
