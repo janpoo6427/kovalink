@@ -521,6 +521,24 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: _badges()),
           if (controller.status == KovaLinkStatus.connected)
+            for (final status in s.runtimeStates)
+              _Line(
+                icon: Icons.info_outline,
+                color: status.state == 'active' ? _accent : _muted,
+                text:
+                    '${status.title.resolve(defaultLocale: _locale)} · '
+                    '${switch (status.state) {
+                      'off' => '끔',
+                      'waiting' => '대기',
+                      'awaitingAuthority' => '차량 제어 권한 대기',
+                      'active' => '활성',
+                      'paused' => '일시중지',
+                      'manualRequired' => '수동 재개 필요',
+                      'unsupported' => '이 차량에서 미지원',
+                      _ => '확인 대기',
+                    }}',
+              ),
+          if (controller.status == KovaLinkStatus.connected)
             for (final dependency in s.dependencies)
               if (dependency.state != 'met')
                 _Line(

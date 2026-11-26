@@ -132,6 +132,11 @@ class KovaParamDependency {
       state: state is String ? state : 'unknown',
     );
   }
+
+  static List<KovaParamDependency> parseList(Object? json) => [
+    if (json is List)
+      for (final raw in json) ?tryParse(raw),
+  ];
 }
 
 class KovaParamSetting {
@@ -162,6 +167,7 @@ class KovaParamSetting {
     this.hidden = false,
     this.requiredCapabilities = const [],
     this.dependencies = const [],
+    this.runtimeStates = const [],
   });
 
   final String key;
@@ -190,6 +196,7 @@ class KovaParamSetting {
   final bool hidden;
   final List<String> requiredCapabilities;
   final List<KovaParamDependency> dependencies;
+  final List<KovaParamDependency> runtimeStates;
 
   static KovaParamSetting parse(Map<dynamic, dynamic> json) {
     final key = json['key'];
@@ -220,7 +227,6 @@ class KovaParamSetting {
     }
     final order = json['order'];
     final capabilities = json['requiredCapabilities'];
-    final dependencies = json['dependencies'];
     return KovaParamSetting(
       key: key,
       groupId: groupId,
@@ -272,10 +278,8 @@ class KovaParamSetting {
           for (final c in capabilities)
             if (c is String) c,
       ],
-      dependencies: [
-        if (dependencies is List)
-          for (final raw in dependencies) ?KovaParamDependency.tryParse(raw),
-      ],
+      dependencies: KovaParamDependency.parseList(json['dependencies']),
+      runtimeStates: KovaParamDependency.parseList(json['runtimeStates']),
     );
   }
 

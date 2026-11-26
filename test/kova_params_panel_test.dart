@@ -52,6 +52,28 @@ void main() {
 
   tearDown(() => kova.dispose());
 
+  testWidgets('shows steering and cruise runtime status separately', (
+    tester,
+  ) async {
+    final item = (gateway.catalog['settings'] as List)
+        .cast<Map<String, dynamic>>()
+        .first;
+    item['runtimeStates'] = [
+      {
+        'title': {'ko': '조향'},
+        'state': 'paused',
+      },
+      {
+        'title': {'ko': '크루즈'},
+        'state': 'manualRequired',
+      },
+    ];
+    await kova.connect('http://127.0.0.1:18082');
+    await _pumpPanel(tester, kova);
+    expect(find.text('조향 · 일시중지'), findsOneWidget);
+    expect(find.text('크루즈 · 수동 재개 필요'), findsOneWidget);
+  });
+
   testWidgets('shows gateway dependency state alongside the saved setting', (
     tester,
   ) async {
