@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kovalink/src/features/connect/auto_connect_panel.dart';
 import 'package:kovalink/src/features/connect/comma_register_page.dart';
 import 'package:kovalink/src/features/connect/ip_connect_sheet.dart';
+import 'package:kovalink/src/features/connect/tailscale_vpn_card.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
 import 'package:kovalink/src/services/auto_connect_controller.dart';
 import 'package:kovalink/src/services/comma_link.dart';
@@ -105,6 +106,10 @@ class ConnectScreen extends StatelessWidget {
             ),
             const SizedBox(height: 14),
           ],
+          if (link != null) ...[
+            TailscaleVpnCard(key: ValueKey(link.registered?.pin), link: link),
+            const SizedBox(height: 14),
+          ],
           Card(
             key: const ValueKey('telemetry-card'),
             child: Padding(
@@ -173,7 +178,7 @@ class ConnectScreen extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4),
             child: Text(
-              '차와 같은 네트워크에서만 연결하고, comma 클라우드는 쓰지 않아요.',
+              '장치 등록과 카메라는 같은 네트워크에서 연결해요.',
               style: TextStyle(color: Color(0xFF8E9DA9), fontSize: 12),
             ),
           ),

@@ -48,6 +48,7 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   crypto: ^3.0.6
   bonsoir: ^7.1.5
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

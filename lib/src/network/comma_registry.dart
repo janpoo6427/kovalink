@@ -14,6 +14,7 @@ class RegisteredComma {
     required this.pin,
     required this.host,
     this.port = kovaGatewayDefaultPort,
+    this.vpnHost,
   });
 
   /// The comma's identity. Its address may change; the pin does not.
@@ -22,19 +23,32 @@ class RegisteredComma {
   /// Last address it answered on (tried first by the Finder).
   final String host;
   final int port;
+  final String? vpnHost;
+
+  static bool isTailscaleHost(String host) => RegExp(
+    r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ts\.net$',
+  ).hasMatch(host);
 
   KovapilotEndpoints get endpoints =>
       KovapilotEndpoints(host: host, port: port, secure: true);
 
   /// Same comma, new address.
   RegisteredComma at(String host, int port) =>
-      RegisteredComma(pin: pin, host: host, port: port);
+      RegisteredComma(pin: pin, host: host, port: port, vpnHost: vpnHost);
+
+  RegisteredComma withVpnHost(String? value) =>
+      RegisteredComma(pin: pin, host: host, port: port, vpnHost: value);
 
   /// True when [device] presented this comma's certificate over TLS.
   bool isPresentedBy(KovaDevice device) =>
       device.secure && pin.matches(device.pin);
 
-  Map<String, Object> toJson() => {'pin': pin.hex, 'host': host, 'port': port};
+  Map<String, Object> toJson() => {
+    'pin': pin.hex,
+    'host': host,
+    'port': port,
+    'vpnHost': ?vpnHost,
+  };
 
   /// Null unless the pin, host (local-only policy) and port are valid.
   static RegisteredComma? fromJson(Object? json) {
@@ -44,7 +58,13 @@ class RegisteredComma {
     final port = json['port'];
     if (pin == null || host is! String || port is! int) return null;
     if (port < 1 || port > 65535 || !isPolicyTarget(host, port)) return null;
-    return RegisteredComma(pin: pin, host: host, port: port);
+    final vpnHost = json['vpnHost'];
+    return RegisteredComma(
+      pin: pin,
+      host: host,
+      port: port,
+      vpnHost: vpnHost is String && isTailscaleHost(vpnHost) ? vpnHost : null,
+    );
   }
 
   @override
@@ -52,10 +72,11 @@ class RegisteredComma {
       other is RegisteredComma &&
       other.pin == pin &&
       other.host == host &&
-      other.port == port;
+      other.port == port &&
+      other.vpnHost == vpnHost;
 
   @override
-  int get hashCode => Object.hash(pin, host, port);
+  int get hashCode => Object.hash(pin, host, port, vpnHost);
 
   @override
   String toString() => 'RegisteredComma(${pin.short} at $host:$port)';
