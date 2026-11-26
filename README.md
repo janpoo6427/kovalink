@@ -1,5 +1,6 @@
 # KovaLink 설치 파일
 
+- [1.0.4 실시간 차선·객체 수신 표시](kovalink-1.0.4-d19b08a-arm64-v8a.apk) — 콤마 송신부 별도 통합 필요.
 - [KovaLink 1.0.3 arm64 설치 파일](kovalink-1.0.3-84f65e7-arm64-v8a.apk) — 데모 맞은편 차량 방향·곡선 주행 표시·카메라 버튼 겹침 수정.
 - [KovaLink 1.0.2 arm64 설치 파일](kovalink-1.0.2-36b51cf-arm64-v8a.apk) — 설정 그룹 접기와 고정 상단바. 실기기·차량 미검증.
 - `kovalink-1.0.0-57b9725-arm64-v8a.apk`는 `master@57b9725`의 Android arm64 빌드입니다.
