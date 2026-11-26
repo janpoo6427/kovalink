@@ -1,5 +1,6 @@
 # KovaLink 설치 파일
 
+- [1.0.6 소유자 등록](kovalink-1.0.6-2f4fcf9-arm64-v8a.apk) — `master@2f4fcf9`. 자동 Wi-Fi에서 장치 연결 → 소유자로 등록, 콤마 화면 알림의 6자리 코드를 넣으면 버전 바꾸기·다시 켜기·Tailscale을 쓸 수 있어요. kovapilot `master-jh@1684f602d` 이상 필요. 1.0.5와 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
 - [1.0.5 콤마 다시 켜기·Git 적용·VPN 연결](kovalink-1.0.5-73cfc14-arm64-v8a.apk) — `master@73cfc14`. 버전 화면에서 받아 둔 버전을 적용하고 콤마를 다시 켤 수 있어요. kovapilot `master@fe277e40b` 이상 필요. 1.0.4와 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
 - [1.0.4 실시간 차선·객체 수신 표시](kovalink-1.0.4-d19b08a-arm64-v8a.apk) — 콤마 송신부 별도 통합 필요.
 - [KovaLink 1.0.3 arm64 설치 파일](kovalink-1.0.3-84f65e7-arm64-v8a.apk) — 데모 맞은편 차량 방향·곡선 주행 표시·카메라 버튼 겹침 수정.
