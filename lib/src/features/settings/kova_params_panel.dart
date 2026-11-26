@@ -510,6 +510,16 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
           if (_expanded) _Details(setting: s, locale: _locale),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: _badges()),
+          if (controller.status == KovaLinkStatus.connected &&
+              s.applyPolicy == KovaApplyPolicy.parked &&
+              s.applyState == 'pendingParked' &&
+              s.appliedValue != null)
+            _Line(
+              color: _muted,
+              text:
+                  '저장값 ${s.describe(s.value, defaultLocale: _locale)} · '
+                  '현재 적용값 ${s.describe(s.appliedValue, defaultLocale: _locale)}',
+            ),
           if (controller.status == KovaLinkStatus.connected)
             for (final status in s.runtimeStates)
               _Line(
@@ -608,6 +618,10 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
         : null;
     final policy = switch ((s.applyPolicy, currentState)) {
       (KovaApplyPolicy.parked, 'pendingParked') => ('저장됨 · P 정차 시 적용', _warn),
+      (KovaApplyPolicy.parked, 'awaitingLongitudinal') => (
+        '종방향 제어 적용 대기',
+        _warn,
+      ),
       (KovaApplyPolicy.parked, 'awaitingStart') => ('플래너 시작 대기', _muted),
       (KovaApplyPolicy.parked, 'applied') => ('적용됨', _accent),
       (KovaApplyPolicy.restart, 'pendingRestart') => (
@@ -739,9 +753,7 @@ class _Details extends StatelessWidget {
         KovaApplyPolicy.restart => s.saveAnytime ? '언제든 저장하고, 담당 프로세스가 다음에 시작할 때 반영해요.' : 'kovapilot을 다시 시작하면 적용돼요. 주행 중에는 바꿀 수 없어요.',
         KovaApplyPolicy.unknown => '언제 적용되는지 알 수 없어 앱에서는 바꿀 수 없어요.',
       }}',
-      if ((s.applyState == 'pendingRestart' ||
-              s.applyState == 'pendingParked') &&
-          s.appliedValue != null)
+      if (s.applyState == 'pendingRestart' && s.appliedValue != null)
         '현재 적용값: ${s.describe(s.appliedValue, defaultLocale: locale)}',
       if (s.status == KovaAvailability.pendingConsumer)
         '상태: 준비 중이에요. 값은 저장되지만 차 동작은 아직 바뀌지 않아요.',

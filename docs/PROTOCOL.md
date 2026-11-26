@@ -233,7 +233,10 @@ KovaLink refuses a gateway whose `schemaVersion` major is not 1.
   documents without the field keep their existing write restrictions.
   A restart setting can report `applyState` of `awaitingStart`,
   `pendingRestart`, or `applied` with the optional `appliedValue` from
-  the running process. `availability`/`applyStatus`: `available`,
+  the running process. A parked setting can report `pendingParked` when
+  the saved `value` differs from the running process's `appliedValue`.
+  Curve slowdown reports `awaitingLongitudinal` when its dependency is
+  supported and waiting to be enabled or applied. `availability`/`applyStatus`: `available`,
   `pendingConsumer` (value is stored but nothing uses it yet), `unsupported`.
 - `device.offroad` comes from `IsOffroad`. Optional `device.parked` comes from
   fresh, valid vehicle and selfdrive messages. The gateway evaluates these
