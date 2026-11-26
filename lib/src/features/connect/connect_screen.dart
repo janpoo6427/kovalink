@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kovalink/src/features/connect/auto_connect_panel.dart';
 import 'package:kovalink/src/features/connect/comma_register_page.dart';
 import 'package:kovalink/src/features/connect/ip_connect_sheet.dart';
+import 'package:kovalink/src/features/connect/owner_pairing_card.dart';
 import 'package:kovalink/src/features/connect/tailscale_vpn_card.dart';
 import 'package:kovalink/src/network/device_discovery.dart';
 import 'package:kovalink/src/services/auto_connect_controller.dart';
@@ -103,8 +104,17 @@ class ConnectScreen extends StatelessWidget {
             ),
             const SizedBox(height: 14),
           ],
+          if (link != null &&
+              link.session?.localNetworkPin != null &&
+              !link.session!.isClosed) ...[
+            OwnerPairingCard(link: link),
+            const SizedBox(height: 14),
+          ],
           if (link != null) ...[
-            TailscaleVpnCard(key: ValueKey(link.registered?.pin), link: link),
+            TailscaleVpnCard(
+              key: ValueKey((link.registered?.pin, link.isOwner)),
+              link: link,
+            ),
             const SizedBox(height: 14),
           ],
           Card(

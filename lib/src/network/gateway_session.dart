@@ -132,8 +132,9 @@ class GatewaySession {
     this.client,
   );
 
-  /// Wi-Fi sessions check the pinned certificate with either bearer
-  /// credentials or the certificate observed during local network discovery.
+  /// Wi-Fi sessions check the pinned certificate with bearer credentials,
+  /// the certificate observed during local network discovery, or both (the
+  /// owner phone on automatic Wi-Fi sends its token there).
   factory GatewaySession({
     required KovapilotEndpoints endpoints,
     GatewayCredentials? credentials,
@@ -148,8 +149,11 @@ class GatewaySession {
       return GatewaySession._(endpoints, null, null, client);
     }
     final pin = credentials?.pin ?? localNetworkPin;
-    if (pin == null || (credentials != null && localNetworkPin != null)) {
-      throw ArgumentError('a Wi-Fi session needs exactly one access method');
+    if (pin == null ||
+        (credentials != null &&
+            localNetworkPin != null &&
+            credentials.pin != localNetworkPin)) {
+      throw ArgumentError('a Wi-Fi session needs one certificate pin');
     }
     late final GatewaySession session;
     final client = gatewayTlsClient(
@@ -190,10 +194,13 @@ class GatewaySession {
   /// True when requests carry the token (Wi-Fi with a registered comma).
   bool get sendsToken => endpoints.secure && credentials != null;
 
-  String? get wifiAuthentication => sendsToken
-      ? 'bearer'
-      : endpoints.secure && localNetworkPin != null
+  /// The Gateway's access mode this session expects in `/v1/health`.
+  String? get wifiAuthentication => !endpoints.secure
+      ? null
+      : localNetworkPin != null
       ? 'localNetwork'
+      : credentials != null
+      ? 'bearer'
       : null;
 
   /// Headers for a WebSocket handshake. Never contains an Origin header

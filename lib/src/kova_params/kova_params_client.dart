@@ -130,11 +130,24 @@ class KovaGatewayHealth {
     required this.schemaVersion,
     this.bindScope,
     this.authentication,
+    this.owner,
+    this.ownerRegistered,
+    this.ownerPairing,
   });
   final String status;
   final int schemaVersion;
   final String? bindScope;
   final String? authentication;
+
+  /// Wi-Fi: this request carried the comma owner's token (null: older
+  /// kovapilot that does not say).
+  final bool? owner;
+
+  /// Wi-Fi: some phone is registered as the owner.
+  final bool? ownerRegistered;
+
+  /// Wi-Fi: the comma can show an owner code (automatic Wi-Fi).
+  final bool? ownerPairing;
 }
 
 sealed class KovaUpdateOutcome {
@@ -353,6 +366,13 @@ class KovaParamsClient {
           : null,
       authentication: json['authentication'] is String
           ? json['authentication'] as String
+          : null,
+      owner: json['owner'] is bool ? json['owner'] as bool : null,
+      ownerRegistered: json['ownerRegistered'] is bool
+          ? json['ownerRegistered'] as bool
+          : null,
+      ownerPairing: json['ownerPairing'] is bool
+          ? json['ownerPairing'] as bool
           : null,
     );
   }

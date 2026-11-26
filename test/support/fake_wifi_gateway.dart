@@ -99,6 +99,21 @@ class FakeWifiGateway {
   /// Never answer (accept and hold every request).
   bool silent = false;
 
+  /// Automatic Wi-Fi owner (kovapilot master-jh owner pairing): the token
+  /// the owner phone sends; null while nobody is registered.
+  String? ownerToken;
+
+  /// Code the comma "shows" and the token it hands out for it.
+  String pairCode = '135790';
+  String issuedToken = 'fe' * 32;
+
+  /// Vehicle off (owner pairing needs it).
+  bool offroad = true;
+
+  /// Answer like a kovapilot without owner pairing (no owner fields).
+  bool ownerPairingSupported = true;
+  int pairRequests = 0;
+
   int get port => _server.port;
   String get origin => 'https://$address:$port';
 
@@ -151,6 +166,16 @@ class FakeWifiGateway {
         HttpHeaders.wwwAuthenticateHeader: 'Bearer',
       });
     }
+    final owner =
+        !localNetwork ||
+        (ownerToken != null &&
+            auth.length == 1 &&
+            auth.single == 'Bearer $ownerToken');
+    if (localNetwork && ownerPairingSupported && auth.isNotEmpty && !owner) {
+      return _error(request, 401, 'authentication_required', {
+        HttpHeaders.wwwAuthenticateHeader: 'Bearer',
+      });
+    }
     switch ((request.method, request.uri.path)) {
       case ('GET', '/v1/health'):
         return _json(request, 200, {
@@ -158,7 +183,35 @@ class FakeWifiGateway {
           'schemaVersion': schemaVersion,
           'bindScope': 'wifi',
           'authentication': localNetwork ? 'localNetwork' : 'bearer',
+          if (ownerPairingSupported) ...{
+            'owner': owner,
+            'ownerRegistered': !localNetwork || ownerToken != null,
+            'ownerPairing': localNetwork,
+          },
         });
+      case ('POST', '/v1/owner/pair')
+          when localNetwork && ownerPairingSupported:
+        await utf8.decodeStream(request);
+        if (!offroad) return _error(request, 409, 'owner_pairing_offroad');
+        pairRequests++;
+        return _json(request, 200, {'expiresIn': 120});
+      case ('POST', '/v1/owner/confirm')
+          when localNetwork && ownerPairingSupported:
+        final body = jsonDecode(await utf8.decodeStream(request));
+        if (body is Map && body['code'] == pairCode) {
+          ownerToken = issuedToken;
+          return _json(request, 200, {'token': issuedToken});
+        }
+        return _json(request, 403, {
+          'error': {
+            'code': 'owner_pairing_code_invalid',
+            'message': 'the code does not match',
+            'remainingAttempts': 4,
+          },
+        });
+      case ('GET', '/v1/vpn'):
+        if (!owner) return _error(request, 403, 'forbidden');
+        return _json(request, 200, {'state': 'needsLogin'});
       case ('GET', '/v1/kova-params'):
         final r = await settings.get(request.uri, const Duration(seconds: 5));
         request.response.statusCode = r.statusCode;
