@@ -385,12 +385,52 @@ void main() {
     final slider = find.byKey(const ValueKey('kova-slider-e2e.level'));
     expect(tester.widget<Slider>(slider).onChanged, isNotNull);
     expect(find.text('저장됨 · P 정차 시 적용'), findsOneWidget);
+    expect(find.text('저장값 3 단계 · 현재 적용값 4 단계'), findsOneWidget);
     setting['applyState'] = 'applied';
     gateway.parked = true;
     await kova.refresh();
     await tester.pump();
     expect(find.text('적용됨'), findsOneWidget);
+    expect(find.textContaining('현재 적용값'), findsNothing);
   });
+
+  testWidgets(
+    'curve slowdown waits for longitudinal control independently of Park',
+    (tester) async {
+      const key = 'cruise.curve_slowdown';
+      final setting = (gateway.catalog['settings'] as List)
+          .cast<Map<String, dynamic>>()
+          .firstWhere((setting) => setting['key'] == 'steering.always_on');
+      setting
+        ..['key'] = key
+        ..['availability'] = 'available'
+        ..['applyPolicy'] = 'parked'
+        ..['savePolicy'] = 'anytime'
+        ..['applyState'] = 'awaitingLongitudinal';
+      gateway.offroad = false;
+      await kova.connect('http://127.0.0.1:18082');
+      await _pumpPanel(tester, kova);
+
+      expect(find.text('종방향 제어 적용 대기'), findsOneWidget);
+      expect(find.text('저장됨 · P 정차 시 적용'), findsNothing);
+      expect(
+        tester
+            .widget<Switch>(find.byKey(const ValueKey('kova-toggle-$key')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(find.textContaining('현재 적용값'), findsNothing);
+
+      setting
+        ..['availability'] = 'unsupported'
+        ..['access'] = 'readOnly'
+        ..remove('applyState');
+      await kova.refresh();
+      await tester.pump();
+      expect(find.text('이 차량에서는 커브 감속을 사용할 수 없어요.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('kova-toggle-$key')), findsNothing);
+    },
+  );
 
   testWidgets('conflict and rejection notices are drawn', (tester) async {
     await kova.connect('http://127.0.0.1:18082');

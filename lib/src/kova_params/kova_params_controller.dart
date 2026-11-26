@@ -151,7 +151,7 @@ class KovaParamsController extends ChangeNotifier {
     if (lock != KovaWriteLock.none) return _shortLockReason(lock);
     if (setting.status == KovaAvailability.unsupported) {
       if (setting.key == 'cruise.curve_slowdown') {
-        return 'openpilot 종방향 제어를 지원할 때 사용할 수 있어요.';
+        return '이 차량에서는 커브 감속을 사용할 수 없어요.';
       }
       return '이 차에서는 쓸 수 없는 기능이에요.';
     }
