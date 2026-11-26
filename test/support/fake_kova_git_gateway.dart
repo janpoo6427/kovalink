@@ -4,7 +4,10 @@
 // HEAD history pages, switch/reset previews with reachability checks,
 // apply -> 403 git_mutation_disabled unless [FakeKovaGitGateway.applyEnabled]
 // (then the kovapilot master@bccedd3ab apply: same preview again, digest
-// check, 202 with the queued maintenance entry), and the loopback-only 403.
+// check, 202 with the queued maintenance entry), the kovapilot master
+// device restart (`restartEnabled` in status, POST /v1/device/restart -> 202
+// or 403 restart_blocked; null [FakeKovaGitGateway.restartEnabled] is a
+// gateway without it), and the loopback-only 403.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -191,6 +194,17 @@ class FakeKovaGitGateway implements KovaParamsTransport {
   /// gateway).
   String? mutationBlock;
 
+  /// The comma takes a restart (car off, registered phone). Null: a
+  /// kovapilot without the restart API (no field, 404).
+  bool? restartEnabled;
+  int restartCalls = 0;
+
+  /// After a taken restart, this many requests fail (the comma is away);
+  /// then it is back, on the staged commit when one was staged. 0 keeps it
+  /// answering as if it never went away.
+  int restartDownRequests = 3;
+  int _away = -1;
+
   /// The last apply request as the gateway stores it (with `phase`).
   Map<String, Object?>? maintenance;
   final List<Map<String, dynamic>> applies = [];
@@ -265,6 +279,14 @@ class FakeKovaGitGateway implements KovaParamsTransport {
   Future<KovaHttpResponse?> _gate(Uri uri) async {
     requests.add(uri.path + (uri.hasQuery ? '?${uri.query}' : ''));
     if (hold != null) await hold!.future;
+    if (_away > 0) {
+      _away--;
+      throw const SocketException('comma restarting');
+    }
+    if (_away == 0) {
+      _away = -1;
+      if (maintenance?['phase'] == 'staged') install();
+    }
     switch (mode) {
       case FakeGitMode.down:
         throw const SocketException('connection refused');
@@ -304,6 +326,8 @@ class FakeKovaGitGateway implements KovaParamsTransport {
     if (!_mutationEnabled && (mutationBlock != null || applyEnabled))
       'mutationBlock': mutationBlock ?? 'offroadOrUpdaterBusy',
     'maintenance': ?_describe(),
+    if (restartEnabled != null)
+      'restartEnabled': restartEnabled! && maintenance?['phase'] != 'queued',
   };
 
   @override
@@ -373,6 +397,18 @@ class FakeKovaGitGateway implements KovaParamsTransport {
   ) async {
     final gated = await _gate(uri);
     if (gated != null) return gated;
+    if (uri.path == '/v1/device/restart' && restartEnabled != null) {
+      restartCalls++;
+      if (!restartEnabled! || maintenance?['phase'] == 'queued') {
+        return _error(
+          403,
+          'restart_blocked',
+          'restart requires authorized access while offroad and not finalizing an update',
+        );
+      }
+      if (restartDownRequests > 0) _away = restartDownRequests;
+      return _json(202, {'restarting': true});
+    }
     if (uri.path == '/v1/git/apply') {
       applyCalls++;
       if (!_mutationEnabled) {

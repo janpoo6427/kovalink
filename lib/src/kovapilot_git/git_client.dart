@@ -42,6 +42,9 @@ enum KovaGitFailure {
   /// known to be clean.
   applyBlocked,
 
+  /// 403 `restart_blocked`: the comma does not take a restart right now.
+  restartBlocked,
+
   /// 404/405: this kovapilot has no Git maintenance API.
   unsupported,
 
@@ -98,6 +101,8 @@ abstract final class KovaGitText {
   static const planChanged = '미리 본 뒤에 콤마나 브랜치가 바뀌었어요. 다시 미리 보고 적용해 주세요.';
   static const applyBlocked = '콤마가 다른 업데이트를 하고 있거나 수정된 파일이 있어서 바꾸지 못했어요.';
   static const unsupported = '콤마의 kovapilot이 아직 이 기능을 지원하지 않아요.';
+  static const restartBlocked = '지금은 콤마를 다시 켤 수 없어요. 시동을 끄고 다시 해 주세요.';
+  static const restartUnavailable = '콤마가 다시 켜기를 받지 못했어요. 잠시 뒤 다시 해 주세요.';
   static const format = '콤마에서 받은 내용을 읽을 수 없어요.';
   static const http = '콤마에서 요청을 처리하지 못했어요. 잠시 뒤 다시 해 주세요.';
 }
@@ -138,6 +143,18 @@ KovaGitException kovaGitError(int statusCode, String? code) =>
       (403, 'git_apply_blocked') => KovaGitException(
         KovaGitFailure.applyBlocked,
         KovaGitText.applyBlocked,
+        statusCode: statusCode,
+        code: code,
+      ),
+      (403, 'restart_blocked') => KovaGitException(
+        KovaGitFailure.restartBlocked,
+        KovaGitText.restartBlocked,
+        statusCode: statusCode,
+        code: code,
+      ),
+      (503, 'restart_unavailable') => KovaGitException(
+        KovaGitFailure.unavailable,
+        KovaGitText.restartUnavailable,
         statusCode: statusCode,
         code: code,
       ),
@@ -242,7 +259,7 @@ class KovaGitClient {
     } on FormatException {
       json = null;
     }
-    // 202: apply accepted (the updater does the rest).
+    // 202: apply or restart accepted (the comma does the rest).
     if (response.statusCode != 200 && response.statusCode != 202) {
       String? code;
       if (json is Map && json['error'] is Map) {
@@ -332,6 +349,15 @@ class KovaGitClient {
         () => transport.postJson(_uri('/v1/git/apply'), body, timeout),
       ),
       parseKovaGitApply,
+    );
+  }
+
+  /// `POST /v1/device/restart`: asks the comma to restart, the same as its
+  /// own Reboot button. 202 means it is restarting; the connection drops for
+  /// a minute or two. A staged update is installed by that restart.
+  Future<void> restart() async {
+    await _call(
+      () => transport.postJson(_uri('/v1/device/restart'), '{}', timeout),
     );
   }
 

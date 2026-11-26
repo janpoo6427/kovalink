@@ -2,7 +2,8 @@
 // branches, HEAD history pages, switch/reset previews, and applying a
 // previewed change when the comma allows it. After an apply the status is
 // read again every few seconds while the comma downloads, until the change
-// is staged (moves on the next start) or fails.
+// is staged (moves on the next start) or fails. 콤마 다시 켜기 asks the comma
+// to restart and reads the status until it went away and answers again.
 //
 // A reset only ever goes back inside the branch the comma is on: the
 // history the gateway gives is that branch's (HEAD), so a commit of another
@@ -61,6 +62,23 @@ abstract final class KovaGitBranchText {
   static const showBranches = '브랜치 목록 보기';
 }
 
+/// Where a restart from this phone is.
+enum KovaGitRestart {
+  idle,
+
+  /// The request is on its way.
+  sending,
+
+  /// The comma took it; waiting for it to go away and answer again.
+  restarting,
+
+  /// It answered again after going away.
+  back,
+
+  /// It did not answer again within [KovaGitController.restartTimeout].
+  lost,
+}
+
 /// Result of a preview: either a plan or a failure line.
 class KovaGitPreview {
   const KovaGitPreview.plan(KovaGitPlan this.plan) : failure = null;
@@ -74,6 +92,7 @@ class KovaGitController extends ChangeNotifier {
     KovaGitClientFactory? clientFactory,
     this.pageSize = 20,
     this.followInterval = const Duration(seconds: 3),
+    this.restartTimeout = const Duration(minutes: 4),
   }) : _clientFactory = clientFactory ?? KovaGitClient.tryCreate;
 
   final KovaGitClientFactory _clientFactory;
@@ -87,6 +106,18 @@ class KovaGitController extends ChangeNotifier {
 
   /// An apply request is on its way to the comma.
   bool sending = false;
+
+  /// How long a restart may take before the screen says it is not back.
+  final Duration restartTimeout;
+  KovaGitRestart restartState = KovaGitRestart.idle;
+  Timer? _restartTimer;
+  int _restartTicks = 0;
+  bool _restartSawDown = false;
+  bool _restartReading = false;
+
+  bool get restartBusy =>
+      restartState == KovaGitRestart.sending ||
+      restartState == KovaGitRestart.restarting;
 
   KovaGitClient? _client;
   String? _endpoint;
@@ -201,6 +232,10 @@ class KovaGitController extends ChangeNotifier {
     }
     load = KovaGitLoad.loading;
     failure = null;
+    if (restartState == KovaGitRestart.back ||
+        restartState == KovaGitRestart.lost) {
+      restartState = KovaGitRestart.idle;
+    }
     _notify();
     try {
       // The gateway runs one inspection at a time (`git_busy` otherwise),
@@ -297,6 +332,75 @@ class KovaGitController extends ChangeNotifier {
     return null;
   }
 
+  /// Asks the comma to restart. Null when it took it (the status is then
+  /// read until the comma went away and answers again), else why not.
+  Future<KovaGitException?> restartComma() async {
+    final client = _client;
+    if (client == null) {
+      return const KovaGitException(
+        KovaGitFailure.transport,
+        KovaGitText.transport,
+      );
+    }
+    if (restartBusy) {
+      return const KovaGitException(KovaGitFailure.busy, KovaGitText.busy);
+    }
+    restartState = KovaGitRestart.sending;
+    _notify();
+    try {
+      await client.restart();
+    } on KovaGitException catch (error) {
+      restartState = KovaGitRestart.idle;
+      _notify();
+      return error;
+    }
+    if (_disposed) return null;
+    restartState = KovaGitRestart.restarting;
+    _restartTicks = 0;
+    _restartSawDown = false;
+    _follow?.cancel();
+    _follow = null;
+    _restartTimer?.cancel();
+    _restartTimer = Timer.periodic(followInterval, (_) => _restartOnce());
+    _notify();
+    return null;
+  }
+
+  /// One status read while restarting. Back once a read works after one
+  /// failed (the comma went away), or when the staged update shows up as
+  /// installed.
+  Future<void> _restartOnce() async {
+    final client = _client;
+    if (client == null || _restartReading || _disposed) return;
+    _restartTicks++;
+    if (followInterval * _restartTicks > restartTimeout) {
+      _restartTimer?.cancel();
+      _restartTimer = null;
+      restartState = KovaGitRestart.lost;
+      _notify();
+      return;
+    }
+    _restartReading = true;
+    try {
+      final next = await client.status();
+      if (_disposed || restartState != KovaGitRestart.restarting) return;
+      final installed =
+          status?.maintenance?.phase == KovaGitMaintenancePhase.staged &&
+          next.maintenance?.phase == KovaGitMaintenancePhase.installed;
+      if (!_restartSawDown && !installed) return;
+      _restartTimer?.cancel();
+      _restartTimer = null;
+      await refresh();
+      if (_disposed) return;
+      restartState = KovaGitRestart.back;
+      _notify();
+    } on KovaGitException {
+      _restartSawDown = true;
+    } finally {
+      _restartReading = false;
+    }
+  }
+
   Future<void> loadMore() async {
     final client = _client;
     final cursor = nextCursor;
@@ -363,6 +467,8 @@ class KovaGitController extends ChangeNotifier {
     _disposed = true;
     _follow?.cancel();
     _follow = null;
+    _restartTimer?.cancel();
+    _restartTimer = null;
     _generation++;
     _client?.close();
     _client = null;

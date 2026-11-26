@@ -142,6 +142,8 @@ class KovaGitStatus {
     this.mutationEnabled = false,
     this.mutationBlock,
     this.maintenance,
+    this.restartEnabled = false,
+    this.restartSupported = false,
   });
 
   factory KovaGitStatus.fromJson(Object? json) {
@@ -165,6 +167,8 @@ class KovaGitStatus {
       // An entry this app cannot read is shown as none rather than failing
       // the whole screen.
       maintenance: _maintenanceOrNull(map['maintenance']),
+      restartEnabled: map['restartEnabled'] == true,
+      restartSupported: map['restartEnabled'] is bool,
     );
   }
 
@@ -197,6 +201,13 @@ class KovaGitStatus {
 
   /// The last apply request and how far it got, or null.
   final KovaGitMaintenance? maintenance;
+
+  /// The comma takes a restart from this phone now (registered phone, car
+  /// off, no update being written).
+  final bool restartEnabled;
+
+  /// This kovapilot has the restart API (it reports `restartEnabled`).
+  final bool restartSupported;
 
   /// A change is with the updater right now.
   bool get applying => maintenance?.active ?? false;
