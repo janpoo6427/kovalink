@@ -782,12 +782,8 @@ class GpuRoadRenderer {
       }
       final slot = pool[index];
       final length = o.lengthMeters ?? layout.length;
-      final yaw = _laneYaw(scene, o.distanceMeters + length / 2);
-      final oncoming =
-          o.relativeSpeedMps < -scene.speedMps - 1 &&
-          body != GpuBody.pedestrian &&
-          body != GpuBody.cone;
-      final heading = o.demoYaw ?? (oncoming ? yaw + math.pi : yaw);
+      final oncoming = scene.isOncoming(o);
+      final heading = scene.objectHeading(o, length);
       final speed = (scene.speedMps + o.relativeSpeedMps).abs();
       await _place(
         slot,
@@ -1015,14 +1011,6 @@ class GpuRoadRenderer {
     var h = (id * 0x27d4eb2d) & 0x7fffffff;
     h = (h ^ (h >> 15)) * 0x2c1b3c6d & 0x7fffffff;
     return colors[h % colors.length];
-  }
-
-  static double _laneYaw(RoadScene scene, double x) {
-    if (scene.plannedPath.length < 2) return 0;
-    final last = scene.plannedPath.last.forwardMeters;
-    final a = math.min(x - 2, last - 4);
-    final slope = (scene.pathLeftAt(a + 4) - scene.pathLeftAt(a)) / 4;
-    return math.atan(slope).clamp(-0.6, 0.6);
   }
 
   Future<void> dispose() async {

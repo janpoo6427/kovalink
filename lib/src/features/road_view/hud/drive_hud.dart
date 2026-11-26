@@ -165,6 +165,19 @@ class DriveHud extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
+        for (final left in [true, false])
+          if (left ? scene.leftBlindspot : scene.rightBlindspot)
+            Align(
+              alignment: left ? Alignment.centerLeft : Alignment.centerRight,
+              child: Semantics(
+                label: left ? "왼쪽 사각지대 경고" : "오른쪽 사각지대 경고",
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.amber,
+                  size: 28,
+                ),
+              ),
+            ),
         if (showNumbers)
           Positioned(
             left: HudLayout.margin,

@@ -9,6 +9,8 @@ import 'package:kovalink/src/network/local_endpoint_policy.dart';
 import 'package:kovalink/src/services/demo_drive_scenario.dart';
 import 'package:kovalink/src/services/web_rtc_road_stream.dart';
 
+import "package:kovalink/src/services/live_lane_filter.dart";
+
 enum GatewayMode { demo, connecting, live, disconnected, error }
 
 /// Opens a telemetry WebSocket (tests replace the network).
@@ -19,6 +21,7 @@ class GatewayController extends ChangeNotifier {
     : _connectSocket = webSocketConnector ?? ((url) => WebSocket.connect(url));
 
   final WebSocketConnector _connectSocket;
+  final _laneFilter = LiveLaneFilter();
   bool _backgroundAttempt = false;
 
   final WebRtcRoadStream roadStream = WebRtcRoadStream();
@@ -190,6 +193,7 @@ class GatewayController extends ChangeNotifier {
     String endpoint, {
     bool authenticated = false,
   }) {
+    _laneFilter.reset();
     _socket = socket;
     connectedEndpoint = endpoint;
     gatewayAuthenticated = authenticated;
@@ -223,7 +227,7 @@ class GatewayController extends ChangeNotifier {
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('telemetry frame은 JSON object여야 합니다.');
       }
-      scene = RoadScene.fromJson(decoded);
+      scene = RoadScene.fromJson(_laneFilter.apply(decoded));
       notifyListeners();
     } on Object {
       errorMessage = '차에서 받은 주행 정보를 읽을 수 없어요.';

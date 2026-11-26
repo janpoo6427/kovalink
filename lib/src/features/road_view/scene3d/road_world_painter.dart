@@ -768,7 +768,7 @@ class RoadWorldPainter extends CustomPainter {
                   width: object.widthMeters ?? nw,
                   height: object.heightMeters ?? nh,
                   yaw: object.kind == TrackedObjectKind.cyclist
-                      ? _laneYaw(object.distanceMeters)
+                      ? scene.objectHeading(object, object.lengthMeters ?? nl)
                       : 0,
                 ),
                 shadowStrength: 0.6,
@@ -806,9 +806,7 @@ class RoadWorldPainter extends CustomPainter {
                   length: length,
                   width: object.widthMeters ?? nw,
                   height: object.heightMeters ?? nh,
-                  yaw:
-                      object.demoYaw ??
-                      _laneYaw(object.distanceMeters + length / 2),
+                  yaw: scene.objectHeading(object, length),
                 ),
                 paintArgb: body.toARGB32(),
                 lamps: VehicleLamps(brake: object.brakeLights),
@@ -871,15 +869,6 @@ class RoadWorldPainter extends CustomPainter {
     return _hash(id * 31 + 7) < 0.45
         ? BuiltinVehicles.suvSet
         : BuiltinVehicles.sedanSet;
-  }
-
-  /// Heading of the lane at [x] (from the planned path), radians.
-  double _laneYaw(double x) {
-    if (scene.plannedPath.length < 2) return 0;
-    final last = scene.plannedPath.last.forwardMeters;
-    final a = math.min(x - 2, last - 4);
-    final slope = (scene.pathLeftAt(a + 4) - scene.pathLeftAt(a)) / 4;
-    return math.atan(slope).clamp(-0.6, 0.6);
   }
 
   MeshDrawStats _paintMeshVehicle(

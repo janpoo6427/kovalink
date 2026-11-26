@@ -242,6 +242,8 @@ class RoadScene {
     required this.rightLane,
     required this.objects,
     this.gear = VehicleGear.unknown,
+    this.leftBlindspot = false,
+    this.rightBlindspot = false,
     this.leftBlinker = false,
     this.rightBlinker = false,
     this.brakeActive = false,
@@ -280,6 +282,7 @@ class RoadScene {
   final List<ScenePoint> rightLane;
   final List<TrackedObject> objects;
   final VehicleGear gear;
+  final bool leftBlindspot, rightBlindspot;
   final bool leftBlinker;
   final bool rightBlinker;
   final bool brakeActive;
@@ -324,6 +327,37 @@ class RoadScene {
       }
     }
     return best;
+  }
+
+  bool isOncoming(TrackedObject o) =>
+      (o.kind == TrackedObjectKind.vehicle ||
+          o.kind == TrackedObjectKind.truck ||
+          o.kind == TrackedObjectKind.cyclist) &&
+      speedMps + o.relativeSpeedMps < -3;
+
+  double objectHeading(TrackedObject o, double length) {
+    if (o.demoYaw case final yaw?) return yaw;
+    final x = o.distanceMeters + length / 2;
+    double? slope(List<ScenePoint> p) {
+      if (p.length < 2) return null;
+      final a = math.max(x - 1, p.first.forwardMeters),
+          b = math.min(x + 1, p.last.forwardMeters);
+      if (b <= a) return null;
+      return (interpolateLeft(p, b) - interpolateLeft(p, a)) / (b - a);
+    }
+
+    final lanes = laneLines;
+    double? laneSlope;
+    if (lanes.length == 2 || lanes.length == 4) {
+      final i = lanes.length == 4 ? 1 : 0;
+      final l = lanes[i], r = lanes[i + 1];
+      if (l.probability > .3 && r.probability > .3) {
+        final a = slope(l.points), b = slope(r.points);
+        if (a != null && b != null) laneSlope = (a + b) / 2;
+      }
+    }
+    return math.atan(laneSlope ?? slope(plannedPath) ?? 0) +
+        (isOncoming(o) ? math.pi : 0);
   }
 
   /// Lateral offset of the planned path at [forward] meters (0 if absent).
@@ -391,6 +425,8 @@ class RoadScene {
         Map<String, dynamic> value => TbtInstruction.fromJson(value),
         _ => null,
       },
+      leftBlindspot: json['leftBlindspot'] == true,
+      rightBlindspot: json['rightBlindspot'] == true,
       plannedPath: points('plannedPath'),
       leftLane: points('leftLane'),
       rightLane: points('rightLane'),
