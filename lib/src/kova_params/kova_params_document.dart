@@ -116,6 +116,29 @@ class KovaParamOption {
       title?.resolve(defaultLocale: defaultLocale) ?? '$value';
 }
 
+class KovaParamDependency {
+  const KovaParamDependency({required this.title, required this.state});
+
+  final LocalizedText title;
+  final String state;
+
+  static KovaParamDependency? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final title = LocalizedText.tryParse(json['title']);
+    if (title == null) return null;
+    final state = json['state'];
+    return KovaParamDependency(
+      title: title,
+      state: state is String ? state : 'unknown',
+    );
+  }
+
+  static List<KovaParamDependency> parseList(Object? json) => [
+    if (json is List)
+      for (final raw in json) ?tryParse(raw),
+  ];
+}
+
 class KovaParamSetting {
   const KovaParamSetting({
     required this.key,
@@ -132,6 +155,7 @@ class KovaParamSetting {
     required this.defaultValue,
     this.applyStatus,
     this.saveAnytime = false,
+    this.saveParkedOnly = false,
     this.applyState,
     this.appliedValue,
     this.minimum,
@@ -139,8 +163,11 @@ class KovaParamSetting {
     this.step,
     this.unit,
     this.options = const [],
+    this.numericSwitch = false,
     this.hidden = false,
     this.requiredCapabilities = const [],
+    this.dependencies = const [],
+    this.runtimeStates = const [],
   });
 
   final String key;
@@ -152,6 +179,7 @@ class KovaParamSetting {
   final KovaAvailability availability;
   final String? applyStatus;
   final bool saveAnytime;
+  final bool saveParkedOnly;
   final String? applyState;
   final Object? appliedValue;
   final KovaRisk risk;
@@ -164,8 +192,11 @@ class KovaParamSetting {
   final num? step;
   final LocalizedText? unit;
   final List<KovaParamOption> options;
+  final bool numericSwitch;
   final bool hidden;
   final List<String> requiredCapabilities;
+  final List<KovaParamDependency> dependencies;
+  final List<KovaParamDependency> runtimeStates;
 
   static KovaParamSetting parse(Map<dynamic, dynamic> json) {
     final key = json['key'];
@@ -220,6 +251,7 @@ class KovaParamSetting {
           ? json['applyStatus'] as String
           : null,
       saveAnytime: json['savePolicy'] == 'anytime',
+      saveParkedOnly: json['savePolicy'] == 'parked',
       applyState: json['applyState'] is String
           ? json['applyState'] as String
           : null,
@@ -234,12 +266,20 @@ class KovaParamSetting {
       step: _finite(json['step']),
       unit: LocalizedText.tryParse(json['unit']),
       options: options,
+      numericSwitch:
+          type == KovaParamType.choice &&
+          json['control'] == 'switch' &&
+          options.length == 2 &&
+          options.any((option) => option.matches(0)) &&
+          options.any((option) => option.matches(1)),
       hidden: json['hidden'] == true || json['visibility'] == 'hidden',
       requiredCapabilities: [
         if (capabilities is List)
           for (final c in capabilities)
             if (c is String) c,
       ],
+      dependencies: KovaParamDependency.parseList(json['dependencies']),
+      runtimeStates: KovaParamDependency.parseList(json['runtimeStates']),
     );
   }
 
@@ -284,13 +324,22 @@ class KovaParamSetting {
       KovaParamType.integer || KovaParamType.number =>
         hasRange ? KovaParamControl.slider : KovaParamControl.numberField,
       KovaParamType.choice =>
-        options.isEmpty ? KovaParamControl.readOnly : KovaParamControl.choice,
+        numericSwitch
+            ? KovaParamControl.toggle
+            : options.isEmpty
+            ? KovaParamControl.readOnly
+            : KovaParamControl.choice,
       // The contract has no string constraints yet, so strings are shown
       // but not edited.
       KovaParamType.string ||
       KovaParamType.unknown => KovaParamControl.readOnly,
     };
   }
+
+  Object toggleValue(bool enabled) =>
+      numericSwitch ? (enabled ? 1 : 0) : enabled;
+
+  bool isToggleOn(Object? value) => numericSwitch ? value == 1 : value == true;
 
   String formatNumber(num? v) {
     if (v == null) return '';

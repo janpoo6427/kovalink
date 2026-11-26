@@ -150,6 +150,9 @@ class KovaParamsController extends ChangeNotifier {
     final lock = writeLock;
     if (lock != KovaWriteLock.none) return _shortLockReason(lock);
     if (setting.status == KovaAvailability.unsupported) {
+      if (setting.key == 'cruise.curve_slowdown') {
+        return 'openpilot 종방향 제어를 지원할 때 사용할 수 있어요.';
+      }
       return '이 차에서는 쓸 수 없는 기능이에요.';
     }
     if (setting.control == KovaParamControl.readOnly) {
@@ -163,6 +166,9 @@ class KovaParamsController extends ChangeNotifier {
       }
       return '읽기 전용 항목이에요.';
     }
+    if (setting.saveParkedOnly && document?.deviceParked != true) {
+      return 'P에 두고 완전히 정차한 뒤 제어를 해제해 주세요.';
+    }
     if (!setting.saveAnytime &&
         setting.applyPolicy == KovaApplyPolicy.parked &&
         document?.deviceParked != true &&
@@ -171,6 +177,7 @@ class KovaParamsController extends ChangeNotifier {
     }
     final onroad = document?.deviceOffroad == false;
     if (!setting.saveAnytime &&
+        !setting.saveParkedOnly &&
         onroad &&
         (setting.applyPolicy == KovaApplyPolicy.offroad ||
             setting.applyPolicy == KovaApplyPolicy.restart)) {
@@ -368,7 +375,14 @@ class KovaParamsController extends ChangeNotifier {
         reason: rejection,
       );
     }
-    final outcome = await client.update(key, value, latest.revision);
+    final outcome = await client.update(
+      key,
+      value,
+      latest.revision,
+      expectedValue: key == 'cruise.openpilot_longitudinal'
+          ? refreshedSetting.value
+          : null,
+    );
     if (generation != _generation) return outcome;
     pending.remove(key);
     final locale = current.defaultLocale;
