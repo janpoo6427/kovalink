@@ -19,7 +19,6 @@ import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/services/vehicle_model_repository.dart';
 import 'package:kovalink/src/settings/app_settings.dart';
 import 'package:kovalink/src/vehicle_pack/vehicle_model_library.dart';
-import 'package:kovalink/src/widgets/page_header.dart';
 import 'package:kovalink/src/widgets/readable_width.dart';
 
 /// Which settings the screen shows. They live in different places and are
@@ -109,8 +108,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ]),
       builder: (context, _) => ReadableListView(
         children: [
-          const PageHeader(title: '설정'),
-          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: SegmentedButton<SettingsTab>(

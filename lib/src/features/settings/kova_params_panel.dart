@@ -286,40 +286,30 @@ class _GroupCard extends StatelessWidget {
     final locale = document.defaultLocale;
     final title = group.title?.resolve(defaultLocale: locale) ?? '기타';
     final description = group.description?.resolve(defaultLocale: locale);
-    return Column(
+    return Card(
       key: ValueKey('kova-group-${group.id}'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, top: 18, bottom: 6),
-          child: Text(
-            title,
-            style: const TextStyle(color: _muted, fontWeight: FontWeight.w700),
-          ),
-        ),
-        if (description != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8, right: 4),
-            child: Text(
-              description,
-              style: const TextStyle(color: _muted, fontSize: 12),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: PageStorageKey('kova-group-panel-${group.id}'),
+        maintainState: true,
+        title: Text(title),
+        subtitle: Text('${group.settings.length}개 항목'),
+        children: [
+          if (description != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(description),
             ),
-          ),
-        Card(
-          child: Column(
-            children: [
-              for (var i = 0; i < group.settings.length; i++) ...[
-                KovaSettingTile(
-                  setting: group.settings[i],
-                  document: document,
-                  controller: controller,
-                ),
-                if (i != group.settings.length - 1) const Divider(height: 1),
-              ],
-            ],
-          ),
-        ),
-      ],
+          for (final setting in group.settings) ...[
+            const Divider(height: 1),
+            KovaSettingTile(
+              setting: setting,
+              document: document,
+              controller: controller,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

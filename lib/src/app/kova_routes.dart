@@ -16,7 +16,6 @@
 // the drive screen. Dialogs and bottom sheets stay what they are (their own
 // popup routes, closed by back first).
 import 'package:flutter/material.dart';
-import 'package:kovalink/src/widgets/glass_nav_button.dart';
 
 abstract final class KovaRoutes {
   static const drive = Navigator.defaultRouteName;
@@ -72,11 +71,15 @@ class KovaPageRoute<T> extends MaterialPageRoute<T> {
 class KovaPage extends StatelessWidget {
   const KovaPage({
     required this.child,
+    required this.title,
+    this.subtitle,
     this.backTooltip = KovaRoutes.backToDrive,
     super.key,
   });
 
   final Widget child;
+  final String title;
+  final String? subtitle;
   final String backTooltip;
 
   @override
@@ -84,19 +87,56 @@ class KovaPage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: Stack(
-          fit: StackFit.expand,
+        child: Column(
           children: [
-            child,
-            Positioned(
-              left: 16,
-              top: 14,
-              child: GlassNavButton(
-                tooltip: backTooltip,
-                icon: Icons.arrow_back_rounded,
-                onPressed: () => Navigator.of(context).maybePop(),
+            Material(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: subtitle == null ? 56 : 72,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: backTooltip,
+                        icon: const BackButtonIcon(),
+                        constraints: const BoxConstraints.tightFor(
+                          width: 48,
+                          height: 48,
+                        ),
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                title,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              if (subtitle != null)
+                                Text(
+                                  subtitle!,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
+            Expanded(child: child),
           ],
         ),
       ),

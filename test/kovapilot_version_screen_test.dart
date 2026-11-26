@@ -27,6 +27,8 @@ class _Harness {
   Widget app({String? endpoint = _endpoint}) => MaterialApp(
     theme: KovaLinkApp.theme(Brightness.dark),
     home: KovaPage(
+      title: "kovapilot 버전",
+      subtitle: endpoint == null ? null : Uri.parse(endpoint).host,
       backTooltip: KovaRoutes.backToSettings,
       child: KovapilotVersionScreen(
         endpoint: endpoint,
