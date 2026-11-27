@@ -98,6 +98,19 @@ class RoadWorldPainter extends CustomPainter {
   /// Default road half-width when the frame has no lanes or edges.
   static const fallbackHalfWidth = 5.4;
 
+  /// Point [offset] meters to the left of the line [center] at forward
+  /// [x], measured across the line's direction (not straight sideways).
+  static (double, double) normalOffset(
+    double Function(double x) center,
+    double x,
+    double offset,
+  ) {
+    final slope = (center(x + 0.25) - center(x - 0.25)) / 0.5;
+    final s = slope.isFinite ? slope : 0.0;
+    final inv = 1 / math.sqrt(1 + s * s);
+    return (x - s * offset * inv, center(x) + offset * inv);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
@@ -394,7 +407,9 @@ class RoadWorldPainter extends CustomPainter {
         LaneLineColor.blue => p.laneBlue,
         _ => p.laneWhite,
       };
-      final color = base.withValues(alpha: 0.25 + 0.75 * line.probability);
+      final color = base.withValues(
+        alpha: (0.25 + 0.75 * line.probability) * line.fade.clamp(0.0, 1.0),
+      );
       double at(double x) => RoadScene.interpolateLeft(line.points, x);
       final lineXs = xs
           .where((x) => x >= math.min(line.points.first.forwardMeters, 0) - 12)
@@ -441,9 +456,16 @@ class RoadWorldPainter extends CustomPainter {
     List<Offset>? outline(double half, double z, {double from = start}) {
       final part = xs.where((x) => x >= from).toList();
       if (part.length < 2) return null;
+      // Width across the ribbon's own direction, so it keeps its width
+      // through a curve instead of thinning where it runs sideways.
+      V3 side(double x, double off) {
+        final (px, py) = normalOffset(center, x, off);
+        return V3(px, py, z);
+      }
+
       return f.camera.projectPolygon([
-        for (final x in part) V3(x, center(x) + half, z),
-        for (final x in part.reversed) V3(x, center(x) - half, z),
+        for (final x in part) side(x, half),
+        for (final x in part.reversed) side(x, -half),
       ]);
     }
 
@@ -1021,14 +1043,23 @@ class RoadWorldPainter extends CustomPainter {
     double halfWidth,
     Color color,
   ) {
-    _strip(
-      f,
-      xs,
-      (x) => center(x) + halfWidth,
-      (x) => center(x) - halfWidth,
-      (x) => color,
-      z: 0.006,
-    );
+    // Offsets across the line's own direction (constant width in curves).
+    for (var index = 0; index < xs.length - 1; index++) {
+      final x0 = xs[index];
+      final x1 = xs[index + 1] + 0.05;
+      final (ax, ay) = normalOffset(center, x0, halfWidth);
+      final (bx, by) = normalOffset(center, x0, -halfWidth);
+      final (cx, cy) = normalOffset(center, x1, -halfWidth);
+      final (dx, dy) = normalOffset(center, x1, halfWidth);
+      _quad(
+        f,
+        V3(ax, ay, 0.006),
+        V3(bx, by, 0.006),
+        V3(cx, cy, 0.006),
+        V3(dx, dy, 0.006),
+        color,
+      );
+    }
   }
 
   void _quad(

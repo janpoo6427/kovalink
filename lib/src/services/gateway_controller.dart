@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:kovalink/src/models/road_geometry_smoother.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/network/gateway_session.dart';
 import 'package:kovalink/src/network/local_endpoint_policy.dart';
@@ -35,6 +36,9 @@ class GatewayController extends ChangeNotifier {
 
   Timer? _demoTimer;
   DemoDriveScenario? _scenario;
+
+  /// Smooths live model geometry for display (the demo is already smooth).
+  final _smoother = RoadGeometrySmoother();
   Duration _demoElapsed = Duration.zero;
   WebSocket? _socket;
   StreamSubscription<dynamic>? _socketSubscription;
@@ -191,6 +195,7 @@ class GatewayController extends ChangeNotifier {
     bool authenticated = false,
   }) {
     _socket = socket;
+    _smoother.reset();
     connectedEndpoint = endpoint;
     gatewayAuthenticated = authenticated;
     mode = GatewayMode.live;
@@ -223,7 +228,7 @@ class GatewayController extends ChangeNotifier {
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('telemetry frame은 JSON object여야 합니다.');
       }
-      scene = RoadScene.fromJson(decoded);
+      scene = _smoother.apply(RoadScene.fromJson(decoded));
       notifyListeners();
     } on Object {
       errorMessage = '차에서 받은 주행 정보를 읽을 수 없어요.';

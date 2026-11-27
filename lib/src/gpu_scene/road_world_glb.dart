@@ -473,28 +473,47 @@ class _WorldBuilder {
       yellow: PrimitiveBuffer(),
       blue: PrimitiveBuffer(),
     };
+    // Lines easing in or out (display fade) go to blended copies of the
+    // lane materials with the fade in the vertex alpha.
+    final fadeMats = <int, int>{};
+    final fadeBufs = <int, PrimitiveBuffer>{};
+    int fadeMat(int base) => fadeMats.putIfAbsent(base, () {
+      final rgb = base == yellow
+          ? GltfSceneBuilder.linear(0xFFE0A417)
+          : base == blue
+          ? GltfSceneBuilder.linear(0xFF3E7BE0)
+          : GltfSceneBuilder.linear(0xFFEDEFF1);
+      return _mat(
+        'KL_LaneFade$base',
+        rgb,
+        roughness: 0.55 - 0.35 * wet,
+        blend: true,
+      );
+    });
     const half = RoadWorldPainter.laneHalfWidth;
     for (final line in scene.laneLines) {
       if (line.points.length < 2) continue;
-      final mat = switch (line.color) {
+      final fade = line.fade.clamp(0.0, 1.0);
+      if (fade <= 0.01) continue;
+      final base = switch (line.color) {
         LaneLineColor.yellow => yellow,
         LaneLineColor.blue => blue,
         _ => white,
       };
-      final buf = bufs[mat]!;
+      final fading = fade < 0.99;
+      final mat = fading ? fadeMat(base) : base;
+      final buf = fading
+          ? fadeBufs.putIfAbsent(mat, () => PrimitiveBuffer(withColors: true))
+          : bufs[base]!;
+      final rgba = fading ? [1.0, 1.0, 1.0, fade] : null;
       double at(double x) => RoadScene.interpolateLeft(line.points, x);
-      final lx = xs
-          .where((x) => x <= line.points.last.forwardMeters + 60)
-          .toList();
+      // No straight extension past the last model point (it shoots off
+      // the road in curves).
+      final lx = xs.where((x) => x <= line.points.last.forwardMeters).toList();
+      if (lx.length < 2) continue;
       void ribbon(List<double> s, double offset, double h) {
         if (s.length < 2) return;
-        _strip(
-          buf,
-          s,
-          (x) => at(x) + offset + h,
-          (x) => at(x) + offset - h,
-          0.008,
-        );
+        _ribbonStrip(buf, s, (x) => at(x) + offset, h, 0.008, rgba);
       }
 
       switch (line.style) {
@@ -519,6 +538,35 @@ class _WorldBuilder {
     }
     for (final e in bufs.entries) {
       _emit('Lane_${e.key}', e.value, e.key);
+    }
+    for (final e in fadeBufs.entries) {
+      _emit('LaneFade_${e.key}', e.value, e.key);
+    }
+  }
+
+  /// Ribbon of half width [half] around [center], offset across the line's
+  /// own direction so it keeps its width through curves.
+  void _ribbonStrip(
+    PrimitiveBuffer buf,
+    List<double> samples,
+    double Function(double) center,
+    double half,
+    double z,
+    List<double>? rgba,
+  ) {
+    final rows = <List<int>>[];
+    for (final x in samples) {
+      final (lx, ly) = RoadWorldPainter.normalOffset(center, x, half);
+      final (rx, ry) = RoadWorldPainter.normalOffset(center, x, -half);
+      final l = toFilament(lx, ly, z), r = toFilament(rx, ry, z);
+      rows.add([
+        buf.vertex(l[0], l[1], l[2], 0, 1, 0, rgba),
+        buf.vertex(r[0], r[1], r[2], 0, 1, 0, rgba),
+      ]);
+    }
+    for (var i = 0; i < rows.length - 1; i++) {
+      _orientUp(buf, rows[i][0], rows[i + 1][0], rows[i][1]);
+      _orientUp(buf, rows[i][1], rows[i + 1][0], rows[i + 1][1]);
     }
   }
 
@@ -1067,14 +1115,15 @@ class _WorldBuilder {
     final rows = <List<int>>[];
     for (final x in samples) {
       final cy = center(x);
+      final slope = (center(x + 0.25) - center(x - 0.25)) / 0.5;
+      final s = slope.isFinite ? slope : 0.0;
+      final inv = 1 / math.sqrt(1 + s * s);
       rows.add([
         for (var c = 0; c < cols.length; c++)
           () {
-            final p = toFilament(
-              x,
-              cy + cols[c] * RoadWorldPainter.pathHalfWidth,
-              0.03,
-            );
+            // Across the ribbon's own direction (constant width in curves).
+            final off = cols[c] * RoadWorldPainter.pathHalfWidth;
+            final p = toFilament(x - s * off * inv, cy + off * inv, 0.03);
             return buf.vertex(p[0], p[1], p[2], 0, 1, 0, colorAt(x, fades[c]));
           }(),
       ]);

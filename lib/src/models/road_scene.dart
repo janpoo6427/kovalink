@@ -70,6 +70,8 @@ class LaneLine {
     this.probability = 1,
     this.color = LaneLineColor.white,
     this.style = LaneLineStyle.solid,
+    this.index,
+    this.fade = 1,
   });
 
   final List<ScenePoint> points;
@@ -79,29 +81,73 @@ class LaneLine {
   final LaneLineColor color;
   final LaneLineStyle style;
 
-  factory LaneLine.fromJson(Map<String, dynamic> json) => LaneLine(
-    points: _pointList(json['points']),
-    probability: ((json['probability'] as num?) ?? 1).toDouble().clamp(
-      0.0,
-      1.0,
-    ),
-    color: _enumByName(
-      LaneLineColor.values,
-      json['color'] as String?,
-      LaneLineColor.unknown,
-    ),
-    style: _enumByName(
-      LaneLineStyle.values,
-      json['style'] as String?,
-      LaneLineStyle.unknown,
-    ),
+  /// Model lane slot (0 far left, 1 ego left, 2 ego right, 3 far right),
+  /// when the gateway reports it.
+  final int? index;
+
+  /// Display fade 0..1 (lines ease in and out instead of popping).
+  final double fade;
+
+  LaneLine withGeometry(List<ScenePoint> points, {double? fade}) => LaneLine(
+    points: points,
+    probability: probability,
+    color: color,
+    style: style,
+    index: index,
+    fade: fade ?? this.fade,
   );
+
+  factory LaneLine.fromJson(Map<String, dynamic> json, {bool mirror = false}) =>
+      LaneLine(
+        points: _pointList(json['points'], mirror: mirror),
+        probability: _unit(json['probability']) ?? 1,
+        index: switch (json['index']) {
+          final int value when value >= 0 && value < 4 => value,
+          _ => null,
+        },
+        color: _enumByName(
+          LaneLineColor.values,
+          json['color'] as String?,
+          LaneLineColor.unknown,
+        ),
+        style: _enumByName(
+          LaneLineStyle.values,
+          json['style'] as String?,
+          LaneLineStyle.unknown,
+        ),
+      );
 }
 
-List<ScenePoint> _pointList(Object? value) =>
-    (value as List<dynamic>? ?? const [])
-        .map((item) => ScenePoint.fromJson(item as Map<String, dynamic>))
-        .toList(growable: false);
+double? _unit(Object? value) => switch (value) {
+  final num n when n.isFinite => n.toDouble().clamp(0.0, 1.0),
+  _ => null,
+};
+
+/// Display-only point list: malformed or non-finite points are dropped and
+/// only strictly increasing forward distances are kept, so one bad sample
+/// can neither throw away the frame nor fold a line back on itself.
+/// [mirror] flips a right-positive source (schema 1 gateways sent the
+/// model's `y` as is) into this app's left-positive frame.
+List<ScenePoint> _pointList(Object? value, {bool mirror = false}) {
+  if (value is! List) return const [];
+  final out = <ScenePoint>[];
+  for (final item in value) {
+    if (item is! Map) continue;
+    final x = item['x'], y = item['y'], z = item['z'];
+    if (x is! num || y is! num || !x.isFinite || !y.isFinite) continue;
+    if (y.abs() > 1000 || x.abs() > 1000) continue;
+    if (out.isNotEmpty && x <= out.last.forwardMeters) continue;
+    final up = z is num && z.isFinite ? z.toDouble() : 0.0;
+    out.add(
+      ScenePoint(
+        forwardMeters: x.toDouble(),
+        leftMeters: mirror ? -y.toDouble() : y.toDouble(),
+        upMeters: mirror ? -up : up,
+      ),
+    );
+  }
+  return List.unmodifiable(out);
+}
 
 enum VehicleGear { park, reverse, neutral, drive, unknown }
 
@@ -359,11 +405,20 @@ class RoadScene {
     this.laneGuidance = const [],
     this.navigation,
     this.autoLaneChange,
+    this.roadEdgeStds = const [],
+    this.modelFrameId,
     // Kept private so callers read [laneLines], which applies the fallback.
     // ignore: prefer_initializing_formals
   }) : _laneLines = laneLines;
 
   final int monotonicTimeNanos;
+
+  /// Model uncertainty (m) of each [roadEdges] entry, when reported.
+  final List<double> roadEdgeStds;
+
+  /// modelV2 frame the geometry came from (null: not reported). The same
+  /// id twice means the gateway sent the same model output again.
+  final int? modelFrameId;
 
   /// Current road name from navigation (display only).
   final String? roadName;
@@ -411,6 +466,44 @@ class RoadScene {
         if (leftLane.length >= 2) LaneLine(points: leftLane),
         if (rightLane.length >= 2) LaneLine(points: rightLane),
       ];
+
+  /// Lane lines exactly as received (null: the frame had no `laneLines`).
+  List<LaneLine>? get reportedLaneLines => _laneLines;
+
+  /// The same frame with display geometry replaced (smoothing output).
+  RoadScene withGeometry({
+    required List<ScenePoint> plannedPath,
+    required List<LaneLine> laneLines,
+    required List<List<ScenePoint>> roadEdges,
+  }) => RoadScene(
+    monotonicTimeNanos: monotonicTimeNanos,
+    speedMps: speedMps,
+    setSpeedMps: setSpeedMps,
+    steeringAngleDegrees: steeringAngleDegrees,
+    engaged: engaged,
+    plannedPath: plannedPath,
+    leftLane: const [],
+    rightLane: const [],
+    objects: objects,
+    gear: gear,
+    leftBlinker: leftBlinker,
+    rightBlinker: rightBlinker,
+    brakeActive: brakeActive,
+    speedLimitKph: speedLimitKph,
+    tbt: tbt,
+    cameraProjection: cameraProjection,
+    laneLines: laneLines,
+    roadEdges: roadEdges,
+    roadType: roadType,
+    odometerMeters: odometerMeters,
+    roadName: roadName,
+    trafficSignal: trafficSignal,
+    roadAlerts: roadAlerts,
+    laneGuidance: laneGuidance,
+    navigation: navigation,
+    autoLaneChange: autoLaneChange,
+    modelFrameId: modelFrameId,
+  );
 
   /// The lead object: explicitly marked by the gateway, else the nearest
   /// vehicle-like object within the ego corridor along the planned path.
@@ -474,10 +567,11 @@ class RoadScene {
   double get setSpeedKph => setSpeedMps * 3.6;
 
   factory RoadScene.fromJson(Map<String, dynamic> json) {
+    // Schema 1 gateways sent the model's right-positive `y` unchanged;
+    // schema 2 sends this app's left-positive frame.
+    final mirror = json['schemaVersion'] == 1;
     List<ScenePoint> points(String key) =>
-        (json[key] as List<dynamic>? ?? const [])
-            .map((value) => ScenePoint.fromJson(value as Map<String, dynamic>))
-            .toList(growable: false);
+        _pointList(json[key], mirror: mirror);
 
     return RoadScene(
       monotonicTimeNanos: (json['monotonicTimeNanos'] as num).toInt(),
@@ -512,13 +606,20 @@ class RoadScene {
       laneLines: switch (json['laneLines']) {
         List<dynamic> value =>
           value
-              .map((item) => LaneLine.fromJson(item as Map<String, dynamic>))
+              .whereType<Map<String, dynamic>>()
+              .map((item) => LaneLine.fromJson(item, mirror: mirror))
               .toList(growable: false),
         _ => null,
       },
       roadEdges: (json['roadEdges'] as List<dynamic>? ?? const [])
-          .map(_pointList)
+          .map((edge) => _pointList(edge, mirror: mirror))
           .toList(growable: false),
+      roadEdgeStds: [
+        if (json['roadEdgeStds'] case final List<dynamic> stds)
+          for (final value in stds)
+            value is num && value.isFinite ? value.toDouble() : double.infinity,
+      ],
+      modelFrameId: (json['modelFrameId'] as num?)?.toInt(),
       roadType: _enumByName(
         RoadType.values,
         json['roadType'] as String?,
