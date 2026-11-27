@@ -383,36 +383,60 @@ class _Choice<T> extends StatelessWidget {
   final List<(T, String)> options;
   final ValueChanged<T> onChanged;
 
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<T>(
-            showSelectedIcon: false,
-            segments: [
-              for (final (option, text) in options)
-                ButtonSegment<T>(
-                  value: option,
-                  label: Text(
-                    text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+  Future<void> _choose(BuildContext context) async {
+    final selected = await showModalBottomSheet<T>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
-            ],
-            selected: {value},
-            onSelectionChanged: (selection) => onChanged(selection.first),
+                for (final (option, text) in options)
+                  ListTile(
+                    title: Text(text),
+                    selected: option == value,
+                    trailing: option == value
+                        ? const Icon(Icons.check_rounded)
+                        : null,
+                    onTap: () => Navigator.of(context).pop(option),
+                  ),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
-      ],
-    ),
-  );
+      ),
+    );
+    if (selected != null && selected != value) onChanged(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = options.firstWhere((option) => option.$1 == value).$2;
+    return ListTile(
+      title: Text(label),
+      subtitle: Text(
+        current,
+        style: TextStyle(color: Theme.of(context).colorScheme.primary),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => _choose(context),
+    );
+  }
 }
 
 class _DisplaySection extends StatelessWidget {
@@ -426,7 +450,11 @@ class _DisplaySection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('주행 화면'),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+          child: Text('이 휴대폰의 표시 설정입니다. 차량 제어 설정은 바뀌지 않습니다.'),
+        ),
+        const _SectionTitle('화면 및 표시'),
         Card(
           child: Column(
             children: [
@@ -435,8 +463,8 @@ class _DisplaySection extends StatelessWidget {
                 label: '시점',
                 value: value.viewpoint,
                 options: const [
-                  (SceneViewpoint.chase, '뒤'),
-                  (SceneViewpoint.topDown, '위'),
+                  (SceneViewpoint.chase, '후방'),
+                  (SceneViewpoint.topDown, '상단'),
                   (SceneViewpoint.driver, '운전석'),
                 ],
                 onChanged: (v) =>
@@ -746,7 +774,7 @@ class _VehicleModelSectionState extends State<_VehicleModelSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('차량 모델'),
+        const _SectionTitle('화면에 표시할 차량'),
         VehicleModelCard(result: widget.current),
         Card(
           child: Builder(

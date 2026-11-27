@@ -230,10 +230,17 @@ void main() {
       tester,
     ) async {
       await pumpScreen(tester);
-      await tester.tap(find.text('위'));
-      await tester.tap(find.text('흐림'));
-      await tester.tap(find.text('mph'));
-      await tester.tap(find.text('고속도로'));
+      for (final (key, choice) in [
+        ('setting-viewpoint', '상단'),
+        ('setting-scene-theme', '흐림'),
+        ('setting-unit', 'mph'),
+        ('setting-demo-route', '고속도로'),
+      ]) {
+        await tester.tap(find.byKey(ValueKey(key)));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(choice));
+        await tester.pumpAndSettle();
+      }
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('setting-lanes')));
       await tester.tap(find.byKey(const ValueKey('setting-hud')));
