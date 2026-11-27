@@ -117,6 +117,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: SegmentedButton<SettingsTab>(
               key: const ValueKey('settings-tabs'),
               showSelectedIcon: false,
+              style: ButtonStyle(
+                minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                ),
+                side: const WidgetStatePropertyAll(BorderSide.none),
+                shape: WidgetStatePropertyAll(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                  final colors = Theme.of(context).colorScheme;
+                  return states.contains(WidgetState.selected)
+                      ? colors.primary.withValues(alpha: 0.12)
+                      : Colors.transparent;
+                }),
+                foregroundColor: WidgetStateProperty.resolveWith((states) {
+                  final colors = Theme.of(context).colorScheme;
+                  return states.contains(WidgetState.selected)
+                      ? colors.primary
+                      : colors.onSurfaceVariant;
+                }),
+                textStyle: WidgetStateProperty.resolveWith(
+                  (states) => TextStyle(
+                    fontSize: 14,
+                    fontWeight: states.contains(WidgetState.selected)
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                  ),
+                ),
+              ),
               segments: const [
                 ButtonSegment(
                   value: SettingsTab.app,
