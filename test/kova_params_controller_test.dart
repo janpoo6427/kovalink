@@ -125,11 +125,11 @@ void main() {
         expect(doc.deviceOffroad, isFalse);
         expect(
           kova.lockReasonFor(doc.setting('steering.always_on')!),
-          contains('시동을 끈 뒤'),
+          contains('P에 두고 완전히 정차한 뒤'),
         );
         expect(
           kova.lockReasonFor(doc.setting('e2e.gain')!),
-          contains('시동을 끈 뒤'),
+          contains('P에 두고 완전히 정차한 뒤'),
         );
         expect(kova.lockReasonFor(doc.setting('e2e.level')!), isNull);
         expect(

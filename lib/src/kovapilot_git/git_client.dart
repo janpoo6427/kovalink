@@ -101,7 +101,8 @@ abstract final class KovaGitText {
   static const planChanged = '미리 본 뒤에 콤마나 브랜치가 바뀌었어요. 다시 미리 보고 적용해 주세요.';
   static const applyBlocked = '콤마가 다른 업데이트를 하고 있거나 수정된 파일이 있어서 바꾸지 못했어요.';
   static const unsupported = '콤마의 kovapilot이 아직 이 기능을 지원하지 않아요.';
-  static const restartBlocked = '지금은 콤마를 다시 켤 수 없어요. 시동을 끄고 다시 해 주세요.';
+  static const restartBlocked =
+      '콤마가 다시 켜기를 받지 않았어요. 등록한 휴대폰으로 연결했는지 확인해 주세요. 예전 kovapilot은 시동을 꺼야 다시 켤 수 있어요.';
   static const restartUnavailable = '콤마가 다시 켜기를 받지 못했어요. 잠시 뒤 다시 해 주세요.';
   static const format = '콤마에서 받은 내용을 읽을 수 없어요.';
   static const http = '콤마에서 요청을 처리하지 못했어요. 잠시 뒤 다시 해 주세요.';

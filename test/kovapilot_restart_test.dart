@@ -225,18 +225,20 @@ void main() {
       expect(gateway.requests.length, settled);
     });
 
-    test('no restart while the comma is downloading', () async {
+    test('a restart is sent while the comma is downloading', () async {
+      // janpoo6427 2026-11-27: 콤마 다시 켜기 works at any time.
       gateway.maintenance = {..._staged(gateway), 'phase': 'queued'};
       controller = make();
       await controller.open(_endpoint);
-      expect(controller.status!.restartEnabled, isFalse);
+      expect(controller.status!.restartEnabled, isTrue);
+      expect(kovaRestartBlockReason(controller.status!), isNull);
+      expect(await controller.restartComma(), isNull);
+      expect(gateway.restartCalls, 1);
+      await until(() => controller.restartState == KovaGitRestart.back);
       expect(
-        kovaRestartBlockReason(controller.status!),
-        '새 버전을 다 받은 뒤 다시 켤 수 있어요.',
-      );
-      expect(
-        (await controller.restartComma())!.kind,
-        KovaGitFailure.restartBlocked,
+        controller.status!.maintenance!.phase,
+        KovaGitMaintenancePhase.queued,
+        reason: 'the download starts again after the restart',
       );
     });
   });
@@ -389,24 +391,72 @@ void main() {
       expect(gateway.restartCalls, 1);
     });
 
-    testWidgets('car on: the button is off with the reason', (tester) async {
-      await open(tester, setup: (g) => g.restartEnabled = false);
-      expect(button(tester, 'git-restart').onPressed, isNull);
-      expect(find.text('시동을 끄면 다시 켤 수 있어요.'), findsOne);
-    });
-
-    testWidgets('a staged update with the car on keeps the old words', (
+    testWidgets('car on with an older kovapilot: the button stays on', (
       tester,
     ) async {
-      final (gateway, _) = await open(
+      await open(tester, setup: (g) => g.restartEnabled = false);
+      expect(button(tester, 'git-restart').onPressed, isNotNull);
+      expect(find.byKey(const ValueKey('git-restart-reason')), findsNothing);
+    });
+
+    testWidgets('not the registered phone: the button is off with the reason', (
+      tester,
+    ) async {
+      await open(
         tester,
         setup: (g) => g
           ..restartEnabled = false
-          ..maintenance = _staged(g),
+          ..applyEnabled = false
+          ..mutationBlock = 'authorization',
       );
-      expect(find.byKey(const ValueKey('git-restart-staged')), findsNothing);
-      expect(find.textContaining('콤마 화면의 업데이트 알림에서'), findsOne);
+      expect(button(tester, 'git-restart').onPressed, isNull);
+      expect(find.text('등록한 휴대폰으로 연결해야 다시 켤 수 있어요.'), findsOne);
+    });
+
+    testWidgets('a download in progress: the dialog says it starts again', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(412, 915) * 2;
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      final gateway = FakeKovaGitGateway.sample()
+        ..applyEnabled = true
+        ..restartEnabled = true;
+      gateway.maintenance = {..._staged(gateway), 'phase': 'queued'};
+      final controller = KovaGitController(
+        clientFactory: (e) => KovaGitClient.tryCreate(e, transport: gateway),
+        followInterval: const Duration(seconds: 3),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: KovaLinkApp.theme(Brightness.dark),
+          home: KovaPage(
+            title: 'kovapilot 버전',
+            backTooltip: KovaRoutes.backToSettings,
+            child: KovapilotVersionScreen(
+              endpoint: _endpoint,
+              controller: controller,
+              now: DateTime(2026, 11, 26, 16),
+            ),
+          ),
+        ),
+      );
+      // The download spinner keeps pumpAndSettle from settling.
+      await frames(tester);
+      final restart = find.byKey(const ValueKey('git-restart'));
+      await tester.ensureVisible(restart);
+      await frames(tester);
+      expect(button(tester, 'git-restart').onPressed, isNotNull);
+      await tester.tap(restart);
+      await frames(tester);
+      expect(find.textContaining('처음부터 다시 받아요'), findsOne);
+      await tester.tap(find.text('취소'));
+      await frames(tester);
       expect(gateway.restartCalls, 0);
+      // The download keeps the screen polling; stop it before the test ends.
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+      await tester.pump(const Duration(seconds: 4));
     });
 
     testWidgets('an older kovapilot shows no restart button', (tester) async {
@@ -448,10 +498,19 @@ void main() {
       kovaRestartBlockReason(status(block: 'authorization')),
       '등록한 휴대폰으로 연결해야 다시 켤 수 있어요.',
     );
+    // Since 2026-11-27 the button stays on with the car on and while an
+    // update is written; an older kovapilot refuses when it is pressed.
     expect(
       kovaRestartBlockReason(status(updater: 'finalizing update...')),
-      '콤마가 새 버전을 준비하는 동안은 다시 켤 수 없어요.',
+      isNull,
     );
-    expect(kovaRestartBlockReason(status()), '시동을 끄면 다시 켤 수 있어요.');
+    expect(kovaRestartBlockReason(status()), isNull);
+    // 적용 with the car on: Park and released control since 2026-11-27, the
+    // car off on an older kovapilot.
+    expect(
+      kovaMutationBlockText('parkedOrUpdaterBusy'),
+      'P단에 두고 정지한 뒤 조향·종방향을 풀고, 콤마가 다른 업데이트를 하지 않을 때 바꿀 수 있어요.',
+    );
+    expect(kovaMutationBlockText('offroadOrUpdaterBusy'), startsWith('시동을 끄고'));
   });
 }

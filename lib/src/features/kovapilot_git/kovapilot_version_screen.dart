@@ -2,10 +2,12 @@
 // tracked branch, modified files, updater), the branches it has fetched and
 // the commit history, plus switch/reset previews. 적용 in a preview hands
 // that change to the comma's updater when the comma allows it (registered
-// phone, car off, updater idle); otherwise it stays off with its reason.
+// phone, stopped in Park with steering and longitudinal control released or
+// the car off, updater idle); otherwise it stays off with its reason.
 // The comma downloads the change and moves to it on its next start; the
 // screen follows the download and says when to restart. 콤마 다시 켜기 asks
-// the comma to restart (car off) and follows it until it answers again.
+// the comma to restart at any time (janpoo6427 2026-11-27) and follows it
+// until it answers again.
 //
 // Branch first: the history is the current branch's, and a reset stays
 // inside it. A commit of another branch is reached by switching to that
@@ -53,6 +55,9 @@ String kovaCommitTimeLabel(DateTime? time, {DateTime? now}) {
 /// Why the comma does not allow 적용 now, from its `mutationBlock`.
 String kovaMutationBlockText(String? block) => switch (block) {
   'authorization' => '등록한 휴대폰으로 연결해야 바꿀 수 있어요.',
+  'parkedOrUpdaterBusy' =>
+    'P단에 두고 정지한 뒤 조향·종방향을 풀고, 콤마가 다른 업데이트를 하지 않을 때 바꿀 수 있어요.',
+  // A kovapilot before 2026-11-27 takes a change only with the car off.
   'offroadOrUpdaterBusy' => '시동을 끄고, 콤마가 다른 업데이트를 하지 않을 때 바꿀 수 있어요.',
   _ => KovaGitText.mutationDisabled,
 };
@@ -71,19 +76,16 @@ String? kovaApplyBlockReason(KovaGitStatus? status, KovaGitPlan? plan) {
   return null;
 }
 
-/// Why 콤마 다시 켜기 is off, or null when it can be pressed.
+/// Why 콤마 다시 켜기 is off, or null when it can be pressed. The button
+/// stays on at any time (janpoo6427 2026-11-27); only a phone that is not
+/// the registered one is told why. A kovapilot before that refuses with the
+/// car on, and the refusal says so when pressed.
 String? kovaRestartBlockReason(KovaGitStatus status) {
   if (status.restartEnabled) return null;
-  if (status.maintenance?.phase == KovaGitMaintenancePhase.queued) {
-    return '새 버전을 다 받은 뒤 다시 켤 수 있어요.';
-  }
   if (status.mutationBlock == 'authorization') {
     return '등록한 휴대폰으로 연결해야 다시 켤 수 있어요.';
   }
-  if ((status.updaterState ?? '').startsWith('finalizing')) {
-    return '콤마가 새 버전을 준비하는 동안은 다시 켤 수 없어요.';
-  }
-  return '시동을 끄면 다시 켤 수 있어요.';
+  return null;
 }
 
 /// Why the updater stopped, from the maintenance `reason`.
@@ -353,8 +355,9 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
 
   /// Asks first: the connection drops while the comma restarts.
   Future<void> _restart() async {
-    final staged =
-        _git.status?.maintenance?.phase == KovaGitMaintenancePhase.staged;
+    final phase = _git.status?.maintenance?.phase;
+    final staged = phase == KovaGitMaintenancePhase.staged;
+    final downloading = phase == KovaGitMaintenancePhase.queued;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -363,6 +366,8 @@ class _KovapilotVersionScreenState extends State<KovapilotVersionScreen> {
         content: Text(
           staged
               ? '받아 둔 새 버전으로 바뀌어요. 다시 켜는 1~2분 동안 연결이 끊겨요.'
+              : downloading
+              ? '받고 있던 새 버전은 다시 켠 뒤 처음부터 다시 받아요. 다시 켜는 1~2분 동안 연결이 끊겨요.'
               : '다시 켜는 1~2분 동안 연결이 끊겨요.',
           style: const TextStyle(height: 1.45),
         ),

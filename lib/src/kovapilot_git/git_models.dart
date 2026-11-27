@@ -2,7 +2,7 @@
 // (kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md`; apply at
 // `master@bccedd3ab`). The gateway inspects the device checkout and
 // previews a branch switch or a reset. When it says `mutationEnabled`
-// (registered phone, comma offroad, updater idle), `POST /v1/git/apply`
+// (registered phone, Park and disengaged or offroad, updater idle), `POST /v1/git/apply`
 // hands the previewed change to the comma's updater, which downloads and
 // stages it; the comma moves to it on its next start.
 
@@ -195,15 +195,18 @@ class KovaGitStatus {
   final bool mutationEnabled;
 
   /// Why apply is off: `authorization` (not the registered phone),
-  /// `offroadOrUpdaterBusy` (driving, updates off, or the updater busy), or
-  /// null (on, or a gateway without apply).
+  /// `parkedOrUpdaterBusy` (not stopped in Park with control released, updates
+  /// off, or the updater busy; `offroadOrUpdaterBusy` from a kovapilot before
+  /// 2026-11-27, which needs the car off), or null (on, or a gateway without
+  /// apply).
   final String? mutationBlock;
 
   /// The last apply request and how far it got, or null.
   final KovaGitMaintenance? maintenance;
 
-  /// The comma takes a restart from this phone now (registered phone, car
-  /// off, no update being written).
+  /// The comma takes a restart from this phone now (registered phone; a
+  /// kovapilot before 2026-11-27 also needs the car off and no update being
+  /// written).
   final bool restartEnabled;
 
   /// This kovapilot has the restart API (it reports `restartEnabled`).

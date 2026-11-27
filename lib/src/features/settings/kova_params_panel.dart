@@ -186,7 +186,7 @@ class KovaConnectionCard extends StatelessWidget {
                   key: ValueKey('kova-onroad-banner'),
                   color: _warn,
                   icon: Icons.directions_car_filled_outlined,
-                  text: '일부 설정은 P 정차 또는 시동 종료가 필요해요.',
+                  text: '일부 설정은 P에 두고 완전히 정차해야 바꿀 수 있어요.',
                 ),
               ],
             ],
@@ -705,7 +705,7 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
               _accent,
             ),
             (KovaApplyPolicy.offroad, _) when !s.saveAnytime => (
-              '시동을 끈 뒤 변경',
+              'P 정차 중 변경 · 다음 시동부터 적용',
               _warn,
             ),
             (KovaApplyPolicy.parked, _) => (
@@ -825,9 +825,9 @@ class _Details extends StatelessWidget {
         '범위: ${s.describe(s.minimum, defaultLocale: locale)} – ${s.describe(s.maximum, defaultLocale: locale)}',
       '적용: ${switch (s.applyPolicy) {
         KovaApplyPolicy.immediate => '바로 적용돼요.',
-        KovaApplyPolicy.offroad => s.saveAnytime ? '언제든 값을 저장할 수 있어요.' : '시동을 끈 뒤 바꿀 수 있어요.',
+        KovaApplyPolicy.offroad => s.saveAnytime ? '언제든 값을 저장할 수 있어요.' : 'P에 두고 완전히 정차했을 때 바꿀 수 있고, 다음 시동부터 적용돼요.',
         KovaApplyPolicy.parked => s.saveAnytime ? '값은 언제든 저장할 수 있고, P에 두고 완전히 정차하면 반영돼요.' : 'P에 두고 완전히 정차했을 때 바꿀 수 있어요.',
-        KovaApplyPolicy.restart => s.saveAnytime ? '언제든 저장할 수 있고, 다음 시동부터 적용돼요.' : '다음 시동부터 적용돼요. 주행 중에는 바꿀 수 없어요.',
+        KovaApplyPolicy.restart => s.saveAnytime ? '언제든 저장할 수 있고, 다음 시동부터 적용돼요.' : 'P에 두고 완전히 정차했을 때 바꿀 수 있고, 다음 시동부터 적용돼요.',
         KovaApplyPolicy.unknown => '언제 적용되는지 알 수 없어 앱에서는 바꿀 수 없어요.',
       }}',
       if (s.applyState == 'pendingRestart' && s.appliedValue != null)

@@ -179,9 +179,10 @@ class KovaParamsController extends ChangeNotifier {
     if (!setting.saveAnytime &&
         !setting.saveParkedOnly &&
         onroad &&
+        document?.deviceParked != true &&
         (setting.applyPolicy == KovaApplyPolicy.offroad ||
             setting.applyPolicy == KovaApplyPolicy.restart)) {
-      return '시동을 끈 뒤 바꿀 수 있어요.';
+      return 'P에 두고 완전히 정차한 뒤 바꿀 수 있어요. 다음 시동부터 적용돼요.';
     }
     if (!alreadySending && pending.containsKey(setting.key)) return '보내는 중이에요.';
     return null;

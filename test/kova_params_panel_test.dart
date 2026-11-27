@@ -382,9 +382,7 @@ void main() {
     },
   );
 
-  testWidgets('P unlocks parked settings without unlocking offroad settings', (
-    tester,
-  ) async {
+  testWidgets('P unlocks parked settings and offroad settings', (tester) async {
     gateway.offroad = false;
     final setting = (gateway.catalog['settings'] as List)
         .cast<Map<String, dynamic>>()
@@ -397,7 +395,12 @@ void main() {
     await kova.refresh();
     await tester.pump();
     expect(find.byKey(const ValueKey('kova-lock-e2e.level')), findsNothing);
-    expect(find.text('시동을 끈 뒤 바꿀 수 있어요.'), findsWidgets);
+    // janpoo6427 2026-11-27: offroad and restart settings are changed in P too.
+    expect(find.text('시동을 끈 뒤 바꿀 수 있어요.'), findsNothing);
+    expect(
+      kova.lockReasonFor(kova.document!.setting('steering.always_on')!),
+      isNull,
+    );
     await kova.setValue('e2e.level', 8);
     expect(gateway.posts.single['value'], 8);
   });

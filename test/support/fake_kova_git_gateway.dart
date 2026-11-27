@@ -194,8 +194,8 @@ class FakeKovaGitGateway implements KovaParamsTransport {
   /// gateway).
   String? mutationBlock;
 
-  /// The comma takes a restart (car off, registered phone). Null: a
-  /// kovapilot without the restart API (no field, 404).
+  /// The comma takes a restart (registered phone, at any time since
+  /// 2026-11-27). Null: a kovapilot without the restart API (no field, 404).
   bool? restartEnabled;
   int restartCalls = 0;
 
@@ -324,10 +324,9 @@ class FakeKovaGitGateway implements KovaParamsTransport {
     'updaterState': updaterState,
     'mutationEnabled': _mutationEnabled,
     if (!_mutationEnabled && (mutationBlock != null || applyEnabled))
-      'mutationBlock': mutationBlock ?? 'offroadOrUpdaterBusy',
+      'mutationBlock': mutationBlock ?? 'parkedOrUpdaterBusy',
     'maintenance': ?_describe(),
-    if (restartEnabled != null)
-      'restartEnabled': restartEnabled! && maintenance?['phase'] != 'queued',
+    'restartEnabled': ?restartEnabled,
   };
 
   @override
@@ -399,11 +398,11 @@ class FakeKovaGitGateway implements KovaParamsTransport {
     if (gated != null) return gated;
     if (uri.path == '/v1/device/restart' && restartEnabled != null) {
       restartCalls++;
-      if (!restartEnabled! || maintenance?['phase'] == 'queued') {
+      if (!restartEnabled!) {
         return _error(
           403,
           'restart_blocked',
-          'restart requires authorized access while offroad and not finalizing an update',
+          'restart requires authorized access',
         );
       }
       if (restartDownRequests > 0) _away = restartDownRequests;

@@ -226,7 +226,9 @@ KovaLink refuses a gateway whose `schemaVersion` major is not 1.
   The bundled settings use numeric values. A numeric switch declares
   `"control": "switch"` with enum options `[0, 1]`, for off and on.
 - `access`: `readOnly` | `readWrite`. `applyPolicy`: `immediate` (used right
-  away), `offroad` (may only change while the device is offroad), `parked`
+  away), `offroad` (used from the next start; since 2026-11-27 it may change
+  offroad or in P with the vehicle stationary and disengaged, older gateways
+  need offroad), `parked`
   (may change offroad or in P with the vehicle stationary and disengaged), or `restart`
   (used when the consuming process next starts). Optional `savePolicy: anytime`
   enables authorized saves independently of ignition and gear. Older
@@ -350,6 +352,16 @@ Contract: kovapilot `docs/kovapilot/KOVALINK_GATEWAY.md`. Client: `lib/src/kovap
   worktree is known and clean. The server rechecks both conditions and the
   preview digest. Wi-Fi maintenance uses an authenticated session. Link
   requests staging. The comma can install the staged update on restart.
+  Since 2026-11-27 (janpoo6427) the comma takes 적용 offroad or stopped in P
+  with steering and longitudinal control released; `mutationBlock` is then
+  `parkedOrUpdaterBusy` ("P단에 두고 정지한 뒤 조향·종방향을 풀고, 콤마가 다른
+  업데이트를 하지 않을 때 바꿀 수 있어요."). An older kovapilot says
+  `offroadOrUpdaterBusy` and needs the car off.
+- 콤마 다시 켜기 stays on at any time for the registered phone, also with the
+  car on, while driving and while an update downloads (the dialog says a
+  download starts again after the restart). Only `mutationBlock:
+  authorization` turns it off with its reason. An older kovapilot refuses with
+  the car on: `403 restart_blocked` shows a line that says so.
 - `cruise.openpilot_longitudinal` reports a numeric saved and applied
   value. Link sends `expectedValue` with this setting's update. Its
   `savePolicy: parked` requires a live Park state before saving.
