@@ -82,10 +82,15 @@ class KovaLinkPages {
     };
   }
 
-  Route<void> connectPage() => KovaPageRoute(
+  /// 장치 연결. Opened from the settings 연결 상태 tab ([fromSettings], back
+  /// returns to settings) or from the 자동 연결 chip on the drive screen.
+  Route<void> connectPage({bool fromSettings = false}) => KovaPageRoute(
     name: KovaRoutes.connect,
     builder: (context) => KovaPage(
       title: "장치 연결",
+      backTooltip: fromSettings
+          ? KovaRoutes.backToSettings
+          : KovaRoutes.backToDrive,
       child: ConnectScreen(
         controller: controller,
         settings: settings,
@@ -109,6 +114,8 @@ class KovaLinkPages {
             modelPicker: modelPicker,
             kovaParams: kovaParams,
             initialTab: tab,
+            onOpenConnect: () =>
+                KovaRoutes.open(context, connectPage(fromSettings: true)),
             // Tabs replace each other: back from any tab is the drive screen.
             onTabSelected: (next) =>
                 KovaRoutes.replace(context, settingsPage(next, instant: true)),

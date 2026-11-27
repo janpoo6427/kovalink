@@ -107,8 +107,6 @@ List<(String, Rect)> driveScreenParts(WidgetTester tester) {
   );
   add('신호 알약', find.byType(SignalPill));
   add('제한속도', find.byType(SpeedLimitSign));
-  add('모델 가져오기 버튼', find.byTooltip('차량 모델 가져오기'));
-  add('연결 버튼', find.byTooltip('장치 연결'));
   add('설정 버튼', find.byTooltip('설정'));
   for (final tip in ['카메라 화면으로 바꾸기', '카메라에 도로 겹쳐 보기', '3D 화면으로 바꾸기']) {
     add('화면 전환 버튼', find.byTooltip(tip));
@@ -226,14 +224,19 @@ void checkVisibleText(WidgetTester tester, LayoutReport report) {
 /// The floating back button on the connect/settings screens must not sit
 /// on the page text.
 void checkBackButton(WidgetTester tester, LayoutReport report) {
-  final back = find.byTooltip('주행 화면으로 돌아가기');
+  // Pages from the drive screen, or from settings (장치 연결).
+  var tip = '주행 화면으로 돌아가기';
+  var back = find.byTooltip(tip);
+  if (back.evaluate().isEmpty) {
+    tip = '설정으로 돌아가기';
+    back = find.byTooltip(tip);
+  }
   if (back.evaluate().isEmpty) return;
   final button = _rectOf(back.evaluate().first);
   if (button == null) return;
   report.parts.add('뒤로 버튼 ${_r(button)}');
   for (final element in find.byType(RichText).hitTestable().evaluate()) {
-    if (element.findAncestorWidgetOfExactType<Tooltip>()?.message ==
-        '주행 화면으로 돌아가기') {
+    if (element.findAncestorWidgetOfExactType<Tooltip>()?.message == tip) {
       continue;
     }
     final rect = _rectOf(element);

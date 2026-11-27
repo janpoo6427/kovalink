@@ -37,6 +37,7 @@ class SettingsScreen extends StatefulWidget {
     this.kovaParams,
     this.initialTab = SettingsTab.app,
     this.onTabSelected,
+    this.onOpenConnect,
     this.now,
     super.key,
   });
@@ -59,6 +60,9 @@ class SettingsScreen extends StatefulWidget {
   /// route, so back from any tab goes to the drive screen. Null switches
   /// the tab in place (the screen used on its own, e.g. in tests).
   final ValueChanged<SettingsTab>? onTabSelected;
+
+  /// Opens 장치 연결 (the 연결 상태 tab's entry). Null hides the entry.
+  final VoidCallback? onOpenConnect;
 
   /// Clock for "n초 전" labels (captures).
   final DateTime Function()? now;
@@ -151,6 +155,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               controller: controller,
               settings: settings,
               kova: _kova,
+              onOpenConnect: widget.onOpenConnect,
             )
           else if (settings != null) ...[
             _DisplaySection(settings: settings),
@@ -210,11 +215,13 @@ class _SessionSection extends StatelessWidget {
     required this.controller,
     required this.settings,
     required this.kova,
+    this.onOpenConnect,
   });
 
   final GatewayController controller;
   final SettingsController? settings;
   final KovaParamsController kova;
+  final VoidCallback? onOpenConnect;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +242,19 @@ class _SessionSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 12),
+        if (onOpenConnect case final open?) ...[
+          Card(
+            child: ListTile(
+              key: const ValueKey('settings-connect-entry'),
+              leading: const Icon(Icons.link_rounded),
+              title: const Text('장치 연결'),
+              subtitle: const Text('콤마 찾기·등록, VPN, 카메라'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: open,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         Card(
           key: const ValueKey('session-card'),
           child: Column(

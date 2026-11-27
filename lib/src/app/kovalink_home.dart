@@ -18,8 +18,9 @@ import 'package:kovalink/src/vehicle_pack/vehicle_model_library.dart';
 import 'package:kovalink/src/widgets/glass_nav_button.dart';
 
 /// The drive screen ([KovaRoutes.drive]), at the bottom of the route stack.
-/// Its buttons push the connect and settings routes; system back here
-/// leaves the app.
+/// Its one button pushes the settings route (장치 연결 and 차량 모델
+/// 가져오기 live in settings); the 자동 연결 chip pushes the connect route.
+/// System back here leaves the app.
 class KovaLinkHome extends StatelessWidget {
   const KovaLinkHome({
     required this.controller,
@@ -69,8 +70,6 @@ class KovaLinkHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = this.settings;
-    final library = this.library;
     void openConnect() => KovaRoutes.open(context, _pages.connectPage());
     // The road view runs under the bottom inset (home indicator, gesture
     // or button nav bar); the buttons stay above it.
@@ -91,25 +90,6 @@ class KovaLinkHome extends StatelessWidget {
                     AutoConnectStatusChip(controller: auto, onTap: openConnect),
                     const SizedBox(width: 10),
                   ],
-                  if (settings != null && library != null) ...[
-                    GlassNavButton(
-                      tooltip: '차량 모델 가져오기',
-                      icon: Icons.file_download_outlined,
-                      onPressed: () => VehicleModelImportFlow.run(
-                        context,
-                        library: library,
-                        settings: settings,
-                        picker: modelPicker,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                  GlassNavButton(
-                    tooltip: '장치 연결',
-                    icon: Icons.link_rounded,
-                    onPressed: openConnect,
-                  ),
-                  const SizedBox(width: 10),
                   GlassNavButton(
                     tooltip: '설정',
                     icon: Icons.settings_outlined,

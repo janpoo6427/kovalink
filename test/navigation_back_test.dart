@@ -231,16 +231,28 @@ void main() {
     await _settle(tester);
     expect(stack.pages, [KovaRoutes.drive]);
 
-    await tester.tap(find.byTooltip('장치 연결'));
+    // 장치 연결 opens from the 연결 상태 tab: its back button returns there.
+    await tester.tap(find.byTooltip('설정'));
     await _settle(tester);
-    expect(stack.pages, [KovaRoutes.drive, KovaRoutes.connect]);
+    await tester.tap(_tab('연결 상태'));
+    await _settle(tester);
+    await tester.tap(find.byKey(const ValueKey('settings-connect-entry')));
+    await _settle(tester);
+    expect(stack.pages, [
+      KovaRoutes.drive,
+      KovaRoutes.settingsSession,
+      KovaRoutes.connect,
+    ]);
+    await tester.tap(find.byTooltip(KovaRoutes.backToSettings));
+    await _settle(tester);
+    expect(stack.pages, [KovaRoutes.drive, KovaRoutes.settingsSession]);
     await tester.tap(find.byTooltip(KovaRoutes.backToDrive));
     await _settle(tester);
     expect(stack.pages, [KovaRoutes.drive]);
     await _done(tester);
   });
 
-  testWidgets('장치 연결 from the button and from the 자동 연결 chip', (tester) async {
+  testWidgets('장치 연결 from settings and from the 자동 연결 chip', (tester) async {
     final platform = _Platform(tester);
     final stack = await _pumpApp(
       tester,
@@ -250,10 +262,21 @@ void main() {
         listNetworks: () async => const [],
       ),
     );
-    await tester.tap(find.byTooltip('장치 연결'));
+    expect(find.byTooltip('장치 연결'), findsNothing);
+    await tester.tap(find.byTooltip('설정'));
     await _settle(tester);
-    expect(stack.pages, [KovaRoutes.drive, KovaRoutes.connect]);
+    await tester.tap(_tab('연결 상태'));
+    await _settle(tester);
+    await tester.tap(find.byKey(const ValueKey('settings-connect-entry')));
+    await _settle(tester);
+    expect(stack.pages, [
+      KovaRoutes.drive,
+      KovaRoutes.settingsSession,
+      KovaRoutes.connect,
+    ]);
     expect(find.byKey(const ValueKey('auto-connect-panel')), findsOneWidget);
+    await _systemBack(tester);
+    expect(stack.pages, [KovaRoutes.drive, KovaRoutes.settingsSession]);
     await _systemBack(tester);
     expect(stack.pages, [KovaRoutes.drive]);
 
@@ -306,7 +329,12 @@ void main() {
         '파일이 너무 커요. 32 MB 이하만 가져올 수 있어요.',
       ),
     );
-    await tester.tap(find.byTooltip('차량 모델 가져오기'));
+    // 차량 모델 가져오기 lives in the settings 앱 tab (no drive-screen button).
+    expect(find.byTooltip('차량 모델 가져오기'), findsNothing);
+    await tester.tap(find.byTooltip('설정'));
+    await _settle(tester);
+    await tester.ensureVisible(find.byKey(const ValueKey('model-import')));
+    await tester.tap(find.byKey(const ValueKey('model-import')));
     await _settle(tester);
     expect(find.text('가져오지 못했어요'), findsOneWidget);
     expect(stack.popups, 1);
@@ -314,6 +342,10 @@ void main() {
     await _systemBack(tester);
     expect(find.text('가져오지 못했어요'), findsNothing);
     expect(stack.popups, 0);
+    expect(stack.pages, [KovaRoutes.drive, KovaRoutes.settingsApp]);
+    expect(platform.closed, isFalse);
+
+    await _systemBack(tester);
     expect(stack.pages, [KovaRoutes.drive]);
     expect(platform.closed, isFalse);
 

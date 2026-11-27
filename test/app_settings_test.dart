@@ -340,7 +340,7 @@ void main() {
       // Demo off: idle road, no invented navigation.
       expect(find.text('좌회전'), findsNothing);
       expect(find.text('조향 보조 대기'), findsOneWidget);
-      expect(find.byTooltip('차량 모델 가져오기'), findsOneWidget);
+      expect(find.byTooltip('차량 모델 가져오기'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
   });

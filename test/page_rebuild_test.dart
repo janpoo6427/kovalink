@@ -131,7 +131,16 @@ void main() {
     await _pumpApp(tester);
     final rebuilds = _Rebuilds()..start();
     try {
-      await tester.tap(find.byTooltip('장치 연결'));
+      await tester.tap(find.byTooltip('설정'));
+      await _run(tester, const Duration(seconds: 1));
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('settings-tabs')),
+          matching: find.text('연결 상태'),
+        ),
+      );
+      await _run(tester, const Duration(seconds: 1));
+      await tester.tap(find.byKey(const ValueKey('settings-connect-entry')));
       await _run(tester, const Duration(seconds: 1));
       expect(find.byType(ConnectScreen), findsOneWidget);
       rebuilds.counts.clear();

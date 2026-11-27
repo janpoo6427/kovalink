@@ -249,14 +249,19 @@ void main() {
               theme: SceneTheme.clear,
               root: root,
             );
-            if (name == 'connect') {
-              await tester.tap(find.byTooltip('장치 연결'));
-            } else {
-              await tester.tap(find.byTooltip('설정'));
-            }
+            await tester.tap(find.byTooltip('설정'));
             await _settle(tester);
             final tabs = find.byKey(const ValueKey('settings-tabs'));
-            if (name == 'settings_session') {
+            if (name == 'connect') {
+              await tester.tap(
+                find.descendant(of: tabs, matching: find.text('연결 상태')),
+              );
+              await _settle(tester);
+              await tester.tap(
+                find.byKey(const ValueKey('settings-connect-entry')),
+              );
+              await _settle(tester);
+            } else if (name == 'settings_session') {
               await tester.tap(
                 find.descendant(of: tabs, matching: find.text('연결 상태')),
               );

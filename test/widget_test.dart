@@ -11,7 +11,7 @@ void main() {
     expect(find.text('제한속도'), findsOneWidget);
     // No turn-by-turn guidance on the drive screen.
     expect(find.text('좌회전'), findsNothing);
-    expect(find.byTooltip('장치 연결'), findsOneWidget);
+    expect(find.byTooltip('장치 연결'), findsNothing);
     expect(find.byTooltip('설정'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());

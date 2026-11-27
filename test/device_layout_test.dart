@@ -142,13 +142,6 @@ Future<List<String>> _checkDevice(
       await tester.pumpWidget(const SizedBox.shrink());
 
       await _pumpHome(tester, root);
-      await tester.tap(find.byTooltip('장치 연결'));
-      await _settle(tester);
-      checkBackButton(tester, report);
-      await _scrollThrough(tester, report);
-
-      await tester.tap(find.byTooltip('주행 화면으로 돌아가기'));
-      await _settle(tester);
       await tester.tap(find.byTooltip('설정'));
       await _settle(tester);
       checkBackButton(tester, report);
@@ -157,6 +150,14 @@ Future<List<String>> _checkDevice(
       await tester.tap(find.descendant(of: tabs, matching: find.text('연결 상태')));
       await _settle(tester);
       await _scrollThrough(tester, report);
+
+      // 장치 연결 opens from the 연결 상태 tab.
+      await tester.tap(find.byKey(const ValueKey('settings-connect-entry')));
+      await _settle(tester);
+      checkBackButton(tester, report);
+      await _scrollThrough(tester, report);
+      await tester.tap(find.byTooltip('설정으로 돌아가기'));
+      await _settle(tester);
 
       await tester.tap(
         find.descendant(of: tabs, matching: find.text('kovapilot')),
