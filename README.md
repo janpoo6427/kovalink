@@ -1,57 +1,7 @@
-# KovaLink 설치 파일
+# KovaLink downloads
 
-- [1.0.13 주행 화면 하단 버튼 정리](kovalink-1.0.13-9b98574-arm64-v8a.apk) — `master@9b98574`. 주행 화면 아래 '차량 모델 가져오기'(다운로드 모양) 버튼을 없앴어요(설정 > 앱 > 모델 파일 가져오기에 그대로 있어요). '장치 연결'(링크 모양) 버튼은 설정 > 연결 상태 탭 맨 위 '장치 연결'로 옮겼어요. 자동 연결 칩을 눌러도 장치 연결로 가요. 1.0.12와 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.12 로드뷰 차선·커브 방향·떨림 고침](kovalink-1.0.12-d85b7af-arm64-v8a.apk) — `master@d85b7af`. 주행 화면 3D 길이 커브에서 반대로 휘던 것을 고치고(옛 게이트웨이도 맞게 읽음), 차선은 확률에 따라 이력을 두고 서서히 나타나고 사라져요(바깥 차선·도로 끝도 그림). 길·차선·경로가 프레임마다 튀지 않게 부드럽게 따라가고, 나쁜 값·빈 값·잠깐 끊김에도 화면이 깨지지 않아요(carrot-vision3d 방식 참고). 차선 4개·도로 끝은 kovapilot `master-jh@0297d7029` 이상에서 나와요. 1.0.11과 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.11 내비 길안내·자동 차선 변경 카드](kovalink-1.0.11-06bb3b8-arm64-v8a.apk) — `master@06bb3b8`. 주행 화면 오른쪽 아래(가로 폰은 모드 버튼 옆)에 carrot 개조 TMAP(v2)이 연결돼 길안내 중이면 회전 표시·거리·안내 문구·다음 회전·목적지까지 거리와 시간·받은 지 몇 초를 보여 줘요. 자동 차선 변경이 켜져 있거나 차선을 바꾸는 중이면 상태(대기·깜빡이 대기·옆 차선 기다림·핸들 밀기·변경 중·되돌아감)와 BSM 좌우·BSM 신호를 보여 줘요(모르는 값은 모름). kovapilot `master-jh@36c80e39b` 이상 필요. 1.0.10과 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.10 종방향 필요 설정 숨김](kovalink-1.0.10-47f98bf-arm64-v8a.apk) — `master@47f98bf`. 종방향 제어가 꺼져 있으면 그게 있어야 동작하는 설정 5개(자동 인게이지·카메라 감속 프로필·크루즈 악셀 동기화·커브 감속·앞차 출발 추종 반응)를 숨기고 '종방향 제어를 켜면 사용할 수 있는 기능: …'처럼 안내해요(저장 뒤 다음 시동 대기·미지원 차량도 따로 안내). 항시 조향은 언제든 저장하고 다음 시동부터 적용돼요. kovapilot `master-jh@8353b1856` 이상 필요(순정 내비 카메라 감속 보완·항시 조향). 1.0.9와 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.9 설정 적용 상태 표시](kovalink-1.0.9-e17c140-arm64-v8a.apk) — `master@e17c140`. 각 설정에 지금 차에 적용됐는지 배지 하나로 보여 줘요: 바로 적용됨 / 적용됨 / 저장됨 · 적용 중 / 저장됨 · 다음 시동부터 적용 / 저장됨 · P 정차 시 적용 / 저장됨 · 아래 조건이 맞아야 동작 / 아직 차에서 동작 안 함. 'P 정차 중 저장'·'다음 시작 때 확인'은 없앴고, 거절된 저장은 '저장 안 됨'으로 시작해요. 자동 인게이지는 주행 중에도 바꿀 수 있어요(kovapilot `master-jh@563d53c5b` 이상). 1.0.8과 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.8 VPN IP로 전체 기능](kovalink-1.0.8-1892849-arm64-v8a.apk) — `master@1892849`. 콤마 VPN이 켜지면 휴대폰 Tailscale만 켜 두면 같은 Wi-Fi가 아니어도 콤마의 VPN IP(100.x)로 알아서 연결돼 모든 기능을 써요(IP로 연결에 100.x도 돼요). VPN 칸에 켜기·끄기와 '부팅하면 켜지고, 콤마에서 Wi-Fi를 끊거나 여기서 끄면 다시 켤 때까지 꺼짐' 안내. 로그인하러 브라우저에 다녀와도 상태를 이어서 확인해요. kovapilot `master-jh@5d931dda8` 이상 필요. 1.0.7과 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.7 Tailscale 자동 설치 표시](kovalink-1.0.7-bc9d9fc-arm64-v8a.apk) — `master@bc9d9fc`. 소유자 휴대폰이 장치 연결 화면에서 콤마의 Tailscale 설치 중·받기 실패·로그인 필요를 알아서 보여 주고, 준비되면 Tailscale 연결 버튼이 나와요. P단에서도 연결할 수 있어요. kovapilot `master-jh@2af2c4f88` 이상 필요. 1.0.6과 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.6 소유자 등록](kovalink-1.0.6-2f4fcf9-arm64-v8a.apk) — `master@2f4fcf9`. 자동 Wi-Fi에서 장치 연결 → 소유자로 등록, 콤마 화면 알림의 6자리 코드를 넣으면 버전 바꾸기·다시 켜기·Tailscale을 쓸 수 있어요. kovapilot `master-jh@1684f602d` 이상 필요. 1.0.5와 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.5 콤마 다시 켜기·Git 적용·VPN 연결](kovalink-1.0.5-73cfc14-arm64-v8a.apk) — `master@73cfc14`. 버전 화면에서 받아 둔 버전을 적용하고 콤마를 다시 켤 수 있어요. kovapilot `master@fe277e40b` 이상 필요. 1.0.4와 같은 서명이라 덮어 설치돼요. 실기기·차량 미검증.
-- [1.0.4 실시간 차선·객체 수신 표시](kovalink-1.0.4-d19b08a-arm64-v8a.apk) — 콤마 송신부 별도 통합 필요.
-- [KovaLink 1.0.3 arm64 설치 파일](kovalink-1.0.3-84f65e7-arm64-v8a.apk) — 데모 맞은편 차량 방향·곡선 주행 표시·카메라 버튼 겹침 수정.
-- [KovaLink 1.0.2 arm64 설치 파일](kovalink-1.0.2-36b51cf-arm64-v8a.apk) — 설정 그룹 접기와 고정 상단바. 실기기·차량 미검증.
-- `kovalink-1.0.0-57b9725-arm64-v8a.apk`는 `master@57b9725`의 Android arm64 빌드입니다.
-  - **설정 → kovapilot** 탭 맨 위에서 **kovapilot 버전 및 Git**을 열 수 있습니다. 현재 브랜치, 커밋 기록 및 변경 미리보기를 확인할 수 있습니다.
-  - Gateway는 기존 `kovapilot master-jh@01079ba` 이상을 사용합니다. 직전 `c499d88` APK와 같은 서명입니다.
-- `kovalink-1.0.0-c499d88-arm64-v8a.apk`는 `master@c499d88`의 Android arm64 빌드입니다.
-  - 콤마를 kovapilot `master-jh@01079ba` 이상으로 업데이트하세요. 같은 사설 네트워크에서 콤마를 부팅하고 Link를 열면 자동으로 연결합니다. [Gateway 동작 안내](https://github.com/janpoo6427/kovapilot/blob/01079ba2dc1ae061f9f853335da788e990a03fb1/docs/kovapilot/KOVALINK_GATEWAY.md)
-  - P 완전 정차에서 순정 ACC 동기화 진단을 바꿀 수 있습니다. 설정 화면은 P 정차 조건과 시동을 꺼야 하는 조건을 구분해 보여 줍니다.
-  - 버전 화면은 콤마의 브랜치와 커밋을 표시합니다. Git 작업 트리 조회가 지연되면 변경 여부만 확인하지 못했다고 표시합니다.
-  - 직전 `0eac0fc` APK와 같은 개발 서명이므로 기존 앱 위에 설치할 수 있습니다.
-- `kovalink-1.0.0-0eac0fc-arm64-v8a.apk`는 `master@0eac0fc`의 Android arm64 빌드입니다.
-  - comma를 kovapilot `master-jh@8194c0a02` 이상으로 업데이트한 뒤, 같은 사설 네트워크에서 comma를 부팅하고 Link 앱을 열면 자동으로 연결합니다. [Gateway 동작 안내](https://github.com/janpoo6427/kovapilot/blob/8194c0a0255eb4ac1ba0246573f074ec9389eecb/docs/kovapilot/KOVALINK_GATEWAY.md)
-  - 같은 서브넷의 기기는 Gateway 주행 정보, 카메라와 허용된 설정에 접속할 수 있습니다. 조향·종방향 제어 설정은 자동 연결에서 읽기 전용입니다.
-  - 직전 `0b95c89` APK와 같은 개발 서명이므로 기존 앱 위에 설치할 수 있습니다.
-- `kovalink-1.0.0-0b95c89-arm64-v8a.apk`는 `master@0b95c89`의 Android arm64 빌드입니다.
-  - **IP로 연결**에서 콤마가 응답하지 않는 경우와 다른 서비스가 응답하는 경우를 구분합니다. 초기 설정을 확인하는 안내도 추가했습니다.
-  - comma를 kovapilot `master-jh@850bca875` 이상으로 업데이트한 뒤 새 Gateway 설정 스크립트를 한 번 실행하세요. [Gateway 설정 안내](https://github.com/janpoo6427/kovapilot/blob/850bca875782ee0615dd51ae355c43ca594c8641/docs/kovapilot/KOVALINK_GATEWAY.md)
-  - 직전 `5e9d600` APK와 같은 개발 서명이므로 기존 앱 위에 설치할 수 있습니다.
-- `kovalink-1.0.0-5e9d600-arm64-v8a.apk`는 `master@5e9d600`의 Android arm64 빌드입니다.
-  - **연결 → 콤마 등록**에서 콤마를 찾거나 IP를 직접 입력하고, Gateway 설정 때 사용한 토큰과 인증서 지문으로 등록할 수 있습니다.
-  - 이 빌드는 이전 배포본과 서명이 다릅니다. 기존 앱을 제거한 뒤 설치하세요.
-  - 콤마는 kovapilot `master-jh@cf3f7d038` 이상으로 업데이트하고 Gateway를 한 번 설정해야 합니다. [Gateway 설정 안내](https://github.com/janpoo6427/kovapilot/blob/cf3f7d038b5d9794b30df9b6b5dfb105f3863896/docs/kovapilot/KOVALINK_GATEWAY.md)
-- kovalink-1.0.0-7835b96-arm64-v8a.apk: arm64 휴대폰용, 7835b96(master) 빌드, 개발용 키 서명(Play 스토어용 아님)
-  - 주행 화면 위 속도 칸을 세 자리(888) 폭으로 고정했어요. 0부터 199까지 속도가 바뀌어도 속도 칸과 옆 표시의 자리가 그대로예요
-  - 속도 숫자는 카메라가 없거나 어두운 화면에서도 읽히게 했어요
-  - 기어(P R N D)는 어두운 캡슐 위에 올려서 밝은 하늘·눈 배경에서도 잘 보여요
-  - 앞의 판들과 같은 키로 서명해서 덮어 설치할 수 있어요
-- kovalink-1.0.0-e0ffc34-arm64-v8a.apk: arm64 휴대폰용, e0ffc34(master) 빌드, 개발용 키 서명(Play 스토어용 아님)
-  - kovapilot 버전 화면에서 커밋으로 되돌리기는 지금 브랜치 안에서만 해요. 미리보기에 ‘지금 브랜치 안에서 되돌려요’가 나오고 다른 브랜치를 고르는 칸은 없어졌어요
-  - 다른 브랜치의 커밋으로 가려면 먼저 그 브랜치로 바꾼 뒤, 그 브랜치의 커밋 기록에서 골라요
-  - 콤마가 브랜치 없이 커밋에 고정돼 있으면 커밋을 눌러도 되돌리기 미리보기가 열리지 않고, 브랜치 목록으로 가는 버튼이 나와요
-  - 콤마에만 있는 커밋처럼 지금 브랜치 기록에 없는 커밋은 그 이유를 쉬운 말로 알려 줘요
-  - 적용 버튼은 여전히 꺼져 있고, 앞의 판들과 같은 키로 서명해서 덮어 설치할 수 있어요
-- kovalink-1.0.0-50979be-arm64-v8a.apk: arm64 휴대폰용, 50979be(master) 빌드, 개발용 키 서명(Play 스토어용 아님)
-  - 설정 → kovapilot → kovapilot 버전에서 콤마의 브랜치, 커밋, 수정된 파일, 업데이트 상태와 커밋 기록을 볼 수 있어요
-  - 브랜치 바꾸기와 커밋으로 되돌리기는 미리보기만 돼요. 적용 버튼은 꺼져 있어요
-  - 지금 kovapilot은 콤마 안에서 여는 연결만 받아서, 휴대폰에서는 아직 콤마 정보가 나오지 않아요
-  - 앞의 판들과 같은 키로 서명해서 지우지 않고 덮어 설치할 수 있어요
-- kovalink-1.0.0-7ea8981-arm64-v8a.apk: arm64 휴대폰용, 7ea8981(master) 빌드, 개발용 키 서명(Play 스토어용 아님)
-  - 설정과 장치 연결에서 뒤로가기를 누르면 주행 화면으로 돌아가고, 주행 화면에서만 앱이 꺼져요
-  - 주소를 넣는 칸이 없어지고 자동 연결이 찾은 콤마로 연결해요
-  - 주행 화면에 길 안내(초록 회전 표지, 길 안내 카드, 차로 안내)가 나오지 않아요
-  - 앞의 d610f8e 판과 같은 키로 서명해서 지우지 않고 덮어 설치할 수 있어요
-- kovalink-1.0.0-d610f8e-arm64-v8a.apk: arm64 휴대폰용, d610f8e(senior/kovalink-settings) 빌드, 개발용 키 서명(Play 스토어용 아님)
-- 설치 시 출처를 알 수 없는 앱 허용이 필요할 수 있음
+APK distribution has moved to GitHub Releases:
+https://github.com/janpoo6427/kovalink/releases
+
+Do not commit APKs to this branch. Publish installers as Release assets.
+Historical binaries remain in Git history; they have not automatically been migrated to Releases.
