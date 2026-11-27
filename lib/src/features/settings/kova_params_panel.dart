@@ -467,16 +467,25 @@ class _KovaSettingTileState extends State<KovaSettingTile> {
                 ),
               ),
             ),
-            for (final option in s.options)
-              ListTile(
-                key: ValueKey('kova-option-${s.key}-${option.value}'),
-                title: Text(option.label(defaultLocale: _locale)),
-                trailing: option.matches(current)
-                    ? const Icon(Icons.check_circle, color: _accent)
-                    : null,
-                onTap: () => Navigator.of(context).pop(option.value),
+            // Long lists (e.g. 49 power-off times) scroll inside the sheet.
+            Flexible(
+              child: ListView(
+                key: ValueKey('kova-options-${s.key}'),
+                shrinkWrap: true,
+                children: [
+                  for (final option in s.options)
+                    ListTile(
+                      key: ValueKey('kova-option-${s.key}-${option.value}'),
+                      title: Text(option.label(defaultLocale: _locale)),
+                      trailing: option.matches(current)
+                          ? const Icon(Icons.check_circle, color: _accent)
+                          : null,
+                      onTap: () => Navigator.of(context).pop(option.value),
+                    ),
+                  const SizedBox(height: 12),
+                ],
               ),
-            const SizedBox(height: 12),
+            ),
           ],
         ),
       ),
