@@ -125,9 +125,13 @@ class TbtInstruction {
     this.nextDistanceMeters,
     this.remainingDistanceMeters,
     this.remainingSeconds,
+    this.mainText,
   });
 
   final TbtManeuver maneuver;
+
+  /// Guidance text of the navigation app (e.g. a junction name), if any.
+  final String? mainText;
   final double distanceMeters;
   final String? roadName;
   final TbtManeuver? nextManeuver;
@@ -155,7 +159,108 @@ class TbtInstruction {
     remainingDistanceMeters: (json['remainingDistanceMeters'] as num?)
         ?.toDouble(),
     remainingSeconds: (json['remainingSeconds'] as num?)?.toInt(),
+    mainText: json['mainText'] as String?,
   );
+}
+
+/// Which navigation app feeds kovapilot (gateway `navigation`).
+enum NavigationSource { carrotV2, carrotLegacy, none }
+
+class NavigationLink {
+  const NavigationLink({
+    required this.source,
+    this.appVersion,
+    this.lastReceivedAgeMs,
+    this.guidanceActive = false,
+    this.offRoute = false,
+  });
+
+  final NavigationSource source;
+  final String? appVersion;
+  final int? lastReceivedAgeMs;
+  final bool guidanceActive;
+  final bool offRoute;
+
+  factory NavigationLink.fromJson(Map<String, dynamic> json) => NavigationLink(
+    source: _enumByName(
+      NavigationSource.values,
+      json['source'] as String?,
+      NavigationSource.none,
+    ),
+    appVersion: json['appVersion'] as String?,
+    lastReceivedAgeMs: (json['lastReceivedAgeMs'] as num?)?.toInt(),
+    guidanceActive: json['guidanceActive'] as bool? ?? false,
+    offRoute: json['offRoute'] as bool? ?? false,
+  );
+}
+
+enum AutoLaneChangeSetting { on, off, unknown }
+
+/// modelV2 lane change state as the gateway names it.
+enum LaneChangePhase {
+  off,
+  preLaneChange,
+  laneChangeStarting,
+  laneChangeFinishing,
+  unknown,
+}
+
+/// kovapilot automatic lane change (modelV2.meta.kovaAutoLaneChange).
+enum AutoLaneChangeAuto { none, pending, waiting, returning, unknown }
+
+enum LaneChangeSide { left, right }
+
+/// Automatic lane change state (gateway `autoLaneChange`, display only).
+/// Values the build does not report stay unknown / null.
+class AutoLaneChangeStatus {
+  const AutoLaneChangeStatus({
+    this.setting = AutoLaneChangeSetting.unknown,
+    this.phase = LaneChangePhase.unknown,
+    this.direction,
+    this.auto = AutoLaneChangeAuto.unknown,
+    this.blindSpotLeft,
+    this.blindSpotRight,
+    this.blindSpotFresh,
+  });
+
+  final AutoLaneChangeSetting setting;
+  final LaneChangePhase phase;
+
+  /// Null without a lane change.
+  final LaneChangeSide? direction;
+  final AutoLaneChangeAuto auto;
+  final bool? blindSpotLeft;
+  final bool? blindSpotRight;
+  final bool? blindSpotFresh;
+
+  factory AutoLaneChangeStatus.fromJson(Map<String, dynamic> json) =>
+      AutoLaneChangeStatus(
+        setting: _enumByName(
+          AutoLaneChangeSetting.values,
+          json['setting'] as String?,
+          AutoLaneChangeSetting.unknown,
+        ),
+        phase: _enumByName(
+          LaneChangePhase.values,
+          json['laneChange'] as String?,
+          LaneChangePhase.unknown,
+        ),
+        direction: switch (json['direction']) {
+          String name =>
+            LaneChangeSide.values
+                .where((side) => side.name == name)
+                .firstOrNull,
+          _ => null,
+        },
+        auto: _enumByName(
+          AutoLaneChangeAuto.values,
+          json['auto'] as String?,
+          AutoLaneChangeAuto.unknown,
+        ),
+        blindSpotLeft: json['blindSpotLeft'] as bool?,
+        blindSpotRight: json['blindSpotRight'] as bool?,
+        blindSpotFresh: json['blindSpotFresh'] as bool?,
+      );
 }
 
 class TrackedObject {
@@ -252,6 +357,8 @@ class RoadScene {
     this.trafficSignal,
     this.roadAlerts = const [],
     this.laneGuidance = const [],
+    this.navigation,
+    this.autoLaneChange,
     // Kept private so callers read [laneLines], which applies the fallback.
     // ignore: prefer_initializing_formals
   }) : _laneLines = laneLines;
@@ -267,6 +374,11 @@ class RoadScene {
 
   /// Lanes at the next maneuver, left to right.
   final List<LaneGuide> laneGuidance;
+
+  /// The navigation app kovapilot receives (null: the gateway sent none,
+  /// e.g. the demo). Turn-by-turn is drawn only from a connected app.
+  final NavigationLink? navigation;
+  final AutoLaneChangeStatus? autoLaneChange;
   final double speedMps;
   final double setSpeedMps;
   final double steeringAngleDegrees;
@@ -424,6 +536,14 @@ class RoadScene {
       laneGuidance: (json['laneGuidance'] as List<dynamic>? ?? const [])
           .map((item) => LaneGuide.fromJson(item as Map<String, dynamic>))
           .toList(growable: false),
+      navigation: switch (json['navigation']) {
+        Map<String, dynamic> value => NavigationLink.fromJson(value),
+        _ => null,
+      },
+      autoLaneChange: switch (json['autoLaneChange']) {
+        Map<String, dynamic> value => AutoLaneChangeStatus.fromJson(value),
+        _ => null,
+      },
     );
   }
 

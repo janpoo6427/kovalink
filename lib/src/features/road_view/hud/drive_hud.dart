@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/features/road_view/hud/nav_cards.dart';
 import 'package:kovalink/src/models/display_units.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/widgets/liquid_glass.dart';
@@ -181,6 +182,15 @@ class DriveHud extends StatelessWidget {
             top: HudLayout.speedTop,
             child: SpeedLimitSign(limitKph: scene.speedLimitKph, unit: unit),
           ),
+        // Turn-by-turn and lane change cards: bottom right; on a landscape
+        // phone right of the mode button and one card at a time, clear of
+        // the navigation app overlay ([HudLayout.navOverlayZone]).
+        Positioned(
+          right: layout.short ? null : HudLayout.margin,
+          left: layout.short ? HudLayout.margin + 48 + HudLayout.gap : null,
+          bottom: layout.bottomInset + 22,
+          child: NavCards(scene: scene, compact: small, single: layout.short),
+        ),
       ],
     );
   }
