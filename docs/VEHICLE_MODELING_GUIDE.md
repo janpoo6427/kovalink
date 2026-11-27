@@ -87,7 +87,7 @@ Files must sit at the archive root (no folder inside the ZIP).
 ## 7. Checklist before import
 
 - [ ] Units meters, scale 1.0, transforms applied
-- [ ] Front is glTF +Z, up +Y, right +X; origin at ground between rear wheels
+- [ ] Front is glTF +Z, up +Y, left +X; origin at ground between rear wheels
 - [ ] Length/width/height/wheelbase in `vehicle.json` match the car (m)
 - [ ] ≤ 100k triangles (≤ 200k hard), textures ≤ 2048 px, PNG/JPEG
 - [ ] All textures embedded; no external file or URL references

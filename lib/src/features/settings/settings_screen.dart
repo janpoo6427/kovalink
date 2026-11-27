@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'vehicle_model_guide.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -857,6 +858,18 @@ class _VehicleModelSectionState extends State<_VehicleModelSection> {
                     title: const Text('모델 파일 가져오기'),
                     subtitle: const Text('.kovamodel 파일'),
                     onTap: _import,
+                  ),
+                  ListTile(
+                    key: const ValueKey('model-import-guide'),
+                    leading: const Icon(Icons.help_outline),
+                    title: const Text('모델 파일 만드는 방법'),
+                    subtitle: const Text('파일 구성 · 제작 조건 · 압축 방법'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => const VehicleModelGuideScreen(),
+                      ),
+                    ),
                   ),
                   SwitchListTile(
                     key: const ValueKey('setting-native-overlay'),

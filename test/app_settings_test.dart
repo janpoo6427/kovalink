@@ -257,6 +257,28 @@ void main() {
       expect(find.text('ENABLE_CANFD_LONGITUDINAL_STAGING'), findsNothing);
     });
 
+    testWidgets('model guide opens without importing or changing selection', (
+      tester,
+    ) async {
+      var picked = false;
+      await pumpScreen(
+        tester,
+        picker: () async {
+          picked = true;
+          return null;
+        },
+      );
+      final before = settings.value.vehicleModelId;
+      await tester.tap(find.byKey(const ValueKey('model-import-guide')));
+      await tester.pumpAndSettle();
+      expect(find.text('.kovamodel은 ZIP 패키지예요'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(picked, isFalse);
+      expect(settings.value.vehicleModelId, before);
+      expect(find.byKey(const ValueKey('model-import')), findsOneWidget);
+    });
+
     testWidgets('imports, lists, selects and deletes a model pack', (
       tester,
     ) async {
