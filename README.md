@@ -40,6 +40,15 @@ development in [CarrotPilot](https://github.com/ajouatom/openpilot) and
 sincere gratitude and respect for the developers, testers, and communities
 behind all three projects.
 
+## Downloads and distribution
+
+Download installable APKs only from [GitHub Releases](https://github.com/janpoo6427/kovalink/releases).
+APKs and other installer binaries must not be committed to source or distribution
+branches. The old `apk/kovalink-builds` branch is retired as a download channel.
+Local build outputs may be kept for testing; publish verified artifacts as Release
+assets with their source commit, version, checksum and validation limitations.
+Historical APKs have not automatically been migrated to Releases.
+
 ## Run
 
 ```sh

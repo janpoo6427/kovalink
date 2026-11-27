@@ -46,3 +46,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Installers are distributed only as GitHub Release assets
+*.apk
+*.aab
