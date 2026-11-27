@@ -16,12 +16,14 @@ import 'package:kovalink/src/services/gateway_controller.dart';
 /// Scene updates received by a fake viewer.
 class _FakeSink implements GpuFrameSink {
   int updates = 0;
+  GpuFrameInput? lastInput;
   bool disposed = false;
   Object? throwOnUpdate;
 
   @override
   Future<void> update(GpuFrameInput input) async {
     if (throwOnUpdate != null) throw throwOnUpdate!;
+    lastInput = input;
     updates++;
   }
 
@@ -48,6 +50,7 @@ class _FakeHost extends GpuViewHost {
 
   int mounts = 0;
   final sinks = <_FakeSink>[];
+  GpuViewCallbacks? callbacks;
 
   @override
   String get label => 'fake';
@@ -57,7 +60,7 @@ class _FakeHost extends GpuViewHost {
 
   @override
   Widget build(BuildContext context, GpuViewCallbacks callbacks) =>
-      _FakeView(host: this, callbacks: callbacks);
+      _FakeView(host: this, callbacks: this.callbacks = callbacks);
 }
 
 class _FakeView extends StatefulWidget {
@@ -254,6 +257,61 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       controller.dispose();
     });
+
+    testWidgets(
+      'resize, texture replacement and resume redraw a static scene',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 4800);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
+        final controller = GatewayController();
+        final host = _FakeHost();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RoadViewScreen(
+              controller: controller,
+              gpuViewHost: host,
+              gpuRetry: (_, _) => false,
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump();
+        await tester.pump();
+        final sink = host.sinks.single;
+        expect(sink.lastInput!.width, 1440);
+        expect(sink.lastInput!.height, 4800);
+        var count = sink.updates;
+        host.callbacks!.onTextureReady();
+        await tester.pump();
+        await tester.pump();
+        expect(
+          sink.updates,
+          greaterThan(count),
+          reason: 'replacement restores scene camera even without telemetry',
+        );
+        tester.view.physicalSize = const Size(4800, 1440);
+        await tester.pump();
+        await tester.pump();
+        expect(sink.lastInput!.width, 4800);
+        expect(sink.lastInput!.height, 1440);
+        count = sink.updates;
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(sink.updates, greaterThan(count));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+      },
+    );
 
     testWidgets('healthy viewer is confirmed and the underlay goes away', (
       tester,

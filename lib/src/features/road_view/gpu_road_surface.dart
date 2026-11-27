@@ -519,7 +519,11 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
   }
 
   void _onTextureReady() {
-    if (_textureReady || _failed || !mounted) return;
+    if (_failed || !mounted) return;
+    // Texture preparation also resets the native camera projection. Reapply
+    // the scene camera after every allocation, not only the initial one.
+    _scheduleAfterLayout();
+    if (_textureReady) return;
     _textureReady = true;
     _diag.event('화면 연결됨 (${_secs(_sinceMount.elapsedMilliseconds)})');
     _maybeProbe();
@@ -611,9 +615,25 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
     }
   }
 
+  bool _layoutUpdateScheduled = false;
+
+  void _scheduleAfterLayout() {
+    if (_layoutUpdateScheduled || !mounted || _failed) return;
+    _layoutUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _layoutUpdateScheduled = false;
+      if (mounted && !_failed && !_size.isEmpty) _schedule(widget.request);
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  @override
+  void didChangeMetrics() => _scheduleAfterLayout();
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    _scheduleAfterLayout();
     if (!_verified || _failed || !mounted) return;
     // Android may hand the texture a new surface after the app was in the
     // background; confirm frames reach the screen again.
@@ -718,8 +738,10 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
           GpuFrameInput(
             scene: request.scene,
             director: request.director,
-            width: (_size.width * dpr).round().clamp(16, 4096),
-            height: (_size.height * dpr).round().clamp(16, 4096),
+            // Match ThermionWidget's physical texture dimensions exactly.
+            // Independent axis clamps change aspect on tall/high-DPI phones.
+            width: (_size.width * dpr).ceil(),
+            height: (_size.height * dpr).ceil(),
             theme: request.theme,
             layers: request.layers,
             vehicle: request.vehicle,
@@ -804,7 +826,10 @@ class _GpuRoadSurfaceState extends State<GpuRoadSurface>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        _size = constraints.biggest;
+        if (_size != constraints.biggest) {
+          _size = constraints.biggest;
+          _scheduleAfterLayout();
+        }
         return RepaintBoundary(
           key: _boundary,
           child: widget.host.build(context, _callbacks),
