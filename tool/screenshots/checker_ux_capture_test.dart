@@ -81,6 +81,13 @@ void main() {
         }
       }
       expect(tester.takeException(), isNull);
+      final tabContext = tester.element(find.text('앱'));
+      final tabStyle = DefaultTextStyle.of(tabContext).style;
+      expect(
+        tabStyle.fontFamily,
+        Theme.of(tabContext).textTheme.labelLarge!.fontFamily,
+      );
+      expect(tabStyle.fontFamily, isNotNull);
       await _save(tester, key, name);
       await tester.tap(find.byKey(const ValueKey('setting-viewpoint')));
       await tester.pumpAndSettle();

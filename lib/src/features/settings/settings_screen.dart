@@ -141,7 +141,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : colors.onSurfaceVariant;
                 }),
                 textStyle: WidgetStateProperty.resolveWith(
-                  (states) => TextStyle(
+                  (states) => Theme.of(context).textTheme.labelLarge!.copyWith(
                     fontSize: 14,
                     fontWeight: states.contains(WidgetState.selected)
                         ? FontWeight.w700
