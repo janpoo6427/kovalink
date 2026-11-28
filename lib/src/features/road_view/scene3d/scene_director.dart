@@ -141,6 +141,7 @@ class SceneDirector {
 
   /// Hero chase framing: the ego is the subject, a little lower and
   /// larger than a plain follow camera, rising and widening with speed.
+  /// Both chase modes step back to expose more surrounding road users.
   /// Portrait screens get a lower, flatter camera so the road is not seen
   /// from too high above.
   static PerspectiveCamera chaseCamera(Size size, double speedMps) {
@@ -150,10 +151,12 @@ class SceneDirector {
     double lerp(double a, double b, double u) => a + (b - a) * u;
     return PerspectiveCamera.framed(
       size,
-      egoWidthFraction: lerp(lerp(0.36, 0.205, t), lerp(0.31, 0.175, t), s),
+      egoWidthFraction:
+          lerp(lerp(0.36, 0.205, t), lerp(0.31, 0.175, t), s) *
+          PerspectiveCamera.chaseFramingScale,
       horizonFraction: lerp(lerp(0.50, 0.455, t), lerp(0.48, 0.44, t), s),
       contactFraction: lerp(lerp(0.80, 0.87, t), lerp(0.795, 0.865, t), s),
-      distance: lerp(8.6, 9.2, s),
+      distance: lerp(8.6, 9.2, s) / PerspectiveCamera.chaseFramingScale,
     );
   }
 

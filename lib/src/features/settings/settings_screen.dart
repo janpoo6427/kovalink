@@ -200,6 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sessionFor: _kova.sessionFor,
             ),
             KovaParamsPanel(
+              gateway: controller,
               controller: _kova,
               address: _settingsAddress,
               now: widget.now,

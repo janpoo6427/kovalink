@@ -26,6 +26,7 @@ class GatewayController extends ChangeNotifier {
   GatewayMode mode = GatewayMode.disconnected;
   RoadScene scene = DemoDriveScenario().sceneAt(Duration.zero);
   String? errorMessage;
+  DateTime? lastTelemetryAt;
   String? connectedEndpoint;
   bool gatewayAuthenticated = false;
 
@@ -198,6 +199,7 @@ class GatewayController extends ChangeNotifier {
     _smoother.reset();
     connectedEndpoint = endpoint;
     gatewayAuthenticated = authenticated;
+    lastTelemetryAt = null;
     mode = GatewayMode.live;
     _socketSubscription = socket.listen(
       _handleMessage,
@@ -229,6 +231,7 @@ class GatewayController extends ChangeNotifier {
         throw const FormatException('telemetry frame은 JSON object여야 합니다.');
       }
       scene = _smoother.apply(RoadScene.fromJson(decoded));
+      lastTelemetryAt = DateTime.now();
       notifyListeners();
     } on Object {
       errorMessage = '차에서 받은 주행 정보를 읽을 수 없어요.';
@@ -246,6 +249,7 @@ class GatewayController extends ChangeNotifier {
   }
 
   void _closeTransport({bool closeSocket = true}) {
+    lastTelemetryAt = null;
     _demoTimer?.cancel();
     _demoTimer = null;
     _scenario = null;

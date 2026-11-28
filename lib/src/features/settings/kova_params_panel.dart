@@ -2,6 +2,8 @@
 // kova_params document. Nothing here lists settings by name; titles,
 // descriptions, groups and options all come from the document.
 import 'package:flutter/material.dart';
+import 'package:kovalink/src/features/settings/vehicle_features_card.dart';
+import 'package:kovalink/src/services/gateway_controller.dart';
 import 'package:kovalink/src/kova_params/kova_params_controller.dart';
 import 'package:kovalink/src/kova_params/kova_params_document.dart';
 
@@ -14,11 +16,13 @@ class KovaParamsPanel extends StatelessWidget {
   const KovaParamsPanel({
     required this.controller,
     required this.address,
+    this.gateway,
     this.now,
     super.key,
   });
 
   final KovaParamsController controller;
+  final GatewayController? gateway;
 
   /// kovapilot settings address of the comma found or entered (not
   /// editable); null before there is one.
@@ -41,6 +45,8 @@ class KovaParamsPanel extends StatelessWidget {
               address: address,
               now: now,
             ),
+            if (gateway case final g?)
+              VehicleFeaturesCard(gateway: g, settings: controller),
             if (document == null)
               const Card(
                 key: ValueKey('kova-empty'),

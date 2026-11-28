@@ -4,9 +4,7 @@ import 'package:kovalink/src/models/display_units.dart';
 import 'package:kovalink/src/models/road_scene.dart';
 import 'package:kovalink/src/widgets/liquid_glass.dart';
 
-/// Turn-by-turn and automatic lane change cards, bottom right of the
-/// drive HUD. Every value comes from the gateway; demo scenes (no
-/// `navigation` / `autoLaneChange`) show neither card.
+/// Turn-by-turn only. Lane-change and BSM information lives in settings.
 class NavCards extends StatelessWidget {
   const NavCards({
     required this.scene,
@@ -18,8 +16,7 @@ class NavCards extends StatelessWidget {
   final RoadScene scene;
   final bool compact;
 
-  /// One card only: the lane change card while a lane change goes on,
-  /// else the turn-by-turn card.
+  /// Retained for callers; only the turn-by-turn card is shown.
   final bool single;
 
   static const width = 260.0;
@@ -29,40 +26,13 @@ class NavCards extends StatelessWidget {
       scene.navigation?.source == NavigationSource.carrotV2 &&
       scene.tbt != null;
 
-  /// The lane change card is shown (setting on, or a lane change going on).
-  static bool showsLaneChange(RoadScene scene) {
-    final status = scene.autoLaneChange;
-    if (status == null) return false;
-    return status.setting == AutoLaneChangeSetting.on ||
-        status.phase == LaneChangePhase.preLaneChange ||
-        status.phase == LaneChangePhase.laneChangeStarting ||
-        status.phase == LaneChangePhase.laneChangeFinishing;
-  }
-
   @override
   Widget build(BuildContext context) {
-    var tbt = showsTbt(scene) ? scene.tbt : null;
-    final laneChange = showsLaneChange(scene) ? scene.autoLaneChange : null;
-    if (single && tbt != null && laneChange != null) {
-      final changing =
-          laneChange.phase != LaneChangePhase.off &&
-          laneChange.phase != LaneChangePhase.unknown;
-      if (changing) tbt = null;
-    }
-    final showLaneChange = laneChange != null && (!single || tbt == null);
-    if (tbt == null && !showLaneChange) return const SizedBox.shrink();
+    final tbt = showsTbt(scene) ? scene.tbt : null;
+    if (tbt == null) return const SizedBox.shrink();
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: width),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (tbt != null)
-            TbtCard(tbt: tbt, link: scene.navigation!, compact: compact),
-          if (tbt != null && showLaneChange) const SizedBox(height: 8),
-          if (showLaneChange) LaneChangeCard(status: laneChange),
-        ],
-      ),
+      child: TbtCard(tbt: tbt, link: scene.navigation!, compact: compact),
     );
   }
 }
@@ -183,49 +153,6 @@ String laneChangeStateText(AutoLaneChangeStatus status) {
           : '$side차선 변경 중';
     case LaneChangePhase.unknown:
       return '모름';
-  }
-}
-
-String _blindSpot(bool? value) => switch (value) {
-  true => '감지',
-  false => '없음',
-  null => '모름',
-};
-
-class LaneChangeCard extends StatelessWidget {
-  const LaneChangeCard({required this.status, super.key});
-
-  final AutoLaneChangeStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final setting = switch (status.setting) {
-      AutoLaneChangeSetting.on => '켬',
-      AutoLaneChangeSetting.off => '끔',
-      AutoLaneChangeSetting.unknown => '모름',
-    };
-    final fresh = switch (status.blindSpotFresh) {
-      true => 'BSM 신호 새로움',
-      false => 'BSM 신호 끊김',
-      null => 'BSM 신호 모름',
-    };
-    return _Card(
-      key: const ValueKey('lane-change-card'),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Line('자동 차선 변경 $setting', muted: true),
-          _Line(laneChangeStateText(status), bold: true),
-          _Line(
-            'BSM 왼쪽 ${_blindSpot(status.blindSpotLeft)} · '
-            '오른쪽 ${_blindSpot(status.blindSpotRight)}',
-          ),
-          _Line(fresh, muted: true),
-          const _Line('막힌 이유 모름', muted: true),
-        ],
-      ),
-    );
   }
 }
 

@@ -114,7 +114,7 @@ void main() {
         expect(fov, inInclusiveRange(45, 80));
         expect(
           camera.eye.z,
-          inInclusiveRange(1.8, 7.5),
+          inInclusiveRange(1.8, 7.5 / PerspectiveCamera.chaseFramingScale),
           reason: 'camera height (m)',
         );
         // f · W / D holds exactly for a 1.85 m wide car at every distance.
@@ -253,7 +253,7 @@ void main() {
       const size = Size(1200, 945);
       final drawn = <TrackedObject?, MeshDrawStats>{};
       const near = TrackedObject(
-        distanceMeters: 8,
+        distanceMeters: 0,
         leftMeters: 0,
         relativeSpeedMps: 0,
       );

@@ -127,7 +127,7 @@ class PerspectiveCamera extends SceneCamera {
     final t = ((aspect - 0.5) / 1.0).clamp(0.0, 1.0);
     return PerspectiveCamera.framed(
       size,
-      egoWidthFraction: _lerp(0.24, 0.17, t),
+      egoWidthFraction: _lerp(0.24, 0.17, t) * chaseFramingScale,
       horizonFraction: _lerp(0.42, 0.46, t),
       contactFraction: _lerp(0.80, 0.85, t),
     );
@@ -176,7 +176,12 @@ class PerspectiveCamera extends SceneCamera {
     );
   }
 
-  static const chaseDistance = 9.0;
+  /// Show the ego about 30% smaller to leave room for neighboring objects.
+  /// Pair the width reduction with the inverse distance increase: this
+  /// preserves focal length, pitch and the rear contact line rather than
+  /// adding wide-angle distortion or moving the car under the HUD.
+  static const chaseFramingScale = 0.70;
+  static const chaseDistance = 9.0 / chaseFramingScale;
 
   final V3 eye;
   final double pitchRadians;

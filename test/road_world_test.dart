@@ -216,7 +216,14 @@ void main() {
         final left = camera.project(const V3(-4.5, 0.93, 0))!.offset;
         final right = camera.project(const V3(-4.5, -0.93, 0))!.offset;
         final egoFraction = (right.dx - left.dx) / size.width;
-        expect(egoFraction, inInclusiveRange(0.15, 0.25));
+        // Wider chase intentionally scales the previous projected size to 70%.
+        expect(
+          egoFraction,
+          inInclusiveRange(
+            0.15 * PerspectiveCamera.chaseFramingScale,
+            0.25 * PerspectiveCamera.chaseFramingScale,
+          ),
+        );
         expect(left.dx, lessThan(right.dx), reason: '+y is left on screen');
       });
     }

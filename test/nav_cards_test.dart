@@ -141,42 +141,17 @@ void main() {
     },
   );
 
-  testWidgets('lane change card: setting, state, blind spots, unknowns', (
+  testWidgets('lane change and BSM boxes are absent even during a change', (
     tester,
   ) async {
-    await pumpHud(
-      tester,
-      RoadScene.fromJson(frame(autoLaneChange: laneChange())),
-    );
-    expect(find.byKey(const ValueKey('lane-change-card')), findsOneWidget);
-    expect(find.text('자동 차선 변경 켬'), findsOneWidget);
-    expect(find.text('대기'), findsOneWidget);
-    expect(find.text('BSM 왼쪽 없음 · 오른쪽 감지'), findsOneWidget);
-    expect(find.text('BSM 신호 모름'), findsOneWidget);
-    expect(find.text('막힌 이유 모름'), findsOneWidget);
-    // setting off and no lane change: no card
-    await pumpHud(
-      tester,
-      RoadScene.fromJson(frame(autoLaneChange: laneChange(setting: 'off'))),
-    );
-    expect(find.byKey(const ValueKey('lane-change-card')), findsNothing);
-    // a lane change with the setting off still shows what happens
-    await pumpHud(
-      tester,
-      RoadScene.fromJson(
-        frame(
-          autoLaneChange: laneChange(
-            setting: 'off',
-            phase: 'preLaneChange',
-            direction: 'left',
-            auto: 'none',
-            fresh: false,
-          ),
-        ),
-      ),
-    );
-    expect(find.text('왼쪽 깜빡이 · 핸들을 밀어 주세요'), findsOneWidget);
-    expect(find.text('BSM 신호 끊김'), findsOneWidget);
+    for (final phase in ['off', 'preLaneChange', 'laneChangeStarting']) {
+      await pumpHud(
+        tester,
+        RoadScene.fromJson(frame(autoLaneChange: laneChange(phase: phase))),
+      );
+      expect(find.byKey(const ValueKey('lane-change-card')), findsNothing);
+      expect(find.textContaining('BSM'), findsNothing);
+    }
   });
 
   test('lane change state labels', () {
@@ -238,11 +213,8 @@ void main() {
         }
         if (layout.short) {
           // one card at a time on a landscape phone: the lane change going on
-          expect(find.byKey(const ValueKey('tbt-card')), findsNothing);
-          expect(
-            find.byKey(const ValueKey('lane-change-card')),
-            findsOneWidget,
-          );
+          expect(find.byKey(const ValueKey('tbt-card')), findsOneWidget);
+          expect(find.byKey(const ValueKey('lane-change-card')), findsNothing);
         }
       }
     },
