@@ -55,6 +55,10 @@ enum TrackedObjectKind {
   trafficCone,
 }
 
+/// Lane of a radar vehicle as kovapilot reports it (gateway `lane`): the own
+/// lane or the lane on either side.
+enum TrackedObjectLane { ego, left, right }
+
 /// Road context reported by the gateway (map/navigation derived). Drives
 /// display choices only, such as roadside scenery.
 enum RoadType { highway, city, unknown }
@@ -344,6 +348,8 @@ class TrackedObject {
     this.heightMeters,
     this.isLead = false,
     this.brakeLights = false,
+    this.lane,
+    this.moving,
   });
 
   /// Gap from the ego front bumper to the object's rear, meters.
@@ -359,6 +365,12 @@ class TrackedObject {
   /// True when the planner/radar marks this object as the lead.
   final bool isLead;
   final bool brakeLights;
+
+  /// Lane from the kovapilot radar (`lane`); null when the source sends none.
+  final TrackedObjectLane? lane;
+
+  /// Moving over the ground (`moving`, kovapilot radar); null when unknown.
+  final bool? moving;
 
   /// Box size used for drawing. Reported sizes win; otherwise a typical
   /// size for the kind.
@@ -391,6 +403,13 @@ class TrackedObject {
       heightMeters: _positive(json['heightMeters']),
       isLead: json['isLead'] as bool? ?? false,
       brakeLights: json['brakeLights'] as bool? ?? false,
+      lane: switch (json['lane']) {
+        String name => TrackedObjectLane.values
+            .where((value) => value.name == name)
+            .firstOrNull,
+        _ => null,
+      },
+      moving: json['moving'] as bool?,
     );
   }
 }
@@ -528,12 +547,16 @@ class RoadScene {
     modelFrameId: modelFrameId,
   );
 
-  /// The lead object: explicitly marked by the gateway, else the nearest
-  /// vehicle-like object within the ego corridor along the planned path.
+  /// The lead object: explicitly marked by the gateway, else (objects
+  /// without a lane) the nearest vehicle-like object within the ego corridor
+  /// along the planned path.
   TrackedObject? get leadObject {
     for (final object in objects) {
       if (object.isLead) return object;
     }
+    // kovapilot radar vehicles carry their lane and mark the lead the car
+    // follows; do not pick another one of them as the lead.
+    if (objects.any((object) => object.lane != null)) return null;
     TrackedObject? best;
     for (final object in objects) {
       if (object.distanceMeters <= 0) continue;
