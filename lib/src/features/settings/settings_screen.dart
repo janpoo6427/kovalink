@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:kovalink/src/features/settings/install_guide_panel.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -25,7 +26,7 @@ import 'package:kovalink/src/widgets/readable_width.dart';
 /// never mixed: the app's own settings (this phone), the current gateway
 /// session (gone when disconnected) and kovapilot's settings (stored on the
 /// device, drawn from its kova_params document).
-enum SettingsTab { app, session, kovapilot }
+enum SettingsTab { app, session, kovapilot, install }
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -112,66 +113,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ]),
       builder: (context, _) => ReadableListView(
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<SettingsTab>(
-              key: const ValueKey('settings-tabs'),
-              showSelectedIcon: false,
-              style: ButtonStyle(
-                minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
-                padding: const WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                ),
-                side: const WidgetStatePropertyAll(BorderSide.none),
-                shape: WidgetStatePropertyAll(
-                  RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: MediaQuery.sizeOf(context).width > 760
+                  ? 720
+                  : MediaQuery.sizeOf(context).width - 40,
+              child: SegmentedButton<SettingsTab>(
+                key: const ValueKey('settings-tabs'),
+                showSelectedIcon: false,
+                style: ButtonStyle(
+                  minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
+                  padding: const WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  ),
+                  side: const WidgetStatePropertyAll(BorderSide.none),
+                  shape: WidgetStatePropertyAll(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    final colors = Theme.of(context).colorScheme;
+                    return states.contains(WidgetState.selected)
+                        ? colors.primary.withValues(alpha: 0.12)
+                        : Colors.transparent;
+                  }),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) {
+                    final colors = Theme.of(context).colorScheme;
+                    return states.contains(WidgetState.selected)
+                        ? colors.primary
+                        : colors.onSurfaceVariant;
+                  }),
+                  textStyle: WidgetStateProperty.resolveWith(
+                    (states) =>
+                        Theme.of(context).textTheme.labelLarge!.copyWith(
+                          fontSize: 14,
+                          fontWeight: states.contains(WidgetState.selected)
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
                   ),
                 ),
-                backgroundColor: WidgetStateProperty.resolveWith((states) {
-                  final colors = Theme.of(context).colorScheme;
-                  return states.contains(WidgetState.selected)
-                      ? colors.primary.withValues(alpha: 0.12)
-                      : Colors.transparent;
-                }),
-                foregroundColor: WidgetStateProperty.resolveWith((states) {
-                  final colors = Theme.of(context).colorScheme;
-                  return states.contains(WidgetState.selected)
-                      ? colors.primary
-                      : colors.onSurfaceVariant;
-                }),
-                textStyle: WidgetStateProperty.resolveWith(
-                  (states) => Theme.of(context).textTheme.labelLarge!.copyWith(
-                    fontSize: 14,
-                    fontWeight: states.contains(WidgetState.selected)
-                        ? FontWeight.w700
-                        : FontWeight.w500,
+                segments: [
+                  ButtonSegment(
+                    value: SettingsTab.app,
+                    icon: MediaQuery.sizeOf(context).width < 600
+                        ? null
+                        : const Icon(Icons.phone_iphone, size: 18),
+                    label: const _TabLabel('앱'),
                   ),
-                ),
+                  ButtonSegment(
+                    value: SettingsTab.session,
+                    icon: MediaQuery.sizeOf(context).width < 600
+                        ? null
+                        : const Icon(Icons.cable, size: 18),
+                    label: const _TabLabel('연결 상태'),
+                  ),
+                  ButtonSegment(
+                    value: SettingsTab.kovapilot,
+                    icon: MediaQuery.sizeOf(context).width < 600
+                        ? null
+                        : const Icon(Icons.directions_car_outlined, size: 18),
+                    label: const _TabLabel('kovapilot'),
+                  ),
+                  ButtonSegment(
+                    value: SettingsTab.install,
+                    icon: MediaQuery.sizeOf(context).width < 600
+                        ? null
+                        : const Icon(Icons.install_mobile_outlined, size: 18),
+                    label: const _TabLabel('설치 안내'),
+                  ),
+                ],
+                selected: {_tab},
+                onSelectionChanged: (s) => _select(s.first),
               ),
-              segments: const [
-                ButtonSegment(
-                  value: SettingsTab.app,
-                  icon: Icon(Icons.phone_iphone, size: 18),
-                  label: _TabLabel('앱'),
-                ),
-                ButtonSegment(
-                  value: SettingsTab.session,
-                  icon: Icon(Icons.cable, size: 18),
-                  label: _TabLabel('연결 상태'),
-                ),
-                ButtonSegment(
-                  value: SettingsTab.kovapilot,
-                  icon: Icon(Icons.directions_car_outlined, size: 18),
-                  label: _TabLabel('kovapilot'),
-                ),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (s) => _select(s.first),
             ),
           ),
           const SizedBox(height: 6),
-          if (_tab == SettingsTab.kovapilot) ...[
+          if (_tab == SettingsTab.install)
+            const InstallGuidePanel()
+          else if (_tab == SettingsTab.kovapilot) ...[
             const SizedBox(height: 10),
             KovapilotVersionEntry(
               endpoint: _kova.endpoint ?? _settingsAddress,

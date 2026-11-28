@@ -47,12 +47,14 @@ class KovaLinkPages {
   final WidgetBuilder? drive;
 
   static String settingsRoute(SettingsTab tab) => switch (tab) {
+    SettingsTab.install => KovaRoutes.settingsInstall,
     SettingsTab.app => KovaRoutes.settingsApp,
     SettingsTab.session => KovaRoutes.settingsSession,
     SettingsTab.kovapilot => KovaRoutes.settingsKovapilot,
   };
 
   static SettingsTab? _tabOf(String? name) => switch (name) {
+    KovaRoutes.settingsInstall => SettingsTab.install,
     KovaRoutes.settingsApp => SettingsTab.app,
     KovaRoutes.settingsSession => SettingsTab.session,
     KovaRoutes.settingsKovapilot => SettingsTab.kovapilot,

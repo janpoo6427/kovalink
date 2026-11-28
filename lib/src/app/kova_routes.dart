@@ -21,6 +21,7 @@ abstract final class KovaRoutes {
   static const drive = Navigator.defaultRouteName;
   static const connect = '/connect';
   static const settingsApp = '/settings/app';
+  static const settingsInstall = '/settings/install';
   static const settingsSession = '/settings/session';
   static const settingsKovapilot = '/settings/kovapilot';
   static const diagnostics = '/settings/app/diagnostics';
