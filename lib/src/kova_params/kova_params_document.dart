@@ -7,6 +7,10 @@
 // - An unknown major `schemaVersion` closes the document (fail closed).
 // - Unknown type/access/applyPolicy values make that setting read-only.
 // - `hidden: true` (or `visibility: "hidden"`) settings are never drawn.
+// - `bundles` (optional) draw the settings that name them in `bundleId` as
+//   one item of their group; each setting keeps its own key and value. An
+//   unknown or malformed bundle leaves its settings as single items, and
+//   older apps that do not read `bundles` show every setting on its own.
 
 /// The `kova_params` major schema this app understands.
 const int supportedKovaParamsSchema = 1;
@@ -163,6 +167,7 @@ class KovaParamSetting {
     required this.description,
     required this.value,
     required this.defaultValue,
+    this.bundleId,
     this.applyStatus,
     this.saveAnytime = false,
     this.saveParkedOnly = false,
@@ -182,6 +187,9 @@ class KovaParamSetting {
 
   final String key;
   final String groupId;
+
+  /// Catalog bundle this setting is drawn in; null for a single item.
+  final String? bundleId;
   final int order;
   final KovaParamType type;
   final KovaParamAccess access;
@@ -240,6 +248,7 @@ class KovaParamSetting {
     return KovaParamSetting(
       key: key,
       groupId: groupId,
+      bundleId: json['bundleId'] is String ? json['bundleId'] as String : null,
       order: order is int ? order : 0,
       type: type,
       access: _pick(
@@ -407,8 +416,10 @@ class KovaParamSetting {
   }
 }
 
-class KovaParamGroup {
-  const KovaParamGroup({
+/// Settings of one group drawn together as a single item (catalog
+/// `bundles`); each keeps its own key, value and control.
+class KovaParamBundle {
+  const KovaParamBundle({
     required this.id,
     required this.order,
     required this.title,
@@ -418,11 +429,47 @@ class KovaParamGroup {
 
   final String id;
   final int order;
+  final LocalizedText title;
+  final LocalizedText? description;
+
+  /// Visible member settings, sorted by order then key.
+  final List<KovaParamSetting> settings;
+}
+
+/// One item of a group: a single setting or a bundle of settings.
+class KovaParamEntry {
+  const KovaParamEntry.single(KovaParamSetting this.setting) : bundle = null;
+  const KovaParamEntry.bundled(KovaParamBundle this.bundle) : setting = null;
+
+  final KovaParamSetting? setting;
+  final KovaParamBundle? bundle;
+
+  int get order => bundle?.order ?? setting!.order;
+  String get id => bundle?.id ?? setting!.key;
+  List<KovaParamSetting> get settings => bundle?.settings ?? [setting!];
+}
+
+class KovaParamGroup {
+  const KovaParamGroup({
+    required this.id,
+    required this.order,
+    required this.title,
+    required this.description,
+    required this.settings,
+    required this.entries,
+  });
+
+  final String id;
+  final int order;
   final LocalizedText? title;
   final LocalizedText? description;
 
   /// Visible settings, sorted by order then key.
   final List<KovaParamSetting> settings;
+
+  /// What the group draws: single settings and bundles, sorted by order
+  /// then id. Every visible setting is in exactly one entry.
+  final List<KovaParamEntry> entries;
 }
 
 class KovaParamsDocument {
@@ -516,6 +563,27 @@ class KovaParamsDocument {
       );
     }
 
+    // Bundles: id -> (group, order, title, description); malformed ones are
+    // skipped so their settings stay single items.
+    final bundleMeta = <String, (String, int, LocalizedText, LocalizedText?)>{};
+    if (json['bundles'] case final List<dynamic> rawBundles) {
+      for (final raw in rawBundles) {
+        if (raw is! Map) continue;
+        final id = raw['id'];
+        final groupId = raw['groupId'];
+        final title = LocalizedText.tryParse(raw['title']);
+        if (id is! String || groupId is! String || title == null) continue;
+        if (bundleMeta.containsKey(id)) continue;
+        final order = raw['order'];
+        bundleMeta[id] = (
+          groupId,
+          order is int ? order : 0,
+          title,
+          LocalizedText.tryParse(raw['description']),
+        );
+      }
+    }
+
     final byGroup = <String, List<KovaParamSetting>>{};
     for (final setting in settings.values) {
       if (setting.hidden) continue;
@@ -524,6 +592,46 @@ class KovaParamsDocument {
           : otherGroupId;
       byGroup.putIfAbsent(groupId, () => []).add(setting);
     }
+    int bySettingOrder(KovaParamSetting a, KovaParamSetting b) =>
+        a.order != b.order
+        ? a.order.compareTo(b.order)
+        : a.key.compareTo(b.key);
+
+    List<KovaParamEntry> entriesOf(
+      String groupId,
+      List<KovaParamSetting> sorted,
+    ) {
+      final members = <String, List<KovaParamSetting>>{};
+      final entries = <KovaParamEntry>[];
+      for (final setting in sorted) {
+        final meta = bundleMeta[setting.bundleId];
+        if (meta != null && meta.$1 == groupId) {
+          members.putIfAbsent(setting.bundleId!, () => []).add(setting);
+        } else {
+          entries.add(KovaParamEntry.single(setting));
+        }
+      }
+      for (final bundle in members.entries) {
+        final meta = bundleMeta[bundle.key]!;
+        entries.add(
+          KovaParamEntry.bundled(
+            KovaParamBundle(
+              id: bundle.key,
+              order: meta.$2,
+              title: meta.$3,
+              description: meta.$4,
+              settings: bundle.value,
+            ),
+          ),
+        );
+      }
+      return entries..sort(
+        (a, b) => a.order != b.order
+            ? a.order.compareTo(b.order)
+            : a.id.compareTo(b.id),
+      );
+    }
+
     final groups =
         <KovaParamGroup>[
           for (final entry in byGroup.entries)
@@ -532,12 +640,8 @@ class KovaParamsDocument {
               order: groupMeta[entry.key]?.$1 ?? 1 << 30,
               title: groupMeta[entry.key]?.$2,
               description: groupMeta[entry.key]?.$3,
-              settings: entry.value
-                ..sort(
-                  (a, b) => a.order != b.order
-                      ? a.order.compareTo(b.order)
-                      : a.key.compareTo(b.key),
-                ),
+              settings: entry.value..sort(bySettingOrder),
+              entries: entriesOf(entry.key, entry.value),
             ),
         ]..sort(
           (a, b) => a.order != b.order

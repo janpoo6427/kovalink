@@ -287,13 +287,26 @@ class _GroupCard extends StatelessWidget {
     final locale = document.defaultLocale;
     final title = group.title?.resolve(defaultLocale: locale) ?? '기타';
     final description = group.description?.resolve(defaultLocale: locale);
-    // Settings that need openpilot longitudinal control are replaced, at the
-    // first one's place, by a note naming them while it does not run.
+    // Items that need openpilot longitudinal control are replaced, at the
+    // first one's place, by a note naming them while it does not run. A
+    // bundle is one item: replaced when all of its settings need it.
+    String? blockOf(KovaParamEntry entry) {
+      final reasons = {
+        for (final setting in entry.settings) setting.longitudinalBlock,
+      };
+      return reasons.length == 1 ? reasons.single : null;
+    }
+
+    String titleOf(KovaParamEntry entry) =>
+        (entry.bundle?.title ?? entry.setting!.title).resolve(
+          defaultLocale: locale,
+        );
+
     final blocked = [
-      for (final setting in group.settings)
-        if (setting.longitudinalBlock != null) setting,
+      for (final entry in group.entries)
+        if (blockOf(entry) != null) entry,
     ];
-    final shown = group.settings.length - blocked.length;
+    final shown = group.entries.length - blocked.length;
     return Card(
       key: ValueKey('kova-group-${group.id}'),
       clipBehavior: Clip.antiAlias,
@@ -312,23 +325,27 @@ class _GroupCard extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               child: Text(description),
             ),
-          for (final setting in group.settings)
-            if (setting.longitudinalBlock == null) ...[
+          for (final entry in group.entries)
+            if (blockOf(entry) == null) ...[
               const Divider(height: 1),
-              KovaSettingTile(
-                setting: setting,
-                document: document,
-                controller: controller,
-              ),
-            ] else if (identical(setting, blocked.first)) ...[
+              if (entry.bundle case final bundle?)
+                KovaSettingBundleTile(
+                  bundle: bundle,
+                  document: document,
+                  controller: controller,
+                )
+              else
+                KovaSettingTile(
+                  setting: entry.setting!,
+                  document: document,
+                  controller: controller,
+                ),
+            ] else if (identical(entry, blocked.first)) ...[
               const Divider(height: 1),
               KovaLongitudinalOnlyNote(
                 groupId: group.id,
-                reason: setting.longitudinalBlock!,
-                features: [
-                  for (final s in blocked)
-                    s.title.resolve(defaultLocale: locale),
-                ],
+                reason: blockOf(entry)!,
+                features: [for (final e in blocked) titleOf(e)],
               ),
             ],
         ],
@@ -370,6 +387,106 @@ class KovaLongitudinalOnlyNote extends StatelessWidget {
       text: message(reason, features),
     ),
   );
+}
+
+/// One list item for a catalog bundle: its title and every member's value
+/// on one line; opened, each member setting has its own control.
+class KovaSettingBundleTile extends StatefulWidget {
+  KovaSettingBundleTile({
+    required this.bundle,
+    required this.document,
+    required this.controller,
+  }) : super(key: ValueKey('kova-bundle-${bundle.id}'));
+
+  final KovaParamBundle bundle;
+  final KovaParamsDocument document;
+  final KovaParamsController controller;
+
+  @override
+  State<KovaSettingBundleTile> createState() => _KovaSettingBundleTileState();
+}
+
+class _KovaSettingBundleTileState extends State<KovaSettingBundleTile> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bundle = widget.bundle;
+    final locale = widget.document.defaultLocale;
+    final pending = widget.controller.pending;
+    final summary = [
+      for (final s in bundle.settings)
+        '${s.title.resolve(defaultLocale: locale)} '
+            '${s.describe(pending.containsKey(s.key) ? pending[s.key] : s.value, defaultLocale: locale)}',
+    ].join(' · ');
+    final description = bundle.description?.resolve(defaultLocale: locale);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          key: ValueKey('kova-bundle-open-${bundle.id}'),
+          onTap: () => setState(() => _open = !_open),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        bundle.title.resolve(defaultLocale: locale),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        summary,
+                        key: ValueKey('kova-bundle-summary-${bundle.id}'),
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(_open ? Icons.expand_less : Icons.expand_more),
+              ],
+            ),
+          ),
+        ),
+        if (_open) ...[
+          if (description != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
+              child: Text(
+                description,
+                style: const TextStyle(color: _muted, fontSize: 13),
+              ),
+            ),
+          for (final setting in bundle.settings)
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Divider(height: 1),
+                  KovaSettingTile(
+                    setting: setting,
+                    document: widget.document,
+                    controller: widget.controller,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ],
+    );
+  }
 }
 
 class KovaSettingTile extends StatefulWidget {

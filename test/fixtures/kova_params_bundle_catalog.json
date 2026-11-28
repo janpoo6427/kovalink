@@ -1,0 +1,557 @@
+{
+  "schemaVersion": 1,
+  "defaultLocale": "ko",
+  "locales": [
+    "ko",
+    "en"
+  ],
+  "groups": [
+    {
+      "id": "navigation",
+      "order": 200,
+      "title": {
+        "ko": "내비게이션",
+        "en": "Navigation"
+      },
+      "description": {
+        "ko": "내비게이션 기반 주행 보조 설정입니다.",
+        "en": "Navigation-based driving assistance settings."
+      }
+    },
+    {
+      "id": "cruise",
+      "order": 300,
+      "title": {
+        "ko": "크루즈",
+        "en": "Cruise"
+      },
+      "description": {
+        "ko": "크루즈 설정속도 관련 설정입니다.",
+        "en": "Cruise set speed settings."
+      }
+    }
+  ],
+  "bundles": [
+    {
+      "id": "navigation.speed_limits",
+      "groupId": "navigation",
+      "order": 100,
+      "title": {
+        "ko": "내비 속도 제한",
+        "en": "Navigation speed limits"
+      },
+      "description": {
+        "ko": "카메라, 도로 제한속도, 과속방지턱 감속을 한 항목에서 따로 고릅니다.",
+        "en": "Choose speed camera, road speed limit and speed bump slowdown separately in one item."
+      }
+    },
+    {
+      "id": "cruise.curve_slowdowns",
+      "groupId": "cruise",
+      "order": 150,
+      "title": {
+        "ko": "커브 감속",
+        "en": "Curve slowdown"
+      },
+      "description": {
+        "ko": "카메라로 본 커브 감속과 내비 회전 감속을 한 항목에서 따로 켭니다.",
+        "en": "Turn vision curve slowdown and navigation turn slowdown on separately in one item."
+      }
+    }
+  ],
+  "settings": [
+    {
+      "key": "navigation.speed_camera_profile",
+      "dependencies": [
+        {
+          "condition": "openpilotLongitudinalApplied",
+          "setting": "cruise.openpilot_longitudinal",
+          "title": {
+            "ko": "openpilot 종방향 제어",
+            "en": "Openpilot longitudinal control"
+          }
+        },
+        {
+          "condition": "verifiedCameraInput",
+          "title": {
+            "ko": "검증된 내비 카메라 입력",
+            "en": "Verified navigation camera input"
+          }
+        }
+      ],
+      "groupId": "navigation",
+      "bundleId": "navigation.speed_limits",
+      "order": 100,
+      "type": "enum",
+      "options": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "사용 안 함",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "여유",
+          "en": "Early"
+        },
+        "2": {
+          "ko": "균형",
+          "en": "Balanced"
+        },
+        "3": {
+          "ko": "근접",
+          "en": "Late"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "카메라 감속 프로필",
+        "en": "Speed camera profile"
+      },
+      "description": {
+        "ko": "카메라 목표속도 도달 지점과 통과 후 복귀 성향을 설정합니다.",
+        "en": "Selects where to reach the camera target speed and how quickly to resume after passing."
+      },
+      "access": "readWrite",
+      "risk": "control",
+      "applyPolicy": "offroad",
+      "savePolicy": "anytime",
+      "availability": "available"
+    },
+    {
+      "key": "navigation.road_speed_limit_profile",
+      "dependencies": [
+        {
+          "condition": "openpilotLongitudinalApplied",
+          "setting": "cruise.openpilot_longitudinal",
+          "title": {
+            "ko": "openpilot 종방향 제어",
+            "en": "Openpilot longitudinal control"
+          }
+        },
+        {
+          "condition": "verifiedCameraInput",
+          "title": {
+            "ko": "검증된 내비 입력",
+            "en": "Verified navigation input"
+          }
+        }
+      ],
+      "groupId": "navigation",
+      "bundleId": "navigation.speed_limits",
+      "order": 102,
+      "type": "enum",
+      "options": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "사용 안 함",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "여유",
+          "en": "Early"
+        },
+        "2": {
+          "ko": "균형",
+          "en": "Balanced"
+        },
+        "3": {
+          "ko": "근접",
+          "en": "Late"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "도로 제한속도 프로필",
+        "en": "Road speed limit profile"
+      },
+      "description": {
+        "ko": "도로 제한속도가 크루즈 설정속도보다 낮으면 그 속도로 줄이고, 제한이 높아지거나 없어지면 돌아오는 성향을 설정합니다. 순정 내비나 Carrot 링크의 지금 제한속도를 씁니다.",
+        "en": "Slows to the road speed limit when it is below your cruise set speed and selects how quickly to resume when the limit rises or ends. Uses the current limit from the stock navigation or the Carrot link."
+      },
+      "access": "readWrite",
+      "risk": "control",
+      "applyPolicy": "offroad",
+      "savePolicy": "anytime",
+      "availability": "available"
+    },
+    {
+      "key": "navigation.speed_bump_profile",
+      "dependencies": [
+        {
+          "condition": "openpilotLongitudinalApplied",
+          "setting": "cruise.openpilot_longitudinal",
+          "title": {
+            "ko": "openpilot 종방향 제어",
+            "en": "Openpilot longitudinal control"
+          }
+        },
+        {
+          "condition": "verifiedCameraInput",
+          "title": {
+            "ko": "검증된 내비 입력",
+            "en": "Verified navigation input"
+          }
+        }
+      ],
+      "groupId": "navigation",
+      "bundleId": "navigation.speed_limits",
+      "order": 104,
+      "type": "enum",
+      "options": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "사용 안 함",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "여유",
+          "en": "Early"
+        },
+        "2": {
+          "ko": "균형",
+          "en": "Balanced"
+        },
+        "3": {
+          "ko": "근접",
+          "en": "Late"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "과속방지턱 감속 프로필",
+        "en": "Speed bump profile"
+      },
+      "description": {
+        "ko": "과속방지턱 앞 35km/h 도달 지점과 지난 뒤 복귀 성향을 설정합니다. Carrot 링크 내비 안내만 쓰고 고속도로에서는 쓰지 않습니다.",
+        "en": "Selects where to reach 35 km/h before a speed bump and how quickly to resume after it. Uses Carrot link guidance only, not on motorways."
+      },
+      "access": "readWrite",
+      "risk": "control",
+      "applyPolicy": "offroad",
+      "savePolicy": "anytime",
+      "availability": "available"
+    },
+    {
+      "key": "navigation.auto_blinker",
+      "dependencies": [
+        {
+          "condition": "blinkerOutput",
+          "title": {
+            "ko": "방향지시등 켜기 지원",
+            "en": "Turn signal output support"
+          }
+        }
+      ],
+      "groupId": "navigation",
+      "order": 110,
+      "type": "enum",
+      "control": "switch",
+      "options": [
+        0,
+        1
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "끔",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "켬",
+          "en": "On"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "내비 자동 방향지시등",
+        "en": "Navigation turn signal"
+      },
+      "description": {
+        "ko": "내비가 갈림길·진출로를 안내할 때 방향지시등을 켜고, 자동 차선 변경 조건을 그대로 거칩니다. 차에서 방향지시등을 켤 수 있는 차량에서만 동작합니다(지금은 없음).",
+        "en": "Turns on the turn signal when navigation announces a fork or exit, then goes through the automatic lane change conditions. Works only on vehicles where the turn signal can be turned on (none yet)."
+      },
+      "access": "readWrite",
+      "risk": "control",
+      "applyPolicy": "immediate",
+      "savePolicy": "anytime",
+      "availability": "available"
+    },
+    {
+      "key": "cruise.accelerator_sync",
+      "dependencies": [
+        {
+          "condition": "openpilotLongitudinalApplied",
+          "setting": "cruise.openpilot_longitudinal",
+          "title": {
+            "ko": "openpilot 종방향 제어",
+            "en": "Openpilot longitudinal control"
+          }
+        },
+        {
+          "condition": "openpilotCruiseSpeedOwner",
+          "title": {
+            "ko": "KOVA 크루즈 설정속도 제어",
+            "en": "KOVA cruise set speed control"
+          }
+        },
+        {
+          "condition": "acceleratorDisengagementOff",
+          "title": {
+            "ko": "가속페달을 밟을 때 주행 보조 해제 · 끔",
+            "en": "Disengage on accelerator pedal · Off"
+          }
+        }
+      ],
+      "groupId": "cruise",
+      "order": 100,
+      "type": "enum",
+      "control": "switch",
+      "options": [
+        0,
+        1
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "끔",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "켬",
+          "en": "On"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "크루즈 악셀 동기화",
+        "en": "Cruise speed sync on accelerator release"
+      },
+      "description": {
+        "ko": "openpilot이 크루즈 설정속도를 관리할 때, 설정속도를 넘어 가속한 뒤 페달을 놓으면 현재 속도로 설정속도를 올립니다. 가속 페달로 크루즈 해제 설정은 꺼져 있어야 합니다.",
+        "en": "When openpilot manages the cruise set speed, raise it to your current speed if you accelerate above it and release the pedal. Requires Disengage on Accelerator Pedal to be off."
+      },
+      "access": "readWrite",
+      "risk": "control",
+      "applyPolicy": "restart",
+      "savePolicy": "anytime",
+      "availability": "available"
+    },
+    {
+      "key": "cruise.curve_slowdown",
+      "dependencies": [
+        {
+          "condition": "openpilotLongitudinalApplied",
+          "setting": "cruise.openpilot_longitudinal",
+          "title": {
+            "ko": "openpilot 종방향 제어",
+            "en": "Openpilot longitudinal control"
+          }
+        }
+      ],
+      "groupId": "cruise",
+      "bundleId": "cruise.curve_slowdowns",
+      "order": 150,
+      "type": "enum",
+      "control": "switch",
+      "options": [
+        0,
+        1
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "끔",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "켬",
+          "en": "On"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "커브 감속",
+        "en": "Curve slowdown"
+      },
+      "description": {
+        "ko": "오픈파일럿이 속도를 제어할 때 커브 앞에서 감속하고, 커브를 벗어나면 크루즈 설정속도 쪽으로 돌아옵니다. 설정은 P에 두고 완전히 정차하면 반영돼요.",
+        "en": "When openpilot controls speed, it slows before a curve and returns toward your cruise set speed after it. Changes apply while stopped in Park."
+      },
+      "access": "readWrite",
+      "risk": "control",
+      "applyPolicy": "parked",
+      "savePolicy": "anytime",
+      "availability": "pendingConsumer"
+    },
+    {
+      "key": "cruise.nav_turn_slowdown",
+      "dependencies": [
+        {
+          "condition": "openpilotLongitudinalApplied",
+          "setting": "cruise.openpilot_longitudinal",
+          "title": {
+            "ko": "openpilot 종방향 제어",
+            "en": "Openpilot longitudinal control"
+          }
+        }
+      ],
+      "groupId": "cruise",
+      "bundleId": "cruise.curve_slowdowns",
+      "order": 152,
+      "type": "enum",
+      "control": "switch",
+      "options": [
+        0,
+        1
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "끔",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "켬",
+          "en": "On"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "내비 회전 감속",
+        "en": "Navigation turn slowdown"
+      },
+      "description": {
+        "ko": "오픈파일럿이 속도를 제어할 때 Carrot 링크 내비 안내의 좌·우회전, 유턴, 회전교차로 앞에서 감속하고, 지나면 크루즈 설정속도 쪽으로 돌아옵니다. 설정은 P에 두고 완전히 정차하면 반영돼요.",
+        "en": "When openpilot controls speed, it slows before left and right turns, U-turns and roundabouts in the Carrot link guidance and returns toward your cruise set speed after them. Changes apply while stopped in Park."
+      },
+      "access": "readWrite",
+      "risk": "control",
+      "applyPolicy": "parked",
+      "savePolicy": "anytime",
+      "availability": "pendingConsumer"
+    },
+    {
+      "key": "cruise.lead_restart_response",
+      "dependencies": [
+        {
+          "condition": "openpilotLongitudinalApplied",
+          "setting": "cruise.openpilot_longitudinal",
+          "title": {
+            "ko": "openpilot 종방향 제어",
+            "en": "Openpilot longitudinal control"
+          }
+        },
+        {
+          "condition": "openpilotCruiseSpeedOwner",
+          "title": {
+            "ko": "KOVA 크루즈 설정속도 제어",
+            "en": "KOVA cruise set speed control"
+          }
+        }
+      ],
+      "groupId": "cruise",
+      "order": 175,
+      "type": "enum",
+      "options": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "끔",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "느리게",
+          "en": "Slow"
+        },
+        "2": {
+          "ko": "보통",
+          "en": "Normal"
+        },
+        "3": {
+          "ko": "빠르게",
+          "en": "Fast"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "앞차 출발 추종 반응",
+        "en": "Lead restart response"
+      },
+      "description": {
+        "ko": "앞차를 따라 정차한 뒤 다시 출발할 때의 대기와 초반 가속을 조절합니다. 끔은 기존 동작을 유지합니다.",
+        "en": "Adjusts the delay and initial acceleration when following a lead vehicle away from a stop. Off keeps the existing behavior."
+      },
+      "access": "readWrite",
+      "risk": "control",
+      "applyPolicy": "parked",
+      "savePolicy": "anytime",
+      "availability": "available"
+    },
+    {
+      "key": "cruise.accelerator_sync_stock_shadow",
+      "dependencies": [
+        {
+          "condition": "stockCruiseSpeedOwner",
+          "title": {
+            "ko": "순정 ACC 설정속도 제어",
+            "en": "Stock ACC cruise set speed control"
+          }
+        },
+        {
+          "condition": "acceleratorDisengagementOff",
+          "title": {
+            "ko": "가속페달을 밟을 때 주행 보조 해제 · 끔",
+            "en": "Disengage on accelerator pedal · Off"
+          }
+        }
+      ],
+      "groupId": "cruise",
+      "order": 200,
+      "type": "enum",
+      "control": "switch",
+      "options": [
+        0,
+        1
+      ],
+      "optionTitles": {
+        "0": {
+          "ko": "끔",
+          "en": "Off"
+        },
+        "1": {
+          "ko": "켬",
+          "en": "On"
+        }
+      },
+      "defaultValue": 0,
+      "title": {
+        "ko": "순정 ACC 동기화 진단",
+        "en": "Stock ACC sync diagnostics"
+      },
+      "description": {
+        "ko": "순정 ACC에서 페달을 놓을 때 동기화 후보와 차량의 설정속도를 기록합니다.",
+        "en": "Log the candidate sync speed and the vehicle's set speed on accelerator release in stock ACC."
+      },
+      "access": "readWrite",
+      "risk": "behavior",
+      "applyPolicy": "immediate",
+      "savePolicy": "anytime",
+      "availability": "available"
+    }
+  ]
+}

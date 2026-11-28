@@ -257,6 +257,13 @@ KovaLink parsing rules:
   settings are not drawn (forward-compatible; the gateway does not emit these
   yet).
 - Settings whose `groupId` is unknown are drawn in a trailing "기타" group.
+- Optional top-level `bundles` (`id`, `groupId`, `order`, `title`, `description`):
+  settings of that group whose `bundleId` names a bundle are drawn as one item
+  (title and every member value on one line; opened, each member keeps its own
+  control and sends its own `key`). Bundles are ordered with the single settings
+  by `order`. An unknown or malformed bundle, or one in another group, leaves its
+  settings as single items. Apps before 1.0.16 ignore `bundles` and draw every
+  setting on its own.
 
 ### `POST /v1/kova-params/update`
 
