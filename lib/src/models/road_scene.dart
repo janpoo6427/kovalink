@@ -242,6 +242,11 @@ class NavigationLink {
 
 enum AutoLaneChangeSetting { on, off, unknown }
 
+/// kovapilot lane change mode (steering.lane_change_mode, gateway `mode`):
+/// off = openpilot does not change lanes, nudge = on steering input,
+/// auto = automatic.
+enum AutoLaneChangeMode { off, nudge, auto, unknown }
+
 /// modelV2 lane change state as the gateway names it.
 enum LaneChangePhase {
   off,
@@ -261,6 +266,7 @@ enum LaneChangeSide { left, right }
 class AutoLaneChangeStatus {
   const AutoLaneChangeStatus({
     this.setting = AutoLaneChangeSetting.unknown,
+    this.mode = AutoLaneChangeMode.unknown,
     this.phase = LaneChangePhase.unknown,
     this.direction,
     this.auto = AutoLaneChangeAuto.unknown,
@@ -270,6 +276,10 @@ class AutoLaneChangeStatus {
   });
 
   final AutoLaneChangeSetting setting;
+
+  /// Builds before the three modes send only `setting`: on was automatic,
+  /// off the nudge.
+  final AutoLaneChangeMode mode;
   final LaneChangePhase phase;
 
   /// Null without a lane change.
@@ -279,13 +289,25 @@ class AutoLaneChangeStatus {
   final bool? blindSpotRight;
   final bool? blindSpotFresh;
 
-  factory AutoLaneChangeStatus.fromJson(Map<String, dynamic> json) =>
-      AutoLaneChangeStatus(
-        setting: _enumByName(
-          AutoLaneChangeSetting.values,
-          json['setting'] as String?,
-          AutoLaneChangeSetting.unknown,
-        ),
+  factory AutoLaneChangeStatus.fromJson(Map<String, dynamic> json) {
+    final setting = _enumByName(
+      AutoLaneChangeSetting.values,
+      json['setting'] as String?,
+      AutoLaneChangeSetting.unknown,
+    );
+    return AutoLaneChangeStatus(
+        setting: setting,
+        mode: json.containsKey('mode')
+            ? _enumByName(
+                AutoLaneChangeMode.values,
+                json['mode'] as String?,
+                AutoLaneChangeMode.unknown,
+              )
+            : switch (setting) {
+                AutoLaneChangeSetting.on => AutoLaneChangeMode.auto,
+                AutoLaneChangeSetting.off => AutoLaneChangeMode.nudge,
+                AutoLaneChangeSetting.unknown => AutoLaneChangeMode.unknown,
+              },
         phase: _enumByName(
           LaneChangePhase.values,
           json['laneChange'] as String?,
@@ -307,6 +329,7 @@ class AutoLaneChangeStatus {
         blindSpotRight: json['blindSpotRight'] as bool?,
         blindSpotFresh: json['blindSpotFresh'] as bool?,
       );
+  }
 }
 
 class TrackedObject {

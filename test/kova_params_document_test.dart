@@ -136,6 +136,27 @@ void main() {
       );
     });
 
+    test('three lane change modes are a choice, not a switch', () {
+      final s = setting({
+        'key': 'steering.lane_change_mode',
+        'type': 'enum',
+        'options': [0, 1, 2],
+        'optionTitles': {
+          '0': {'ko': '끔', 'en': 'Off'},
+          '1': {'ko': '조향 개입 시', 'en': 'On steering input'},
+          '2': {'ko': '자동', 'en': 'Automatic'},
+        },
+        'defaultValue': 1,
+        'value': 2,
+        'minimum': null,
+        'maximum': null,
+        'step': null,
+      });
+      expect(s.control, KovaParamControl.choice);
+      expect(s.options.map((o) => o.label()), ['끔', '조향 개입 시', '자동']);
+      expect(s.describe(2), '자동');
+    });
+
     test('numbers without a range use a number field', () {
       final s = setting({'minimum': null, 'maximum': null});
       expect(s.hasRange, isFalse);

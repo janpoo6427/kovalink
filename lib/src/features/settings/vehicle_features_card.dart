@@ -113,13 +113,16 @@ class _VehicleFeaturesCardState extends State<VehicleFeaturesCard> {
               const SizedBox(height: 16),
               _FeatureTile(
                 icon: Icons.alt_route,
-                title: '자동 차선 변경',
-                label: switch (lane?.setting) {
-                  AutoLaneChangeSetting.on => '설정 켬',
-                  AutoLaneChangeSetting.off => '설정 끔',
+                title: '차선 변경',
+                label: switch (lane?.mode) {
+                  AutoLaneChangeMode.off => '끔',
+                  AutoLaneChangeMode.nudge => '조향 개입 시',
+                  AutoLaneChangeMode.auto => '자동',
                   _ => '확인할 수 없음',
                 },
-                highlighted: lane?.setting == AutoLaneChangeSetting.on,
+                highlighted:
+                    lane?.mode == AutoLaneChangeMode.nudge ||
+                    lane?.mode == AutoLaneChangeMode.auto,
                 detail: lane == null
                     ? '차량의 설정·동작 정보를 받으면 표시합니다.'
                     : '현재 동작 · ${laneChangeStateText(lane)}\n설정이 켜져 있어도 항상 차선을 변경하는 것은 아닙니다.',
